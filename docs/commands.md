@@ -155,7 +155,7 @@ boss crawl stop <run_id>
 
 默认 Hook 为 `none`。`screenshot-full` 仅在用户明确选择 `--hook-profile screenshot-full --hook-dir <目录>` 时启用；目录必须由用户拥有相应授权，并提供原始 7 个脚本及 `SHA256SUMS`。缺少 `--hook-dir` 时 `crawl run` / `crawl start` 在创建任务、打开浏览器之前返回 `INVALID_PARAM`；`--hook-dir` 与其它 profile 同时给出或显式为空时同样在创建任务之前拒绝，不会静默忽略目录。项目不再发布这些第三方脚本，运行前逐文件校验 SHA-256 并记录脚本标识与摘要；不记录 Cookie、请求头或完整请求体。
 
-候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”，不会启动浏览器；`boss agent crawl --query <关键词> --city <城市> --resume <简历名>` 会新建真实采集，与 `crawl run` 一样把 `boss login` 的登录 Cookie 与 User-Agent 注入独立采集浏览器；本地登录态缺失、没有 Cookie 或缺少 `wt2` 时在打开浏览器之前返回 `AUTH_REQUIRED`，不创建任务。已有同 `data_dir` 风险锁时，run/start/resume 和 agent 的新采集在浏览器构造、连接及后台拉起前阻断；resume 只恢复自身断点，不能清锁。新风险保持 `risk_stopped` outcome、已采集队列与 checkpoint，并在 `data.risk_lock` 保留结构化原因和可用业务码，未知业务码为 `null`；人工恢复步骤只放在 `hints.operator_actions`，不提供可自动执行的恢复动作。状态、结果、本地 shortlist 导入和读取已完成 run 仍可用。`--run-id` 只分析已有任务：同时给出 `--city`、显式 `--pages` 或 `--with-detail` 时在读取任务之前返回 `INVALID_PARAM`，不再静默丢弃这些新采集参数；`--run-id` 与 `--query` 同时出现（含空串）按互斥参数拒绝，显式空 `--query` 同样在创建任务之前拒绝。
+候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”，不会启动浏览器；`boss agent crawl --query <关键词> --city <城市> --resume <简历名>` 会新建真实采集，与 `crawl run` 一样把 `boss login` 的登录 Cookie 与 User-Agent 注入独立采集浏览器；本地登录态缺失、没有 Cookie 或缺少 `wt2` 时在打开浏览器之前返回 `AUTH_REQUIRED`，不创建任务。已有同 `data_dir` 风险锁时，run/start/resume 和 agent 的新采集在浏览器构造、连接及后台拉起前阻断；resume 只恢复自身断点，不能清锁。新风险保持 `risk_stopped` outcome、已采集队列与 checkpoint，并在 `data.risk_lock` 保留结构化原因和可用业务码，未知业务码为 `null`；人工恢复步骤只放在 `hints.operator_actions`，不提供可自动执行的恢复动作。状态、结果、本地 shortlist 导入和读取已完成 run 仍可用。`--run-id` 只分析已有任务：同时给出 `--city`、显式 `--pages` 或 `--with-detail` 时在读取任务之前返回 `INVALID_PARAM`，不再静默丢弃这些新采集参数；`--run-id` 与 `--query` 同时出现（含空串）按互斥参数拒绝，显式空 `--query` 同样在创建任务之前拒绝。带 `--query` 时显式为空的 `--city` 单独报「--city 的值不能为空」，不再误报成未提供城市（Issue #2604）。
 
 列表项缺少 `securityId` 时不会伪造空详情：该职位保持待补状态，详情状态记为 `missing-security-id`，可用 `crawl results --detail-status pending` 查看，后续恢复会重试补全。
 
@@ -175,6 +175,8 @@ boss crawl stop <run_id>
 | `boss exchange <uid-or-sid>` | 请求交换手机号或微信；优先使用 `boss chat` 输出的稳定 `uid` |
 
 `batch-greet --dry-run` 的执行提示保留本次数据目录以及显式给出的 `--browser-source` / `--cdp-url` / `--delay`，只去掉 `--dry-run`；照提示执行时使用的登录态、去重缓存、浏览器通道与节流区间与预览一致。
+
+`greet --message` 与 `batch-greet` 的 `--city` / `--salary` / `--experience` / `--education` 显式传空串或纯空白时按 `INVALID_PARAM` 拒绝，提示不发起任何平台调用；省略选项仍分别使用默认招呼语与不筛选。这避免变量未展开时静默发出默认正文，或在无限定范围的搜索结果上批量招呼（Issue #2602 / #2603）。
 
 `apply` / `greet` / `batch-greet` 的后继命令保留原 `--data-dir` 与平台：投递成功或被重复记录拦截后查看投递记录、跟进会话，以及招呼后的搜索、推荐、会话提示，均使用同一目录。空编号的搜索恢复指引和重复操作的 `error.recovery_action` 同样携带目录。批量招呼已发送但记账失败时，只提示在原目录核对会话，不自动重发；目录里的空格、引号与 Rich 标签按 shell 参数转义并按字面显示。
 

@@ -17,7 +17,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
-from boss_agent_cli.commands._text_guard import reject_unencodable_params
+from boss_agent_cli.commands._text_guard import reject_blank_options, reject_unencodable_params
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	error_contract_for_code,
@@ -92,16 +92,16 @@ def _emit_greet_unconfirmed(
 @click.command("greet")
 @click.argument("security_id")
 @click.argument("job_id")
-@click.option("--message", default="", help="自定义打招呼消息")
+@click.option("--message", default=None, help="自定义打招呼消息")
 @click.pass_context
 @handle_auth_errors("greet")
-def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -> None:
+def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str | None) -> None:
 	"""向指定招聘者打招呼"""
 	if not require_compliance_allowed(ctx, "greet"):
 		return
 
-	if message and not message.strip():
-		# 拒绝会被平台当成招呼正文的纯空白内容（Issue #1817）。
+	if message is not None and not message.strip():
+		# 空串与纯空白都会被平台当成招呼正文；显式传空不能退化成默认招呼语（Issue #2603）。
 		handle_error_output(
 			ctx,
 			"greet",
@@ -110,6 +110,8 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			recovery_action="省略 --message 使用默认招呼语，或传入非空内容后重试",
 		)
 		return
+	# 缺省仍走默认招呼语；后续调用方只拿到 str。
+	message = message or ""
 
 	# 在读缓存或联系平台前报告缺失的职位标识。
 	if not security_id.strip() or not job_id.strip():
@@ -382,6 +384,11 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			recovery_action=f"传入非空关键词后重试；可先用 {search_cmd} 确认搜索范围",
 			hints={"next_actions": [search_cmd]},
 		)
+		return
+
+	# 显式传空的筛选项不能静默退化成「不筛选」，否则会在没有限定范围的情况下
+	# 对搜索结果批量发出招呼（Issue #2602）。省略选项仍保持原语义。
+	if reject_blank_options(ctx, "batch-greet", city=city, salary=salary, experience=experience, education=education):
 		return
 
 	data_dir = ctx.obj["data_dir"]
