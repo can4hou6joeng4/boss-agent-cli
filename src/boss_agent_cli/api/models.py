@@ -79,6 +79,10 @@ def scalar_or_none(value: Any) -> Any:
 	"""
 	if value is None or isinstance(value, (dict, list, tuple)):
 		return None
+	if isinstance(value, bool):
+		# 布尔不是数值业务码（``raw_job_type`` 声明为 int | str | None）：
+		# 平台把 jobType 漂移成 true 时按缺失处理（Issue #2549）。
+		return None
 	if isinstance(value, float) and not math.isfinite(value):
 		return None
 	return value

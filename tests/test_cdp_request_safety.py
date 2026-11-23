@@ -164,7 +164,8 @@ def test_non_cdp_job_card_keeps_httpx_first(tmp_path):
 	client = BossClient(FakeAuth(tmp_path))
 	assert client.is_browser_only() is False
 	with (
-		patch.object(client, "job_card_httpx", return_value={"code": 0}) as mock_httpx,
+		# 空载荷按未命中回退浏览器，httpx 优先只适用于带 jobCard 的成功响应（Issue #2548）。
+		patch.object(client, "job_card_httpx", return_value={"code": 0, "zpData": {"jobCard": {"encryptJobId": "j1"}}}) as mock_httpx,
 		patch.object(client, "_browser_request") as mock_browser,
 	):
 		client.job_card("sec", "lid")

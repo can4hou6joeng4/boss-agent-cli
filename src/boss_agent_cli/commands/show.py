@@ -1,5 +1,6 @@
 import click
 
+from boss_agent_cli.api._base_client import parameter_status_code
 from boss_agent_cli.api.models import field_dict
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
@@ -90,6 +91,19 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			raw = platform.job_card(security_id, lid)
 		except NotImplementedError as exc:
 			handle_not_supported(ctx, "show", exc, fallback_message="当前平台不支持职位详情能力")
+			return
+		except Exception as exc:
+			# 参数类 4xx 是确定性失败：换浏览器通道 / 重试都会复现（Issue #2548）。
+			status = parameter_status_code(exc)
+			if status is None:
+				raise
+			handle_error_output(
+				ctx, "show",
+				code="INVALID_PARAM",
+				message=f"平台拒绝了请求参数（HTTP {status}），换通道或重试不会改变结果",
+				recovery_action=f"核对编号后重试；或先用 {search_cmd} 重新搜索",
+				hints=rerun_hints,
+			)
 			return
 		if not platform.is_success(raw):
 			handle_platform_error_output(ctx, "show", platform, raw, fallback_message="职位详情获取失败")

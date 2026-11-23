@@ -2,15 +2,28 @@ import atexit
 from typing import Any
 
 from boss_agent_cli.api import endpoints
-from boss_agent_cli.api._base_client import RequestTextEncodingError, _BaseHttpClient
+from boss_agent_cli.api._base_client import RequestTextEncodingError, _BaseHttpClient, parameter_status_code
 from boss_agent_cli.api.httpx_helpers import make_client_registry
-from boss_agent_cli.api.zhipin_errors import classify_code_37, normalize_risk_code
+from boss_agent_cli.api.zhipin_errors import classify_code_37, is_platform_success_code, normalize_risk_code
 
 # atexit safeguard: close any BossClient instances not explicitly closed
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
 
 atexit.register(_close_open_clients)
+
+
+def _job_card_empty_success(response: Any) -> bool:
+	"""成功响应的 ``zpData.jobCard`` 是否缺失 / 为空。
+
+	只对成功码判断：401、业务错误与风控码交给上层分类，不能拿错误响应去触发
+	浏览器回退，否则会掩盖认证 / 风控结论。httpx 卡片接口会返回 200 但
+	``zpData`` 为空，此时浏览器通道仍可能拿到完整卡片（Issue #2548）。
+	"""
+	if not isinstance(response, dict) or not is_platform_success_code(response.get("code")):
+		return False
+	data = response.get("zpData")
+	return not (isinstance(data, dict) and bool(data.get("jobCard")))
 
 
 class AuthError(Exception):
@@ -273,23 +286,33 @@ class BossClient(_BaseHttpClient):
 		return self._browser_request("POST", endpoints.GREET_URL, data=data)
 
 	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
-		"""httpx 优先 + 浏览器降级获取职位卡片信息；CDP 模式下只走浏览器。"""
+		"""httpx 优先 + 浏览器降级获取职位卡片信息；CDP 模式下只走浏览器。
+
+		降级只覆盖「httpx 通道不可用」：参数类 4xx 与限流换通道必然复现；
+		成功响应但载荷为空时，浏览器通道才可能拿到完整卡片（Issue #2548）。
+		"""
 		if self.is_browser_only():
 			return self.job_card_browser(security_id, lid)
 		try:
-			return self.job_card_httpx(security_id, lid)
+			raw_card = self.job_card_httpx(security_id, lid)
 		except Exception as error:
 			from boss_agent_cli.api.request_budget import is_request_stop
 
 			# 参数不可编码是确定性失败：换浏览器通道仍会带同一组坏参数，
-			# 不该白起一次浏览器（Issue #2533）。
-			if is_request_stop(error) or isinstance(error, RequestTextEncodingError):
+			# 不该白起一次浏览器（Issue #2533）。限流同理：浏览器通道会立刻
+			# 再撞同一个限流窗口（Issue #2548）。
+			if is_request_stop(error) or isinstance(error, (RequestTextEncodingError, PlatformRateLimitError)):
+				raise
+			if parameter_status_code(error) is not None:
 				raise
 			# httpx-only 策略没有浏览器通道：回退必然以 BROWSER_DISABLED 结束，
 			# 还会把真实的 HTTP / 超时 / 解析错误整体覆盖掉。原样上抛保留故障
 			# 分类（Issue #2217）。
 			if not self.browser_enabled():
 				raise
+		else:
+			if not (self.browser_enabled() and _job_card_empty_success(raw_card)):
+				return raw_card
 		params = {"securityId": security_id, "lid": lid}
 		return self._browser_request("GET", endpoints.JOB_CARD_URL, params=params)
 

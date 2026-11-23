@@ -165,7 +165,10 @@ def test_apply_with_lid():
 def test_job_card_prefers_httpx():
 	"""job_card 走 httpx 优先，httpx 成功时不应调用 _browser_request。"""
 	client = _make_client()
-	client.job_card_httpx = MagicMock(return_value={"code": 0, "zpData": {"title": "Go"}})
+	# 成功码必须带非空 jobCard 才算命中：空载荷按未命中回退浏览器（Issue #2548）。
+	client.job_card_httpx = MagicMock(
+		return_value={"code": 0, "zpData": {"jobCard": {"encryptJobId": "j1"}, "title": "Go"}}
+	)
 
 	result = client.job_card("sid")
 	assert result["zpData"]["title"] == "Go"
