@@ -16,7 +16,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands.recruiter._hints import hint_command
-from boss_agent_cli.services.candidate_actions import was_provably_unsent
+from boss_agent_cli.services.candidate_actions import candidate_action_provably_unsent, was_provably_unsent
 from boss_agent_cli.display import (
 	error_contract_for_code,
 	handle_auth_errors,
@@ -300,7 +300,13 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 				details={**base, "job_id": job_id},
 			)
 			return
-		except Exception:
+		except Exception as exc:
+			# 连接 / 代理 / 协议错误（以及编码失败）证明卡片请求未发出：释放
+			# 预约并交给装饰器按可重试错误处理，避免一次断网永久锁死该会话
+			# （Issue #2596）。可能已发出的传输错误仍保持结果未知。
+			if candidate_action_provably_unsent(exc):
+				_release(cache, friend_id)
+				raise
 			_fail(
 				ctx,
 				code="LOCATION_RESULT_UNKNOWN",

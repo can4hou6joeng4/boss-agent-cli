@@ -123,7 +123,11 @@ def test_accept_never_uses_unrelated_or_incomplete_friend(friends):
 def test_accept_stops_after_read_auth_failure(method):
 	client = _client()
 	getattr(client, method).return_value = {"code": 7}
-	assert client.accept_resume_by_friend(123, 456) == {"code": 7}
+	assert client.accept_resume_by_friend(123, 456) == {
+		"code": 7,
+		"__cli_error_stage__": "precheck",
+		"__cli_error_details__": {"accepted": False, "stage": "precheck"},
+	}
 	client._request.assert_not_called()
 
 

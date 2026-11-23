@@ -4,6 +4,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api._base_client import RequestTextEncodingError, was_request_provably_unsent
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError
@@ -17,6 +18,7 @@ from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	handle_platform_error_output,
 	platform_error_contract,
 	risk_error_message,
 )
@@ -122,7 +124,12 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			# 预算/时限只在调度前抛出（request_sent=False）：同意请求没有发出，
 			# 不能报成「结果未知」让人去核对一个不存在的操作；停止契约由装饰器输出。
 			raise
-		except Exception:
+		except Exception as exc:
+			# 连接 / 代理 / 协议错误与编码失败都证明没有发出任何请求（包括写前的
+			# 只读请求），不能报成结果未知；其余异常仍按响应丢失处理
+			# （Issue #2596）。
+			if was_request_provably_unsent(exc) or isinstance(exc, RequestTextEncodingError):
+				raise
 			# 写请求响应丢失时不能宣称失败或建议重发，也不透传可能含凭据的异常。
 			_, recovery_action = error_contract_for_code("RESUME_ACCEPT_RESULT_UNKNOWN")
 			handle_error_output(
@@ -133,6 +140,19 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 				recoverable=False,
 				recovery_action=recovery_action,
 				details={**data, "accepted": None},
+			)
+			return
+		if isinstance(result, dict) and result.get("__cli_error_stage__") == "precheck":
+			# 写之前的只读失败（historyMsg / friendDetail）不是同意结果未知：
+			# 按只读契约返回平台错误，限流可重试，accepted 明确为 false
+			# （Issue #2597）。
+			handle_platform_error_output(
+				ctx,
+				command,
+				platform,
+				result,
+				fallback_message="读取附件简历请求状态失败，未发送同意请求",
+				read_only_operation=True,
 			)
 			return
 		if not platform.is_success(result):
