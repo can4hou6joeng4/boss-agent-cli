@@ -14,5 +14,3 @@ __all__ = ["blank_option_names", "hint_command", "positional_hint", "reject_blan
 def hint_command(ctx: click.Context, command: str) -> str:
 	"""构造招聘者后继命令；``hr`` 组自身会设置 recruiter 角色，无需再带 --role。"""
 	return boss_command_for_ctx(ctx, command, include_data_dir=True)
-
-
