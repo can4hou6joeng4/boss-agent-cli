@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.176（2026-11-24）：向导 / MCP `boss_wizard` 的招聘者动作对显式空白筛选项按 `INVALID_PARAM` 拒绝，与顶层 `hr ...` 命令同口径（Issue #2618）。
+
 v3.4.175（2026-11-24）：MCP 参数映射不再吞掉写工具的显式空串（`boss_greet` 消息、`boss_batch_greet` 筛选项、`boss_hr_candidates` 城市 / 职位），空值由 CLI 在平台调用前按 `INVALID_PARAM` 拒绝（Issue #2615）。
 
 v3.4.174（2026-11-24）：招聘写入口统一读取 `stop.json` 与 `state.json` 的熔断状态；持久化熔断仍打开、状态损坏或 wizard / MCP 写动作都会在派发前返回 `CIRCUIT_BREAKER_OPEN`（Issue #2612）。
