@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.api._base_client import RequestTextEncodingError
+from boss_agent_cli.api._base_client import PlatformStatusRejected, RequestTextEncodingError, parameter_status_code
 from boss_agent_cli.api.browser_client import BrowserNavigationError, ChatTabCdpUnreachable
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 from boss_agent_cli.api.client import PlatformRiskError
@@ -731,13 +731,27 @@ class WorkflowRunner:
 				if write_marker is not None:
 					error = self._unconfirmed_error("INTERNAL_ERROR", write_marker)
 				else:
-					internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
-					error = WorkflowActionError(
-						"INTERNAL_ERROR",
-						f"{type(exc).__name__}: {exc}",
-						recoverable=internal_recoverable,
-						recovery_action=internal_recovery,
-					)
+					status = parameter_status_code(exc)
+					if isinstance(exc, PlatformStatusRejected) and status is not None:
+						# 平台对同一组参数的确定性拒绝：与单次命令同口径报
+						# INVALID_PARAM，不给「升级版本」的 INTERNAL_ERROR 指引
+						# （Issue #2567）。
+						invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
+						error = WorkflowActionError(
+							"INVALID_PARAM",
+							f"平台拒绝了请求参数（HTTP {status}）",
+							recoverable=invalid_recoverable,
+							recovery_action=invalid_recovery,
+							replay_safe=True,
+						)
+					else:
+						internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
+						error = WorkflowActionError(
+							"INTERNAL_ERROR",
+							f"{type(exc).__name__}: {exc}",
+							recoverable=internal_recoverable,
+							recovery_action=internal_recovery,
+						)
 			except OSError as exc:
 				# 本地文件读写失败（导出路径不可写、磁盘满）重试同一 run_id 也不会成功；
 				# 套接字层的 ConnectionError / TimeoutError 仍是网络问题，保持可重试语义。

@@ -1,5 +1,6 @@
 import errno
 import json
+import os
 import stat
 from datetime import datetime
 from pathlib import Path
@@ -140,6 +141,23 @@ class ResumeStore:
 			return legacy
 		return legacy
 
+	def _iter_resume_files(self) -> list[Path]:
+		"""枚举简历目录下的 ``*.json``；目录读不出来必须上抛。
+
+		``Path.glob`` 在 3.9–3.13 对不可读目录静默返回 ``[]``：列表命令会报
+		「没有简历」并引导用户重建，真实原因（权限 / 挂载异常）被完全掩盖
+		（Issue #2569）。只有 ``FileNotFoundError`` 按「目录确实不存在」处理。
+		"""
+		try:
+			names = os.listdir(self._dir)
+		except FileNotFoundError:
+			return []
+		except ValueError as exc:
+			# 含 NUL 的路径在 listdir 处抛 ValueError：与 _path_mode 同口径
+			# 归一为带 filename 的 OSError，命令出口按本地 IO 错误收口。
+			raise OSError(errno.EINVAL, str(exc), str(self._dir)) from exc
+		return [self._dir / name for name in names if name.endswith(".json")]
+
 	def list_all(self) -> list[dict[str, Any]]:
 		"""列出所有简历摘要（name, title, updated_at）"""
 		return self.list_all_with_corrupt()[0]
@@ -157,7 +175,7 @@ class ResumeStore:
 		"""
 		results: list[dict[str, Any]] = []
 		corrupt: list[str] = []
-		for path in sorted(self._dir.glob("*.json")):
+		for path in sorted(self._iter_resume_files()):
 			raw, _ = self._read_payload(path)
 			if raw is None:
 				corrupt.append(path.stem)

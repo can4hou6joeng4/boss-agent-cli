@@ -22,7 +22,12 @@ from rich.segment import Segment
 from rich.table import Table
 from rich.text import Text
 
-from boss_agent_cli.api._base_client import PlatformResponseInvalid, RequestTextEncodingError
+from boss_agent_cli.api._base_client import (
+	PlatformResponseInvalid,
+	PlatformStatusRejected,
+	RequestTextEncodingError,
+	parameter_status_code,
+)
 from boss_agent_cli.cache.store import (
 	CacheBusyError,
 	CacheDatabaseInvalid,
@@ -1325,6 +1330,8 @@ def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[
 # 并建议「重试」会让 Agent 反复重试，重试的若是平台请求，还会白白消耗请求预算。
 # PlatformResponseInvalid：平台响应不是 JSON 对象，或深嵌套让 resp.json() 抛
 # RecursionError；同一响应重试必然复现，按 INTERNAL_ERROR（不可恢复）上报（Issue #1368）。
+# PlatformStatusRejected：读请求收到平台的确定性 4xx（401/403/429 已提前收口），
+# 同一请求重试必然复现（Issue #2567）。
 # MarkupError：Rich 标记解析失败（漏转义的外部字符串进了渲染器）。同一输入必然
 # 复现，且这是 CLI 自身的转义缺陷，不能兜成可重试的网络错误（Issue #1399）。
 INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (
@@ -1334,6 +1341,7 @@ INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (
 	IndexError,
 	OverflowError,
 	PlatformResponseInvalid,
+	PlatformStatusRejected,
 	MarkupError,
 )
 
@@ -1656,6 +1664,21 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					),
 				)
 			except INTERNAL_ERROR_TYPES as e:
+				status = parameter_status_code(e)
+				if isinstance(e, PlatformStatusRejected) and status is not None:
+					# 平台对同一组参数的确定性拒绝（400 / 406 / 409 / 410 / 422）：
+					# 与 detail / show / wizard 同口径报 INVALID_PARAM，不能给
+					# 「升级 CLI 或提交 issue」的 INTERNAL_ERROR 指引（Issue #2567）。
+					rejected_recoverable, rejected_recovery = error_contract_for_code("INVALID_PARAM")
+					handle_error_output(
+						ctx,
+						command_name,
+						code="INVALID_PARAM",
+						message=f"{command_name} 请求被平台拒绝（HTTP {status}），同一组参数重试不会改变结果",
+						recoverable=rejected_recoverable,
+						recovery_action=rejected_recovery,
+					)
+					return
 				internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
 				handle_error_output(
 					ctx,

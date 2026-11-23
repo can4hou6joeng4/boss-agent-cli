@@ -82,6 +82,20 @@ class PlatformResponseInvalid(ValueError):
 	"""
 
 
+class PlatformStatusRejected(ValueError):
+	"""读请求收到平台的确定性 4xx 状态（401/403/429 已在 ``_request`` 提前收口）。
+
+	同一请求重试必然得到同一状态，命令出口不能兜成可重试的
+	``NETWORK_ERROR`` +「重试」（Issue #2567）。子类化 ``ValueError`` 与
+	``PlatformResponseInvalid`` 同口径；``parameter_status_code`` 继续识别
+	参数类 4xx，detail / show / wizard 的「不换通道」判定保持不变。
+	"""
+
+	def __init__(self, status_code: int) -> None:
+		super().__init__(f"平台返回了未预期的 HTTP 状态（HTTP {status_code}）")
+		self.status_code = status_code
+
+
 class RequestTextEncodingError(ValueError):
 	"""请求参数含有无法按 UTF-8 编码的字符（如孤立代理项）。
 
@@ -104,6 +118,11 @@ def parameter_status_code(error: BaseException) -> int | None:
 	命令层据此拒绝「换了浏览器通道就能好」的假设：400 / 422 等是平台对同一组
 	参数的直接拒绝，回退只会白起一次浏览器（Issue #2548）。
 	"""
+	status = getattr(error, "status_code", None)
+	if type(status) is int and status in _PARAMETER_STATUS_CODES:
+		# 读请求的确定性 4xx 已由 ``_request`` 转成 ``PlatformStatusRejected``：
+		# 通道降级判定不能再看到裸 ``HTTPStatusError`` 才生效（Issue #2567）。
+		return status
 	response = getattr(error, "response", None)
 	status = getattr(response, "status_code", None)
 	if type(status) is int and status in _PARAMETER_STATUS_CODES:
@@ -301,6 +320,7 @@ class _BaseHttpClient:
 		self._unpersisted_risk_lock = lock
 		if data_dir is None:
 			return
+		persisted = False
 		try:
 			cdp_risk_lock.write_lock(
 				data_dir,
@@ -310,7 +330,7 @@ class _BaseHttpClient:
 				reason=lock.reason,
 				platform_code=lock.platform_code,
 			)
-			self._unpersisted_risk_lock = None
+			persisted = True
 		# UnicodeError 不在 OSError 之下：记录风控的分支里任何异常逃逸都会替换
 		# 原始 PlatformRiskError，把风控硬边界降级成可重试错误（Issue #1487）。
 		except (OSError, UnicodeError):
@@ -327,15 +347,20 @@ class _BaseHttpClient:
 			if not same_root:
 				try:
 					budget.record_risk(reason=lock.reason, platform_code=lock.platform_code)
+					persisted = True
 				except (OSError, UnicodeError):
-					self._unpersisted_risk_lock = lock
+					pass
+		if persisted:
+			# 任一位置落盘都足以阻止新进程（Issue #2566）：组目录写成功时不能再
+			# 报 persisted=false；主锁写成功而组锁失败时也不能反向覆盖成未持久化。
+			self._unpersisted_risk_lock = None
 		if error is not None:
 			error.details["risk_lock"] = {
 				"locked": True,
 				"reason": lock.reason,
 				"platform_code": lock.platform_code,
 				"explicit_resume_required": True,
-				"persisted": self._unpersisted_risk_lock is None,
+				"persisted": persisted,
 			}
 
 	def _raise_platform_risk_response(self, response: dict[str, Any], *, browser: Any = None) -> None:
@@ -565,6 +590,12 @@ class _BaseHttpClient:
 						resp.raise_for_status()
 				except httpx.HTTPStatusError as exc:
 					if not write_possible:
+						status = exc.response.status_code
+						if 400 <= status < 500 and status != 408:
+							# 读请求的确定性 4xx（401/403/429 已提前收口；408 是暂时性
+							# 超时）：同一请求重试必然复现，不能兜成可重试的
+							# NETWORK_ERROR 让 Agent 反复消耗请求预算（Issue #2567）。
+							raise PlatformStatusRejected(status) from None
 						# 读路径原样上抛：重建异常文本，查询参数里的 __zp_stoken__ 不能
 						# 随 error.message 进入信封（Issue #2157）。
 						raise _status_error_without_query(exc) from None

@@ -22,7 +22,10 @@ from boss_agent_cli.services.output_path import refuse_non_regular_target
 #: 与 ``output._MAX_SAFE_INT_BITS`` 同口径：十进制超过 4300 位的整数在
 #: ``json.dump`` / ``json.dumps`` 转字符串时抛 ValueError（Python 3.11+
 #: 的整数转换上限），整份本地状态 / 导出会落成本地 IO 错误（Issue #2388）。
+#: 位长度只是快速路径：14285 bit 起才可能超限，最终以十进制位数精确判定
+#: （Issue #2568）。
 _MAX_JSON_INT_BITS = 14284
+_MAX_JSON_INT_DIGITS = 4300
 
 
 def path_mode(path: Path) -> int | None:
@@ -147,7 +150,15 @@ def _json_safe_value(value: Any, *, null_oversized_ints: bool = False) -> Any:
 		return value
 	if isinstance(value, int):
 		if null_oversized_ints and value.bit_length() > _MAX_JSON_INT_BITS:
-			return None
+			# bit_length 超阈值只说明「可能」超过 4300 位：``2**14284`` 恰好是
+			# 4300 位，``json.dumps`` 能正常序列化。只有 ``str()`` 真的失败
+			# （> 4300 位）才归 null，不能静默丢弃可序列化的值（Issue #2568）。
+			try:
+				if len(str(value)) > _MAX_JSON_INT_DIGITS:
+					return None
+			except ValueError:
+				return None
+			return value
 		return value
 	if isinstance(value, dict):
 		return {
