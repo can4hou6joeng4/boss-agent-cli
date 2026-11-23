@@ -2481,7 +2481,9 @@ def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	# 之前按参数错误收口（Issue #2525）。
 	geek_id = _required_nonblank_value(inputs, "geek_id")
 	job_id = _required_nonblank_value(inputs, "job_id")
-	security_id = _optional_str(inputs.get("security_id"))
+	# 非字符串不能 str() 后发给平台：{"a": 1} 会变成它的 repr 进入一次
+	# effect: unknown 的请求（Issue #2633）。空串仍按未提供处理。
+	security_id = _optional_str_strict(inputs, "security_id") or None
 	return _recruiter_call(
 		context,
 		lambda platform: platform.view_geek(geek_id, job_id, security_id),
