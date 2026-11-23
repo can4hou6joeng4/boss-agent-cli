@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from anyio import CancelScope
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
@@ -235,6 +236,8 @@ _READ_ONLY_TOOL_NAMES = frozenset({
 	"boss_hr_resume",
 	"boss_hr_jobs",
 	"boss_hr_jobs_detail",
+	# wizard 只有 status 是纯读取，其余 action 按写操作处理（Issue #2552）。
+	"boss_wizard",
 })
 
 #: 工具名整体只读、但个别参数会把调用变成平台写操作。判定必须看参数：
@@ -244,7 +247,14 @@ _TOOL_WRITE_MODES: dict[str, frozenset[str]] = {
 	"boss_hr_jobs": frozenset({"online", "offline"}),
 	# config 的 list / get 只读本地配置；set / reset 才写本地文件，按写处理。
 	"boss_config": frozenset({"set", "reset"}),
+	# stop 写本地停止标记；结果未知时无条件重放可能中断期间恢复的任务。
+	"boss_wizard": frozenset({"run", "resume", "stop"}),
 }
+
+#: 带 action 维度但 schema 缺省值不是 ``list`` 的工具：`_tool_may_write` 的缺省
+#: action 必须与 schema 的 ``default`` 一致，否则省略 action 会被误判成只读。
+#: `boss_wizard` 省略 action 时映射层执行 run（Issue #2552）。
+_DEFAULT_ACTION_BY_TOOL: dict[str, str] = {"boss_wizard": "run"}
 
 #: schema 里带 action 维度的工具。只读白名单中的这类工具读写取决于参数，必须在
 #: `_TOOL_WRITE_MODES` 显式登记（写模式可以是空集）；漏登记时按写处理，不让新增
@@ -275,7 +285,15 @@ _FILTER_READ_INTERRUPT_RECOVERY = (
 _DRY_RUN_INTERRUPT_RECOVERY = "演练命令已中断，不产生平台写入；可直接重试或降低 limit"
 
 
+def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
+	if args and args[0] == "wizard" and _option_value(args, "--stop") is not None:
+		return "先用 wizard --status 查询同一 run_id 的当前状态；确认仍需停止后再发出 stop，不要自动重试"
+	return _WRITE_INTERRUPT_RECOVERY
+
+
 def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
+	if args and args[0] == "wizard" and _option_value(args, "--status") is not None:
+		return "状态查询已中断，未更改任务；可重新查询同一 run_id"
 	if args[:2] == ("agent", "train"):
 		return _DRY_RUN_INTERRUPT_RECOVERY
 	if args and args[0] in {"search", "watch"}:
@@ -313,9 +331,11 @@ def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> 
 		# 带 action 维度却没有登记写模式：无法判断哪个动作会产生平台写入，按写处理
 		# （与「未列出的工具按写」同一保守原则）。守卫测试保证现有工具不会走到这里。
 		return tool_name in _ACTION_DIMENSION_TOOL_NAMES
-	# 缺省 action 与 schema 默认值一致（list）：只有显式声明写模式才算写。
-	action = arguments.get("action", "list")
-	return isinstance(action, str) and action in write_modes
+	# 缺省 action 与 schema 默认值一致：登记过的工具缺省是 list，wizard 缺省是 run
+	# （`_DEFAULT_ACTION_BY_TOOL`）。只有显式声明写模式才算写。
+	raw_action = arguments.get("action")
+	action = raw_action if isinstance(raw_action, str) else _DEFAULT_ACTION_BY_TOOL.get(tool_name, "list")
+	return action in write_modes
 
 
 def _option_region(args: tuple[str, ...]) -> tuple[str, ...]:
@@ -439,11 +459,11 @@ def _cli_timeout(args: tuple[str, ...]) -> float:
 	#       按 900s 封顶；普通 search 只有 1 次列表请求 → 95s，仍取默认 120s。
 	# A wizard deadline belongs to the child. The host allows bounded extra
 	# time for that child to commit its result/checkpoint and emit the envelope.
-	if args and args[0] == "wizard" and "--timeout" in _option_region(args):
-		region = _option_region(args)
+	requested_timeout = _option_value(args, "--timeout") if args and args[0] == "wizard" else None
+	if requested_timeout is not None:
 		try:
-			requested = float(region[region.index("--timeout") + 1])
-		except (IndexError, ValueError):
+			requested = float(requested_timeout)
+		except ValueError:
 			return _CLI_TIMEOUT_SECONDS
 		if math.isfinite(requested) and requested > 0:
 			# wizard 子进程自己的 --timeout 没有上限：宿主若按任意大值等待，
@@ -522,7 +542,7 @@ def _parse_cli_output(
 		args,
 		"CLI_ERROR",
 		stderr or "命令执行失败",
-		recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_UNPARSEABLE_RECOVERY,
+		recovery_action=_write_interrupt_recovery(args) if may_write else _READ_UNPARSEABLE_RECOVERY,
 		outcome_unknown=may_write,
 	)
 
@@ -601,7 +621,7 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 			"WORKFLOW_TIMEOUT",
 			"底层 CLI 超时",
 			outcome_unknown=may_write,
-			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _read_interrupt_recovery(args),
+			recovery_action=_write_interrupt_recovery(args) if may_write else _read_interrupt_recovery(args),
 		)
 	except OSError as exc:
 		return _spawn_failure(args, exc)
@@ -670,14 +690,27 @@ def _interrupted_failure(
 		code,
 		"MCP 调用已取消" if code == "WORKFLOW_STOPPED" else "底层 CLI 超时",
 		outcome_unknown=may_write,
-		recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _read_interrupt_recovery(args),
+		recovery_action=_write_interrupt_recovery(args) if may_write else _read_interrupt_recovery(args),
 		checkpoint_result=checkpoint_result if isinstance(checkpoint_result, dict) else None,
 	)
 
 
 async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
-	if args and args[0] == "wizard" and not any(flag in args for flag in ("--timeout", "--status", "--stop")):
+	if args and args[0] == "wizard" and not any(
+		_option_value(args, flag) is not None for flag in ("--timeout", "--status", "--stop")
+	):
 		args = (*args, "--timeout", str(_CLI_TIMEOUT_SECONDS))
+	# 估算在启动前完成，参数错误不会启动可能产生写入的子进程。
+	try:
+		timeout = _cli_timeout(args)
+	except (ArithmeticError, ValueError) as exc:
+		return _cli_failure(
+			args,
+			"INVALID_PARAM",
+			f"参数超出本地估算范围：{exc}",
+			outcome_unknown=False,
+			recovery_action="减小 count / summary-limit 后重试；本次子进程未启动",
+		)
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
 	spawn = asyncio.create_task(
 		asyncio.create_subprocess_exec(
@@ -692,40 +725,29 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 	except OSError as exc:
 		return _spawn_failure(args, exc)
 	except asyncio.CancelledError:
-		try:
-			process = await asyncio.shield(spawn)
-		except OSError as exc:
-			# The child never ran, so the interrupted call left no platform effect.
-			# Point at installation/path, not at a checkpoint that cannot exist
-			# (Issue #1000).
-			return _cli_failure(
-				args,
-				"WORKFLOW_STOPPED",
-				f"无法启动底层 boss CLI：{exc}",
-				outcome_unknown=False,
-				recovery_action=_SPAWN_FAILURE_RECOVERY,
-			)
-		output = asyncio.create_task(process.communicate())
-		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
+		# asyncio.shield 保护启动任务，却不保护等待者。MCP SDK 的 AnyIO 取消域
+		# 会在之后每次 await 再抛取消；必须保护取回句柄及清理，不能遗留仍运行的 CLI。
+		with CancelScope(shield=True):
+			try:
+				process = await asyncio.shield(spawn)
+			except OSError as exc:
+				# 启动失败未产生平台操作，应指向安装或路径（Issue #1000）。
+				return _cli_failure(
+					args,
+					"WORKFLOW_STOPPED",
+					f"无法启动底层 boss CLI：{exc}",
+					outcome_unknown=False,
+					recovery_action=_SPAWN_FAILURE_RECOVERY,
+				)
+			output = asyncio.create_task(process.communicate())
+			stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		return _interrupted_failure(args, "WORKFLOW_STOPPED", stdout, may_write=may_write)
 	output = asyncio.create_task(process.communicate())
-	# 超时估算必须在 spawn 之后仍可安全求值：异常先停子进程并回标准失败信封，
-	# 不能把 OverflowError 漏成 MCP 内部错误（Issue #1609）。
-	try:
-		timeout = _cli_timeout(args)
-	except (ArithmeticError, ValueError) as exc:
-		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
-		return _cli_failure(
-			args,
-			"INVALID_PARAM",
-			f"参数超出本地估算范围：{exc}",
-			outcome_unknown=False,
-			recovery_action="减小 count / summary-limit 后重试；本次子进程已停止，未返回结果",
-		)
 	try:
 		stdout, stderr = await asyncio.wait_for(asyncio.shield(output), timeout)
 	except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
-		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
+		with CancelScope(shield=True):
+			stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		code = "WORKFLOW_STOPPED" if isinstance(exc, asyncio.CancelledError) else "WORKFLOW_TIMEOUT"
 		return _interrupted_failure(args, code, stdout, may_write=may_write)
 	return _parse_cli_output(
@@ -796,9 +818,16 @@ _JSON_TYPE_CHECKS: dict[str, tuple[type, ...]] = {
 
 #: 单个数组最多逐条列出的元素错误数，其余只报数量：错误信封不随输入规模膨胀。
 _MAX_ELEMENT_TYPE_ERRORS = 3
-# 超过这个位数的整数不直接转十进制文本：Python 的 int→str 位数上限会让
-# 错误信息本身抛 ValueError，进而把 tools/call 变成内部错误（Issue #1620）。
+#: 超过这个位数的整数不直接转十进制文本：Python 的 int→str 位数上限会让
+#: 错误信息本身抛 ValueError，进而把 tools/call 变成内部错误（Issue #1620）。
 _MAX_BRIEF_NUMBER_BITS = 256
+#: JSON 客户端（JavaScript 等）能精确表示的最大整数（``Number.MAX_SAFE_INTEGER``
+#: = ``2**53 - 1``）。浮点输入超过这个量级时相邻整数已经无法区分，归一化成 int
+#: 只会把丢失精度的值当精确整数使用（Issue #2553）。
+_JSON_SAFE_INTEGER = 2**53 - 1
+#: enum 校验失败时最多列出的合法取值数：行业等枚举有几十项，错误信封不随
+#: schema 规模膨胀。
+_MAX_ENUM_VALUES_IN_ERROR = 8
 
 
 def _brief_numeric(value: object) -> str:
@@ -827,6 +856,10 @@ def _normalize_integral_numbers(tool_name: str, arguments: dict[str, Any]) -> No
 	JSON 数字 ``1.0`` 按 schema 语义是合法 ``integer``，Python 解码成 ``float``
 	后会被类型检查拒绝；即使放行，``str(1.0)`` 拼进 argv 也会变成选项值
 	``"1.0"``。这里在类型检查与映射之前统一归一，两处共用同一份数据。
+
+	超出 ``2**53 - 1`` 的整值浮点不归一（Issue #2553）：IEEE 754 在该量级无法表示
+	相邻整数，调用方看到的 ``9007199254740993.0`` 实际已经是 ``...992``，
+	再转成 ``int`` 只会把已丢失精度的值当成精确整数发出去。
 	"""
 	tool = next((item for item in TOOLS if item.name == tool_name), None)
 	if tool is None:
@@ -837,7 +870,8 @@ def _normalize_integral_numbers(tool_name: str, arguments: dict[str, Any]) -> No
 		if not isinstance(prop, dict):
 			continue
 		if prop.get("type") == "integer" and _is_integral_float(value):
-			arguments[key] = int(value)
+			if abs(value) <= _JSON_SAFE_INTEGER:
+				arguments[key] = int(value)
 			continue
 		items = prop.get("items")
 		if (
@@ -846,7 +880,53 @@ def _normalize_integral_numbers(tool_name: str, arguments: dict[str, Any]) -> No
 			and items.get("type") == "integer"
 			and isinstance(value, list)
 		):
-			arguments[key] = [int(item) if _is_integral_float(item) else item for item in value]
+			arguments[key] = [
+				int(item) if _is_integral_float(item) and abs(item) <= _JSON_SAFE_INTEGER else item
+				for item in value
+			]
+
+
+# 预设与订阅的四种筛选在 Click 中显式不区分大小写。schema 仍发布标准写法，
+# 入口不能因新增枚举检查而拒绝此前合法的大小写变体。
+_CASE_INSENSITIVE_FILTER_ENUMS = frozenset({"industry", "scale", "stage", "job_type"})
+
+
+def _json_enum_allows(enum: list[Any], value: Any, *, case_insensitive: bool = False) -> bool:
+	"""按 JSON Schema 的 enum 语义判断取值是否合法。
+
+	数值按值相等（``1`` 与 ``1.0`` 同值）；``bool`` 不与 ``0`` / ``1`` 混同。
+	"""
+	if isinstance(value, bool):
+		return any(item is value for item in enum)
+	if case_insensitive and isinstance(value, str):
+		folded = value.casefold()
+		return any(isinstance(item, str) and item.casefold() == folded for item in enum)
+	for item in enum:
+		if isinstance(item, bool):
+			continue
+		if isinstance(value, (int, float)) and isinstance(item, (int, float)):
+			if value == item:
+				return True
+			continue
+		if type(item) is type(value) and item == value:
+			return True
+	return False
+
+
+def _enum_error(key: str, value: Any, enum: list[Any]) -> str:
+	shown = [item if isinstance(item, str) else _brief_numeric(item) for item in enum[:_MAX_ENUM_VALUES_IN_ERROR]]
+	allowed = "、".join(shown)
+	if len(enum) > _MAX_ENUM_VALUES_IN_ERROR:
+		allowed += f" 等 {len(enum)} 个取值"
+	if isinstance(value, str):
+		# 错误只展示一段可读预览，避免反射整段误传文本或内嵌控制字符。
+		preview = value[:80]
+		rendered = preview if preview.isprintable() and preview else repr(preview)
+		if len(value) > len(preview):
+			rendered += "…"
+	else:
+		rendered = _brief_numeric(value)
+	return f"{key}={rendered} 不是允许的取值：{allowed}"
 
 
 def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str]:
@@ -874,9 +954,28 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 		expected = prop.get("type")
 		if not isinstance(expected, str) or expected not in _JSON_TYPE_CHECKS:
 			continue
+		if (
+			expected == "integer"
+			and isinstance(value, float)
+			and value.is_integer()
+			and abs(value) > _JSON_SAFE_INTEGER
+		):
+			# 超范围的整值浮点已在归一化时跳过（Issue #2553）：报精度问题比
+			# 「应为 integer，收到 float」更接近调用方需要修的东西。
+			errors.append(
+				f"{key}={_brief_numeric(value)} 超出 JSON 安全整数范围（2^53-1）："
+				"请用 JSON 整数字面量传入原值，不要使用小数点或指数写法"
+			)
+			continue
 		if not _matches_json_type(value, expected):
 			errors.append(f"{key} 应为 {expected}，收到 {type(value).__name__}")
 			continue
+		enum_values = prop.get("enum")
+		if isinstance(enum_values, list) and enum_values:
+			case_insensitive = tool_name in {"boss_preset_add", "boss_watch_add"} and key in _CASE_INSENSITIVE_FILTER_ENUMS
+			if not _json_enum_allows(enum_values, value, case_insensitive=case_insensitive):
+				errors.append(_enum_error(key, value, enum_values))
+				continue
 		if expected == "string":
 			# schema 声明了 minLength 时，入口按同一约束拒绝（Issue #1533）：
 			# 空串在 CLI 上大多只能得到参数错误，客户端本可以在发送前拦下。
@@ -884,6 +983,11 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			if isinstance(min_length, int) and not isinstance(min_length, bool) and len(value) < min_length:
 				errors.append(f"{key} 至少需要 {min_length} 个字符")
 		if expected in {"integer", "number"}:
+			if isinstance(value, float) and not math.isfinite(value):
+				# JSON 的 1e400 解码成 inf：上下界比较对 inf / nan 恒为 False，
+				# 入口放行后会被拼成 `--timeout inf` 之类的取值（Issue #2553）。
+				errors.append(f"{key} 必须是有限数值，收到 {_brief_numeric(value)}")
+				continue
 			minimum = prop.get("minimum")
 			maximum = prop.get("maximum")
 			if isinstance(minimum, (int, float)) and not isinstance(minimum, bool) and value < minimum:

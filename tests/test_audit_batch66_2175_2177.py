@@ -155,7 +155,11 @@ def test_estimated_requests_still_honors_real_dry_run() -> None:
 
 
 def test_search_active_schema_accepts_empty_clear_value() -> None:
-	assert "" in _tool("boss_search").input_schema["properties"]["active"]["enum"]
+	# 工具目录不再用封闭 enum 收窄 active：CLI 还接受 3day、3日 等别名，
+	# enum 会把合法别名挡在入口。空串仍按「清除已保存筛选」原样下发（Issue #2553）。
+	properties = _tool("boss_search").input_schema["properties"]
+	assert "enum" not in properties["active"]
+	assert _build_args("boss_search", {"query": "Python", "active": ""}) == ["search", "Python", "--active", ""]
 
 
 def test_shortlist_annotate_schema_requires_non_empty_tag_arrays() -> None:

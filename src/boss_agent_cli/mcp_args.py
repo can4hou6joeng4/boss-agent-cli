@@ -161,6 +161,19 @@ def _reject_incompatible_action_args(
 	)
 
 
+def _option_pair(flag: str, value: str) -> list[str]:
+	"""把选项与其取值拼成 argv 片段（Issue #2553）。
+
+	取值以 ``--`` 开头时合并为一个 token，避免宿主扫描把值认成终止符或其他开关。
+	Click 长选项用 ``--flag=value``；短选项要直接连接（如 ``-o--report.csv``），
+	否则 Click 会把 ``=`` 读进路径。其他取值保留两 token 形式。
+	"""
+	if not value.startswith("--"):
+		return [flag, value]
+	separator = "=" if flag.startswith("--") else ""
+	return [f"{flag}{separator}{value}"]
+
+
 def _optional(
 	args: list[str],
 	flag: str,
@@ -177,7 +190,7 @@ def _optional(
 		return
 	if not value and key not in _ENUM_KEYS and (command, key) not in _EXPLICIT_EMPTY_KEYS:
 		return
-	args.extend([flag, str(value)])
+	args.extend(_option_pair(flag, str(value)))
 
 
 def _literal_positionals(args: list[str], *, start: int = 1, count: int = 1) -> list[str]:
@@ -198,7 +211,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["schema"]
 		output_format = arguments.get("format")
 		if output_format is not None:
-			args.extend(["--format", str(output_format)])
+			args.extend(_option_pair("--format", str(output_format)))
 		return args
 
 	if name == "wizard":
@@ -220,7 +233,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		_reject_incompatible_action_args("boss_wizard", action, arguments, _WIZARD_ACTION_KEYS[action], _WIZARD_KEY_USAGE)
 		if action in {"resume", "status", "stop"}:
 			run_id = str(arguments["run_id"])
-			args = ["wizard", f"--{action}", run_id]
+			args = ["wizard", *_option_pair(f"--{action}", run_id)]
 		else:
 			payload = {
 				key: arguments[key]
@@ -229,9 +242,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			}
 			args = ["wizard", "--input-json", json.dumps(payload, ensure_ascii=False, separators=(",", ":"))]
 		if arguments.get("timeout") is not None:
-			args.extend(["--timeout", str(arguments["timeout"])])
+			args.extend(_option_pair("--timeout", str(arguments["timeout"])))
 		if arguments.get("max_retries") is not None:
-			args.extend(["--max-retries", str(arguments["max_retries"])])
+			args.extend(_option_pair("--max-retries", str(arguments["max_retries"])))
 		return args
 
 	if name == "search":
@@ -246,7 +259,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			_optional(args, f"--{opt}", opt, arguments, command=name)
 		_optional(args, "--job-type", "job_type", arguments, command=name)
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		if arguments.get("no_cache"):
 			args.append("--no-cache")
 		if arguments.get("with_score"):
@@ -260,7 +273,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "crawl_results":
 		args = ["crawl", "results", str(arguments["run_id"])]
 		if arguments.get("page") is not None:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		_optional(args, "--detail-status", "detail_status", arguments)
 		return _literal_positionals(args, start=2)
 
@@ -273,19 +286,19 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			raise ValueError("boss_crawl_shortlist 的 selectors 与 all 必须且只能选一个；请去掉其中一个")
 		args = ["crawl", "shortlist", str(arguments["run_id"])]
 		for selector in arguments.get("selectors") or []:
-			args.extend(["--selector", str(selector)])
+			args.extend(_option_pair("--selector", str(selector)))
 		if arguments.get("all"):
 			args.append("--all")
 		if arguments.get("tags"):
-			args.extend(["--tags", str(arguments["tags"])])
+			args.extend(_option_pair("--tags", str(arguments["tags"])))
 		if arguments.get("note"):
-			args.extend(["--note", str(arguments["note"])])
+			args.extend(_option_pair("--note", str(arguments["note"])))
 		return _literal_positionals(args, start=2)
 
 	if name == "recommend":
 		args = [name]
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		if arguments.get("with_score"):
 			args.append("--with-score")
 		return args
@@ -293,9 +306,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "detail":
 		args = [name, arguments["security_id"]]
 		if "job_id" in arguments and arguments["job_id"]:
-			args.extend(["--job-id", arguments["job_id"]])
+			args.extend(_option_pair("--job-id", arguments["job_id"]))
 		if arguments.get("lid"):
-			args.extend(["--lid", str(arguments["lid"])])
+			args.extend(_option_pair("--lid", str(arguments["lid"])))
 		return _literal_positionals(args)
 
 	if name == "greet":
@@ -308,9 +321,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name]
 		_optional(args, "--from", "from_who", arguments)
 		if "days" in arguments:
-			args.extend(["--days", str(arguments["days"])])
+			args.extend(_option_pair("--days", str(arguments["days"])))
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		_optional(args, "--export", "format", arguments)
 		_optional(args, "--output", "output_file", arguments, command=name)
 		if arguments.get("raw"):
@@ -321,7 +334,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name]
 		_optional(args, "--section", "section", arguments)
 		if arguments.get("deliver_page") is not None:
-			args.extend(["--deliver-page", str(arguments["deliver_page"])])
+			args.extend(_option_pair("--deliver-page", str(arguments["deliver_page"])))
 		return args
 
 	if name == "chatmsg":
@@ -329,11 +342,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 存在即下发：显式空串必须交给 CLI 按 INVALID_PARAM 拒绝，不能被真值
 		# 判断化装成「没传」而静默退回全列表扫描（Issue #2277）。
 		if "friend_uid" in arguments:
-			args.extend(["--friend-uid", str(arguments["friend_uid"])])
+			args.extend(_option_pair("--friend-uid", str(arguments["friend_uid"])))
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		if "count" in arguments:
-			args.extend(["--count", str(arguments["count"])])
+			args.extend(_option_pair("--count", str(arguments["count"])))
 		if arguments.get("raw"):
 			args.append("--raw")
 		return _literal_positionals(args)
@@ -341,9 +354,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "chat_summary":
 		args = ["chat-summary", arguments["security_id"]]
 		if arguments.get("page") is not None:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		if arguments.get("count") is not None:
-			args.extend(["--count", str(arguments["count"])])
+			args.extend(_option_pair("--count", str(arguments["count"])))
 		return _literal_positionals(args)
 
 	if name == "mark":
@@ -359,7 +372,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 描述承诺「手机号或微信」，但 CLI 默认 phone：省略/显式 phone 不下发，
 		# 空串等非法值交给 CLI 的枚举诊断（Issue #982、#1200）。
 		if "type" in arguments and arguments["type"] is not None and arguments["type"] != "phone":
-			args.extend(["--type", str(arguments["type"])])
+			args.extend(_option_pair("--type", str(arguments["type"])))
 		return _literal_positionals(args)
 
 	if name == "apply":
@@ -375,7 +388,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		_optional(args, "--job-type", "job_type", arguments)
 		# MCP 侧参数名是 limit，CLI 选项名是 --count。默认值要显式下发：不传就落到
 		# CLI 的默认 10，比工具声明的 5 多打一倍招呼。
-		args.extend(["--count", str(arguments.get("limit", 5))])
+		args.extend(_option_pair("--count", str(arguments.get("limit", 5))))
 		if arguments.get("dry_run"):
 			args.append("--dry-run")
 		return _literal_positionals(args)
@@ -396,7 +409,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if arguments.get("dry_run", True):
 			args.append("--dry-run")
 		if "limit" in arguments and arguments["limit"] is not None:
-			args.extend(["--limit", str(arguments["limit"])])
+			args.extend(_option_pair("--limit", str(arguments["limit"])))
 		if arguments.get("resume"):
 			args.append("--resume")
 		return args
@@ -404,7 +417,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "agent_train":
 		args = ["agent", "train"]
 		if "limit" in arguments and arguments["limit"] is not None:
-			args.extend(["--limit", str(arguments["limit"])])
+			args.extend(_option_pair("--limit", str(arguments["limit"])))
 		return args
 
 	if name == "agent_review":
@@ -417,7 +430,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["agent", "review", "reject", str(arguments["id"])]
 		# 显式空串要原样下发（Issue #1324）：CLI 的 default 只在选项缺席时生效。
 		if arguments.get("reason") is not None:
-			args.extend(["--reason", str(arguments["reason"])])
+			args.extend(_option_pair("--reason", str(arguments["reason"])))
 		return _literal_positionals(args, start=3)
 
 	if name == "agent_pending":
@@ -430,7 +443,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["agent", "stop"]
 		# 显式空串要原样下发（Issue #1324）：CLI 的 default 只在选项缺席时生效。
 		if arguments.get("reason") is not None:
-			args.extend(["--reason", str(arguments["reason"])])
+			args.extend(_option_pair("--reason", str(arguments["reason"])))
 		return args
 
 	if name == "export":
@@ -441,11 +454,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if "query" in arguments and arguments["query"] is not None:
 			args.append(str(arguments["query"]))
 		if "url" in arguments and arguments["url"] is not None:
-			args.extend(["--url", str(arguments["url"])])
+			args.extend(_option_pair("--url", str(arguments["url"])))
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type"):
 			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments)
 		if "count" in arguments:
-			args.extend(["--count", str(arguments["count"])])
+			args.extend(_option_pair("--count", str(arguments["count"])))
 		_optional(args, "--format", "format", arguments)
 		_optional(args, "-o", "output_file", arguments, command=name)
 		if arguments.get("include_private"):
@@ -455,7 +468,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "follow_up":
 		args = ["follow-up"]
 		if "days_stale" in arguments:
-			args.extend(["--days-stale", str(arguments["days_stale"])])
+			args.extend(_option_pair("--days-stale", str(arguments["days_stale"])))
 		return args
 
 	if name == "config":
@@ -493,13 +506,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if arguments.get("all"):
 			args.append("--all")
 		if arguments.get("days") is not None:
-			args.extend(["--days", str(arguments["days"])])
+			args.extend(_option_pair("--days", str(arguments["days"])))
 		return args
 
 	if name == "digest":
 		args = [name]
 		if "days_stale" in arguments:
-			args.extend(["--days-stale", str(arguments["days_stale"])])
+			args.extend(_option_pair("--days-stale", str(arguments["days_stale"])))
 		_optional(args, "--format", "format", arguments)
 		_optional(args, "-o", "output", arguments, command=name)
 		return args
@@ -507,7 +520,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "stats":
 		args = [name]
 		if "days" in arguments:
-			args.extend(["--days", str(arguments["days"])])
+			args.extend(_option_pair("--days", str(arguments["days"])))
 		_optional(args, "--format", "format", arguments)
 		_optional(args, "--output", "output_file", arguments, command=name)
 		return args
@@ -524,19 +537,19 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 显式空串要原样下发：CLI 对空简历名有 INVALID_PARAM 诊断（Issue #1951），
 		# truthiness 会把调用方的错误参数静默改成「未指定」（Issue #2176）。
 		if arguments.get("resume") is not None:
-			args.extend(["--resume", arguments["resume"]])
+			args.extend(_option_pair("--resume", arguments["resume"]))
 		if "count" in arguments:
-			args.extend(["--count", str(arguments["count"])])
+			args.extend(_option_pair("--count", str(arguments["count"])))
 		return _literal_positionals(args, start=2)
 
 	if name == "ai_chat_coach":
 		args = ["ai", "chat-coach", arguments["chat_text"]]
 		if arguments.get("resume") is not None:
-			args.extend(["--resume", arguments["resume"]])
+			args.extend(_option_pair("--resume", arguments["resume"]))
 		# 显式空串与缺省不是同一语义：CLI 会把 style 原样替换进 prompt，
 		# 空串要原样下发（Issue #1862，与 agent_stop.reason 同口径）。
 		if "style" in arguments:
-			args.extend(["--style", arguments["style"]])
+			args.extend(_option_pair("--style", arguments["style"]))
 		return _literal_positionals(args, start=2)
 
 	if name == "resume_list":
@@ -546,24 +559,33 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals(["resume", "show", arguments["name"]], start=2)
 
 	if name == "ai_analyze_jd":
-		return _literal_positionals(["ai", "analyze-jd", arguments["jd_text"], "--resume", arguments["resume"]], start=2)
+		return _literal_positionals(
+			["ai", "analyze-jd", arguments["jd_text"], *_option_pair("--resume", arguments["resume"])],
+			start=2,
+		)
 
 	if name == "ai_optimize":
-		return _literal_positionals(["ai", "optimize", arguments["resume"], "--jd", arguments["jd_text"]], start=2)
+		return _literal_positionals(
+			["ai", "optimize", arguments["resume"], *_option_pair("--jd", arguments["jd_text"])],
+			start=2,
+		)
 
 	if name == "ai_suggest":
-		return _literal_positionals(["ai", "suggest", arguments["resume"], "--jd", arguments["jd_text"]], start=2)
+		return _literal_positionals(
+			["ai", "suggest", arguments["resume"], *_option_pair("--jd", arguments["jd_text"])],
+			start=2,
+		)
 
 	if name == "ai_fit":
-		args = ["ai", "fit", "--resume", arguments["resume"]]
+		args = ["ai", "fit", *_option_pair("--resume", arguments["resume"])]
 		if "limit" in arguments:
-			args.extend(["--limit", str(arguments["limit"])])
+			args.extend(_option_pair("--limit", str(arguments["limit"])))
 		return args
 
 	if name == "ai_suggest_keywords":
 		args = ["ai", "suggest-keywords"]
 		if "limit" in arguments:
-			args.extend(["--limit", str(arguments["limit"])])
+			args.extend(_option_pair("--limit", str(arguments["limit"])))
 		return args
 
 	if name == "ai_resume_optimize":
@@ -597,14 +619,14 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# page=0 是显式传入的非法值，要原样下发交给 CLI 的 IntRange(1) 拒绝；
 		# 用真值判断会把它静默换成默认第 1 页，与其他工具的页码行为不一致。
 		if arguments.get("page") is not None:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		return args
 
 	if name == "history":
 		args = ["history"]
 		# 与 favorites_list 同一取舍：显式传入的 0 交给 CLI 拒绝，不静默改写。
 		if arguments.get("page") is not None:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		return args
 
 	if name == "shortlist_add":
@@ -613,25 +635,25 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 真值判断会把 "" 化装成没传，落库的 source 与调用方参数不一致。
 		for opt in ("title", "company", "city", "salary", "source"):
 			if arguments.get(opt) is not None:
-				args.extend([f"--{opt}", str(arguments[opt])])
+				args.extend(_option_pair(f"--{opt}", str(arguments[opt])))
 		if arguments.get("lid"):
-			args.extend(["--lid", str(arguments["lid"])])
+			args.extend(_option_pair("--lid", str(arguments["lid"])))
 		if arguments.get("tags"):
-			args.extend(["--tags", str(arguments["tags"])])
+			args.extend(_option_pair("--tags", str(arguments["tags"])))
 		if arguments.get("note"):
-			args.extend(["--note", str(arguments["note"])])
+			args.extend(_option_pair("--note", str(arguments["note"])))
 		return _literal_positionals(args, start=2, count=2)
 
 	if name == "shortlist_annotate":
 		args = ["shortlist", "annotate", arguments["security_id"], arguments["job_id"]]
 		for tag in arguments.get("add_tags") or []:
-			args.extend(["--add-tag", str(tag)])
+			args.extend(_option_pair("--add-tag", str(tag)))
 		for tag in arguments.get("remove_tags") or []:
-			args.extend(["--remove-tag", str(tag)])
+			args.extend(_option_pair("--remove-tag", str(tag)))
 		# `--note ""` 在 CLI 是「替换为空」，即清空备注；用 truthiness 会把空串
 		# 丢掉，旧备注保留而信封仍回 updated=true（Issue #872）。
 		if "note" in arguments and arguments["note"] is not None:
-			args.extend(["--note", str(arguments["note"])])
+			args.extend(_option_pair("--note", str(arguments["note"])))
 		return _literal_positionals(args, start=2, count=2)
 
 	if name == "shortlist_compare":
@@ -639,7 +661,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 显式空串必须原样下发：CLI 统一按 INVALID_PARAM 拒绝，真值判断会把它
 		# 化装成「没传」并比较全部条目（Issue #1565）。
 		if arguments.get("tag") is not None:
-			args.extend(["--tag", str(arguments["tag"])])
+			args.extend(_option_pair("--tag", str(arguments["tag"])))
 		return args
 
 	if name == "shortlist_remove":
@@ -671,11 +693,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 空串不是「未传」：与 label_id 同口径按存在性下发，交给 CLI 归一
 		# （Issue #1865）。
 		if "job_id" in arguments:
-			args.extend(["--job-id", str(arguments["job_id"])])
+			args.extend(_option_pair("--job-id", str(arguments["job_id"])))
 		if "label_id" in arguments:
-			args.extend(["--label-id", str(arguments["label_id"])])
+			args.extend(_option_pair("--label-id", str(arguments["label_id"])))
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		return args
 
 	if name == "hr_candidates":
@@ -684,47 +706,47 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append(arguments["query"])
 		for opt in ("city", "job_id", "experience", "degree", "age", "school_level", "activeness", "source", "salary"):
 			if arguments.get(opt):
-				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
+				args.extend(_option_pair(f"--{opt.replace('_', '-')}", str(arguments[opt])))
 		if arguments.get("select"):
 			args.append("--select")
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		return _literal_positionals(args, start=2, count=int(bool(arguments.get("query"))))
 
 	if name == "hr_chat":
 		args = ["hr", "chat"]
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		if "job_id" in arguments:
-			args.extend(["--job-id", str(arguments["job_id"])])
+			args.extend(_option_pair("--job-id", str(arguments["job_id"])))
 		if "label_id" in arguments:
-			args.extend(["--label-id", str(arguments["label_id"])])
+			args.extend(_option_pair("--label-id", str(arguments["label_id"])))
 		if "summary_limit" in arguments:
-			args.extend(["--summary-limit", str(arguments["summary_limit"])])
+			args.extend(_option_pair("--summary-limit", str(arguments["summary_limit"])))
 		return args
 
 	if name == "hr_chatmsg":
 		args = ["hr", "chatmsg", str(arguments["friend_id"])]
 		if "count" in arguments:
-			args.extend(["--count", str(arguments["count"])])
+			args.extend(_option_pair("--count", str(arguments["count"])))
 		# 存在即下发（显式 null 已在入口剥离）：游标 0 是非法取值，但不能被
 		# 真值判断化装成「没传」，否则调用方拿到默认最新一页还以为翻页生效（Issue #1199）。
 		if "max_msg_id" in arguments:
-			args.extend(["--max-msg-id", str(arguments["max_msg_id"])])
+			args.extend(_option_pair("--max-msg-id", str(arguments["max_msg_id"])))
 		return _literal_positionals(args, start=2)
 
 	if name == "hr_last_messages":
 		args = ["hr", "last-messages"]
 		for friend_id in arguments.get("friend_ids") or []:
-			args.extend(["--friend-id", str(friend_id)])
+			args.extend(_option_pair("--friend-id", str(friend_id)))
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		if "job_id" in arguments:
-			args.extend(["--job-id", str(arguments["job_id"])])
+			args.extend(_option_pair("--job-id", str(arguments["job_id"])))
 		if "label_id" in arguments:
-			args.extend(["--label-id", str(arguments["label_id"])])
+			args.extend(_option_pair("--label-id", str(arguments["label_id"])))
 		if "limit" in arguments:
-			args.extend(["--limit", str(arguments["limit"])])
+			args.extend(_option_pair("--limit", str(arguments["limit"])))
 		return args
 
 	if name == "hr_resume":
@@ -737,7 +759,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["hr", "resume", "--exchange", "--friend-id", str(arguments["friend_id"])]
 		# 省略 type 等于 phone；空串是调用方写错了取值，交给 CLI 的枚举诊断（Issue #982）。
 		if "type" in arguments and arguments["type"] is not None and arguments["type"] != "phone":
-			args.extend(["--type", str(arguments["type"])])
+			args.extend(_option_pair("--type", str(arguments["type"])))
 		return args
 
 	if name == "hr_reply":
@@ -763,7 +785,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "hr_recommendations":
 		args = ["hr", "recommendations", "--job-id", str(arguments["job_id"])]
 		if "page" in arguments:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		return args
 
 	if name == "hr_greet":
@@ -777,7 +799,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			"--message", str(arguments["message"]),
 		]
 		if arguments.get("suid"):
-			args.extend(["--suid", str(arguments["suid"])])
+			args.extend(_option_pair("--suid", str(arguments["suid"])))
 		if arguments.get("yes") is True:
 			args.append("--yes")
 		if arguments.get("dry_run") is True:
@@ -807,7 +829,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if action in {"online", "offline"}:
 			args.append(str(arguments["job_id"]))
 		elif arguments.get("page") is not None:
-			args.extend(["--page", str(arguments["page"])])
+			args.extend(_option_pair("--page", str(arguments["page"])))
 		return _literal_positionals(args, start=3, count=int(action in {"online", "offline"}))
 
 	if name == "hr_jobs_detail":
@@ -822,7 +844,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "pipeline":
 		args = [name]
 		if arguments.get("days_stale") is not None:
-			args.extend(["--days-stale", str(arguments["days_stale"])])
+			args.extend(_option_pair("--days-stale", str(arguments["days_stale"])))
 		return args
 
 	# 无参数命令：doctor, cities, interviews
