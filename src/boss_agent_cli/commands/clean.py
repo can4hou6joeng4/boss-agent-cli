@@ -814,21 +814,31 @@ def _path_stats(path: Path) -> tuple[int, int]:
 		return 0, 0
 	size = 0
 	count = 0
-	for item in path.rglob("*"):
-		item_mode = _lstat_mode(item)
-		if item_mode is None:
-			continue
-		if stat.S_ISLNK(item_mode):
-			target_mode = _stat_mode(item)
-			if target_mode is None or not stat.S_ISREG(target_mode):
-				continue
-		elif not stat.S_ISREG(item_mode):
-			continue
+	directories = [path]
+	while directories:
+		directory = directories.pop()
 		try:
-			size += item.stat().st_size
+			# rglob 会静默跳过不可读的子目录，使清理预览虚报为零（Issue #2572）。
+			items = list(directory.iterdir())
 		except FileNotFoundError:
 			continue
-		count += 1
+		for item in items:
+			try:
+				entry = item.lstat()
+			except FileNotFoundError:
+				continue
+			if stat.S_ISDIR(entry.st_mode):
+				directories.append(item)
+				continue
+			if stat.S_ISLNK(entry.st_mode):
+				target_mode = _stat_mode(item)
+				if target_mode is None or not stat.S_ISREG(target_mode):
+					continue
+			elif not stat.S_ISREG(entry.st_mode):
+				continue
+			# 同样只统计嵌套文件链接本身，不把目标大小记成已释放。
+			size += entry.st_size
+			count += 1
 	return size, count
 
 

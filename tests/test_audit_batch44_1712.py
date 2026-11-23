@@ -199,6 +199,49 @@ def test_path_stats_metadata_error_propagates(
 		clean_module._path_stats(root)
 
 
+def test_privacy_preview_reports_unreadable_resume_subdirectory(
+	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	subdir = tmp_path / "resumes" / "nested"
+	payload_file = subdir / "example.json"
+	subdir.mkdir(parents=True)
+	payload_file.write_text("{}", encoding="utf-8")
+	iterdir = Path.iterdir
+
+	def unreadable(path: Path) -> Any:
+		if path == subdir:
+			raise PermissionError(f"无法列出 {path}")
+		return iterdir(path)
+
+	monkeypatch.setattr(Path, "iterdir", unreadable)
+	exit_code, payload = _invoke(tmp_path, "clean", "--privacy", "--dry-run")
+
+	assert exit_code == 1
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
+	assert payload["data"]["failed"][0]["target"] == "本地简历"
+	assert str(subdir) in payload["data"]["failed"][0]["reason"]
+	assert payload_file.read_text(encoding="utf-8") == "{}"
+
+
+def test_path_stats_tolerates_subdirectory_disappearing(
+	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	subdir = tmp_path / "gone"
+	subdir.mkdir()
+	(tmp_path / "kept.txt").write_bytes(b"abc")
+	iterdir = Path.iterdir
+
+	def removed(path: Path) -> Any:
+		if path == subdir:
+			raise FileNotFoundError(str(path))
+		return iterdir(path)
+
+	monkeypatch.setattr(Path, "iterdir", removed)
+
+	assert clean_module._path_stats(tmp_path) == (3, 1)
+
+
 def test_privacy_preflight_metadata_error_aborts_before_delete(
 	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
