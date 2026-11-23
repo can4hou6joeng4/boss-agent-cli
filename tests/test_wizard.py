@@ -22,7 +22,7 @@ from boss_agent_cli.crawler.service import CrawlOutcome, CrawlSettings, crawl_ex
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.search_filters import resolve_welfare_keywords
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
+from boss_agent_cli.services.pagination import MAX_TRUSTED_COUNT, MAX_TRUSTED_PAGE
 from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus, WizardInput
@@ -619,6 +619,18 @@ def test_candidate_chat_accepts_trusted_page_limit(tmp_path):
 	DEFAULT_ACTIONS["candidate_chat"](context, {"page": MAX_TRUSTED_PAGE}, {})
 
 	assert platform.calls == [("friend_list", MAX_TRUSTED_PAGE)]
+
+
+@pytest.mark.parametrize("count", [MAX_TRUSTED_COUNT + 1, "1000001"])
+def test_candidate_chat_history_rejects_count_above_trusted_limit(tmp_path, count):
+	"""`chatmsg --count` 的 Click 上限不能被向导绕过（Issue #2625）。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowInputError, match="count"):
+		DEFAULT_ACTIONS["candidate_chat_history"](context, {"gid": "10001", "count": count}, {})
+
+	assert platform.calls == []
 
 
 def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):

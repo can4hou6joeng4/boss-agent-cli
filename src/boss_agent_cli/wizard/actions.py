@@ -47,7 +47,7 @@ from boss_agent_cli.services.contact_lookup import (
 )
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
+from boss_agent_cli.services.pagination import MAX_TRUSTED_COUNT, MAX_TRUSTED_PAGE
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
@@ -1288,7 +1288,7 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 	identifier = _required_nonblank_value(inputs, "gid")
 	# 页码在解析联系人之前校验：越界值不应先翻一遍沟通列表再拒绝（Issue #2625）。
 	page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
-	count = _int_input(inputs, "count", 20, minimum=1)
+	count = _int_input(inputs, "count", 20, minimum=1, maximum=MAX_TRUSTED_COUNT)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
 		gid = _candidate_current_uid(friend)
