@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.177（2026-11-24）：向导 / MCP `boss_wizard` 的聊天记录游标拒绝显式 `max_msg_id: 0` / 负数，打招呼拒绝显式空白 `message`，求职者分页动作拒绝超过 `MAX_TRUSTED_PAGE` 的页码，三处均与顶层命令同口径（Issue #2621 / #2623 / #2625）。
+
 v3.4.176（2026-11-24）：向导 / MCP `boss_wizard` 的招聘者动作对显式空白筛选项按 `INVALID_PARAM` 拒绝，与顶层 `hr ...` 命令同口径（Issue #2618）。
 
 v3.4.175（2026-11-24）：MCP 参数映射不再吞掉写工具的显式空串（`boss_greet` 消息、`boss_batch_greet` 筛选项、`boss_hr_candidates` 城市 / 职位），空值由 CLI 在平台调用前按 `INVALID_PARAM` 拒绝（Issue #2615）。

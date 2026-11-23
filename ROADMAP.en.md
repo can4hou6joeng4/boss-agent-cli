@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.177 (2026-11-24): the wizard / MCP `boss_wizard` chat-history action rejects explicit `max_msg_id: 0` / negative cursors, the greet action rejects explicit blank `message`, and candidate paging actions reject pages above `MAX_TRUSTED_PAGE`, all matching the top-level commands (Issue #2621 / #2623 / #2625).
+
 v3.4.176 (2026-11-24): recruiter actions in the wizard / MCP `boss_wizard` path reject explicit blank filters with `INVALID_PARAM`, matching the top-level `hr ...` commands (Issue #2618).
 
 v3.4.175 (2026-11-24): MCP argument mapping no longer drops explicit empty strings for write tools (`boss_greet` message, `boss_batch_greet` filters, `boss_hr_candidates` city / job); the CLI rejects them with `INVALID_PARAM` before any platform call (Issue #2615).
