@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.174 (2026-11-24): every recruiter write entry point now reads the circuit breaker from both `stop.json` and `state.json`; a persisted breaker, unreadable state or a wizard / MCP write action returns `CIRCUIT_BREAKER_OPEN` before dispatch (Issue #2612).
+
 v3.4.173 (2026-11-23): wizard checkpoints after a platform-risk failure no longer offer or execute `--resume`; write-result markers cover run-level errors, waiting-input steps and error-code drift (Issues #2608 / #2609).
 
 v3.4.172 (2026-11-23): blank `batch-greet` filters and a blank `greet --message` are rejected before any platform call instead of greeting an unbounded result set or silently sending the default text; `agent crawl` reports a blank city accurately (Issues #2602 / #2603 / #2604).
