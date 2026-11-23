@@ -269,11 +269,21 @@ def test_preset_active_keeps_cli_aliases(active) -> None:
 	assert _build_args("boss_preset_add", arguments)[-2:] == ["--active", active]
 
 
+@pytest.mark.parametrize("tool", ["boss_preset_add", "boss_watch_add"])
+def test_saved_search_preserves_case_insensitive_choices(tool) -> None:
+	arguments = {"name": "n", "query": "q", "stage": "a轮"}
+	assert _argument_type_errors(tool, arguments) == []
+	assert _build_args(tool, arguments)[-2:] == ["--stage", "a轮"]
+
+
 def test_long_enum_error_stays_bounded() -> None:
-	errors = _argument_type_errors("boss_preset_add", {"name": "n", "query": "q", "industry": "不存在"})
+	value = "不存在\n" * 1000
+	errors = _argument_type_errors("boss_preset_add", {"name": "n", "query": "q", "industry": value})
 	message = "\n".join(errors)
 	assert "不是允许的取值" in message
 	assert "等 " in message and " 个取值" in message
+	assert len(message) < 300
+	assert "\n" not in message
 
 
 @pytest.mark.parametrize(

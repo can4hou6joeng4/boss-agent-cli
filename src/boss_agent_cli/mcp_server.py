@@ -886,13 +886,21 @@ def _normalize_integral_numbers(tool_name: str, arguments: dict[str, Any]) -> No
 			]
 
 
-def _json_enum_allows(enum: list[Any], value: Any) -> bool:
+# 预设与订阅的四种筛选在 Click 中显式不区分大小写。schema 仍发布标准写法，
+# 入口不能因新增枚举检查而拒绝此前合法的大小写变体。
+_CASE_INSENSITIVE_FILTER_ENUMS = frozenset({"industry", "scale", "stage", "job_type"})
+
+
+def _json_enum_allows(enum: list[Any], value: Any, *, case_insensitive: bool = False) -> bool:
 	"""按 JSON Schema 的 enum 语义判断取值是否合法。
 
 	数值按值相等（``1`` 与 ``1.0`` 同值）；``bool`` 不与 ``0`` / ``1`` 混同。
 	"""
 	if isinstance(value, bool):
 		return any(item is value for item in enum)
+	if case_insensitive and isinstance(value, str):
+		folded = value.casefold()
+		return any(isinstance(item, str) and item.casefold() == folded for item in enum)
 	for item in enum:
 		if isinstance(item, bool):
 			continue
@@ -910,9 +918,12 @@ def _enum_error(key: str, value: Any, enum: list[Any]) -> str:
 	allowed = "、".join(shown)
 	if len(enum) > _MAX_ENUM_VALUES_IN_ERROR:
 		allowed += f" 等 {len(enum)} 个取值"
-	# 空串按 repr 渲染：`key=` 后直接跟「不是允许的取值」看不出传了空值。
 	if isinstance(value, str):
-		rendered = repr(value) if not value else value
+		# 错误只展示一段可读预览，避免反射整段误传文本或内嵌控制字符。
+		preview = value[:80]
+		rendered = preview if preview.isprintable() and preview else repr(preview)
+		if len(value) > len(preview):
+			rendered += "…"
 	else:
 		rendered = _brief_numeric(value)
 	return f"{key}={rendered} 不是允许的取值：{allowed}"
@@ -953,18 +964,18 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			# 「应为 integer，收到 float」更接近调用方需要修的东西。
 			errors.append(
 				f"{key}={_brief_numeric(value)} 超出 JSON 安全整数范围（2^53-1）："
-				"浮点输入在该量级已丢失精度，请改用不超过 2^53 的整数或字符串形式的标识"
+				"请用 JSON 整数字面量传入原值，不要使用小数点或指数写法"
 			)
 			continue
 		if not _matches_json_type(value, expected):
 			errors.append(f"{key} 应为 {expected}，收到 {type(value).__name__}")
 			continue
 		enum_values = prop.get("enum")
-		if isinstance(enum_values, list) and enum_values and not _json_enum_allows(enum_values, value):
-			# schema 的 enum 与 CLI 的取值域同源：入口放行非法值只会在 CLI 报错或被
-			# 映射层的真值判断静默丢弃（`preset_add active=""`），Issue #2553。
-			errors.append(_enum_error(key, value, enum_values))
-			continue
+		if isinstance(enum_values, list) and enum_values:
+			case_insensitive = tool_name in {"boss_preset_add", "boss_watch_add"} and key in _CASE_INSENSITIVE_FILTER_ENUMS
+			if not _json_enum_allows(enum_values, value, case_insensitive=case_insensitive):
+				errors.append(_enum_error(key, value, enum_values))
+				continue
 		if expected == "string":
 			# schema 声明了 minLength 时，入口按同一约束拒绝（Issue #1533）：
 			# 空串在 CLI 上大多只能得到参数错误，客户端本可以在发送前拦下。
