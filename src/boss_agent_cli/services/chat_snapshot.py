@@ -5,6 +5,7 @@ import errno
 import json
 import os
 import re
+import stat
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -13,7 +14,7 @@ from typing import Any
 
 from boss_agent_cli.services.chat_utils import contact_identity
 from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
-from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
+from boss_agent_cli.services.json_files import path_mode, read_bytes_if_regular, write_json_atomic
 from boss_agent_cli.output import Logger
 
 _SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -314,7 +315,14 @@ def _find_previous_snapshot(snapshot_dir: str, today: str) -> str | None:
 		except ValueError:
 			continue
 		snapshots.append(fname)
-	if not snapshots:
-		return None
-	snapshots.sort(reverse=True)
-	return os.path.join(snapshot_dir, snapshots[0])
+	for fname in sorted(snapshots, reverse=True):
+		path = os.path.join(snapshot_dir, fname)
+		try:
+			mode = path_mode(Path(path))
+		except OSError:
+			# 类型未知不能当成目录并跳过；保留既有读失败告警，不使用更旧基线。
+			return path
+		if mode is not None and stat.S_ISREG(mode):
+			return path
+		# 日期同名目录等非文件不能遮蔽更早的有效快照（Issue #2575）。
+	return None

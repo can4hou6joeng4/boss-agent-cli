@@ -173,14 +173,15 @@ def test_oversized_singleton_lock_pid_is_treated_as_stale(tmp_path):
 # ── #1584：空 securityId 不伪造详情成功 ───────────────────────────
 
 
-def test_missing_security_id_stays_pending(tmp_path):
+@pytest.mark.parametrize("detail_id", ["", "  ", None, True, {"id": None}, "\ud800"])
+def test_missing_security_id_stays_pending(tmp_path, detail_id):
 	page = {
 		"code": 0,
 		"zpData": {
 			"jobList": [
 				{
 					"encryptJobId": "job-1",
-					"securityId": "",
+					"securityId": detail_id,
 					"jobName": "AI 工程师",
 				}
 			],
@@ -203,6 +204,59 @@ def test_missing_security_id_stays_pending(tmp_path):
 		assert items[0]["detail_done"] is False
 		assert items[0]["payload"]["detail_status"] == "missing-security-id"
 		assert transport.detail_calls == []
+
+
+def test_resume_page_adds_missing_detail_identifier_without_overwriting_rows(tmp_path: Path) -> None:
+	transport = _DetailTransport({
+		"code": 0,
+		"zpData": {
+			"jobList": [
+				{"encryptJobId": "job-1", "securityId": "detail-example-1", "jobName": "更新标题"},
+				{"encryptJobId": "job-2", "securityId": "detail-example-2", "jobName": "更新标题"},
+			],
+			"hasMore": False,
+		},
+	})
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda _: transport, budget_factory=_NoDelayBudget)
+		run = service.create(_settings(tmp_path, with_detail=True))
+		# 模拟列表行已写入、游标未推进的断点。
+		cache.put_crawl_job(run, "job-1", 1, {"job_id": "job-1", "title": "原始标题"}, detail_done=False)
+		done = {"job_id": "job-2", "title": "原始标题", "post_description": "已有详情"}
+		cache.put_crawl_job(run, "job-2", 1, done, detail_done=True)
+		before = cache.get_crawl_job(run, "job-1")
+		assert before is not None
+
+		outcome = service.resume(run)
+		first = cache.get_crawl_job(run, "job-1")
+		second = cache.get_crawl_job(run, "job-2")
+		assert outcome.status == "completed"
+		assert first is not None and first["detail_done"] is True
+		assert first["selector"] == before["selector"]
+		assert first["page_no"] == before["page_no"]
+		assert first["payload"]["title"] == "原始标题"
+		assert first["payload"]["post_description"] == "职位描述"
+		assert second is not None and second["detail_done"] is True
+		assert second["payload"] == done
+		assert transport.detail_calls == ["detail-example-1"]
+
+
+@pytest.mark.parametrize("bad_id", [{"id": None}, True, ["x"], 1.0, "  "])
+def test_crawl_does_not_dedupe_distinct_jobs_by_malformed_identifier(tmp_path: Path, bad_id: object) -> None:
+	transport = _DetailTransport({
+		"code": 0,
+		"zpData": {
+			"jobList": [{"encryptJobId": bad_id, "jobName": title} for title in ("职位一", "职位二")],
+			"hasMore": False,
+		},
+	})
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda _: transport, budget_factory=_NoDelayBudget)
+		outcome = service.create_and_run(_settings(tmp_path))
+		assert outcome.status == "completed"
+		rows = cache.list_crawl_jobs(outcome.run_id)
+		assert [row["payload"]["title"] for row in rows] == ["职位一", "职位二"]
+		assert [row["payload"]["job_id"] for row in rows] == ["", ""]
 
 
 def test_fetch_detail_rejects_empty_security_id(tmp_path):
