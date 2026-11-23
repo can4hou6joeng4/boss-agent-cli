@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.173] - 2026-11-23
+
 ### Fixed
 - 风控（`ACCOUNT_RISK` / `ENVIRONMENT_RISK`）落盘的 workflow 断点不再把 `--resume` 当作 `hints.next_actions`，改为按 `RISK_ERROR_CONTRACTS` 给出 `boss doctor` 与真人核对说明；操作者处理完官方页面并清除本地风险锁后的显式 `--resume` 保持不变（Issue #2608）。
 - `wizard --resume` 的写前标记判定补齐 run 级错误、`waiting_input` 步骤与错误码大小写漂移；这些结果未知的写步骤不再 fail-open 重放，提示层与执行层共用同一阻断口径（Issue #2609）。

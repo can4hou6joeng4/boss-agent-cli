@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.173 (2026-11-23): wizard checkpoints after a platform-risk failure no longer offer or execute `--resume`; write-result markers cover run-level errors, waiting-input steps and error-code drift (Issues #2608 / #2609).
+
 v3.4.172 (2026-11-23): blank `batch-greet` filters and a blank `greet --message` are rejected before any platform call instead of greeting an unbounded result set or silently sending the default text; `agent crawl` reports a blank city accurately (Issues #2602 / #2603 / #2604).
 
 v3.4.171 (2026-11-23): recruiter write requests that provably never left the machine release local reservations and retry as network errors, precheck failures on resume acceptance use the read-only error contract, and explicitly blank filters are rejected instead of silently widening results (Issues #2596 / #2597 / #2598).
