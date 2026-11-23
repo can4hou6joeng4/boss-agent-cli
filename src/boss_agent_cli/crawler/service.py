@@ -1203,7 +1203,10 @@ class CrawlService:
 				continue
 			checks += 1
 			row = item["payload"]
-			job_id = str(row.get("job_id", ""))
+			# 显式 null / 容器类型按缺失处理：str(None) 会得到 "None"，
+			# 让详情缓存按这个伪主键跨职位共享，后一个职位直接采用前一个
+			# 职位的描述并跳过自己的详情请求（Issue #2642）。
+			job_id = safe_text(row.get("job_id") or "")
 			cached = self._cache.get_job_desc(job_id)
 			if cached:
 				row["post_description"] = cached
@@ -1258,7 +1261,8 @@ class CrawlService:
 						"detail_status": "fetched",
 					}
 				)
-				self._cache.put_job_desc(job_id, str(row["post_description"]))
+				if job_id:
+					self._cache.put_job_desc(job_id, str(row["post_description"]))
 			self._put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=True)
 		return checks
 

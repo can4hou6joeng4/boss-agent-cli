@@ -871,18 +871,34 @@ def _prepare_background_resume(
 				marked_at = cache.mark_crawl_run_active(run_id, "queued")
 				# worker 的错误信封写进空设备：依赖缺失与登录态不足要在这里由父进程报出来。
 				preflight()
-			except BaseException:
+			except BaseException as original:
+				# 还原本身也可能失败（磁盘满 / 库锁冲突）：不能让还原异常顶替原始
+				# 预检错误，否则操作者看不到真正原因，run 还停在 queued；两个还原
+				# 写操作各自独立尝试，失败以 note 附加（与前台 _resume_locked 的
+				# Issue #2562 同口径，#2642）。
+				restore_failures: list[str] = []
 				if clear_stop and previous_stop:
-					cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
-				# 预检 / 落盘失败：状态、错误与时间戳还原到恢复前，失败的调用
-				# 不改动任务（Issue #1042 / #2195 / #2240）。
-				cache.restore_crawl_run_state(
-					run_id,
-					status=previous_status,
-					error=previous_error,
-					updated_at=previous_updated_at,
-					marked_at=marked_at,
-				)
+					# 预检 / 落盘失败：状态、错误与时间戳还原到恢复前，失败的调用
+					# 不改动任务（Issue #1042 / #2195 / #2240）。
+					try:
+						cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
+					except Exception as exc:
+						restore_failures.append(f"stop 标记还原失败（{type(exc).__name__}: {exc}）")
+				try:
+					cache.restore_crawl_run_state(
+						run_id,
+						status=previous_status,
+						error=previous_error,
+						updated_at=previous_updated_at,
+						marked_at=marked_at,
+					)
+				except Exception as exc:
+					restore_failures.append(f"运行状态还原失败（{type(exc).__name__}: {exc}）")
+				if restore_failures:
+					original.add_note(
+						"恢复失败后的状态还原未完成：" + "；".join(restore_failures)
+						+ "。先核对 crawl status，再决定是否手工修正断点"
+					)
 				raise
 		return "queued", True
 
