@@ -6,9 +6,9 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.display import boss_command_for_ctx, positional_hint, shell_argument
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, positional_hint, shell_argument
 
-__all__ = ["blank_option_names", "hint_command", "positional_hint", "shell_argument"]
+__all__ = ["blank_option_names", "hint_command", "positional_hint", "reject_blank_options", "shell_argument"]
 
 
 def hint_command(ctx: click.Context, command: str) -> str:
@@ -28,3 +28,23 @@ def blank_option_names(**values: Any) -> list[str]:
 		for name, value in values.items()
 		if value is not None and not (isinstance(value, str) and value.strip())
 	]
+
+
+def reject_blank_options(ctx: click.Context, command: str, /, **values: Any) -> bool:
+	"""显式给出的空白筛选项按 ``INVALID_PARAM`` 拒绝。
+
+	``None``（未提供）保持原语义；显式空串 / 纯空白不能静默变成「不筛选」，
+	否则 Agent 会以为已按职位 / 城市过滤并据此执行后续写操作（Issue #2598）。
+	"""
+	blank = blank_option_names(**values)
+	if not blank:
+		return False
+	labels = " / ".join(blank)
+	handle_error_output(
+		ctx,
+		command,
+		code="INVALID_PARAM",
+		message=f"{labels} 不能为空",
+		recovery_action=f"补上 {labels} 的有效值后重试；若不按该条件筛选，请省略该选项",
+	)
+	return True

@@ -7,7 +7,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands._text_guard import reject_unencodable_params
-from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._hints import hint_command, reject_blank_options
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
@@ -42,6 +42,8 @@ from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str | None, experience: str | None, degree: str | None, age: str | None, school_level: str | None, activeness: str | None, source: str | None, salary: str | None, select: bool, page: int) -> None:
 	"""搜索候选人"""
 	if not require_compliance_allowed(ctx, "recruiter-candidates"):
+		return
+	if reject_blank_options(ctx, "recruiter-candidates", job_id=job_id, city=city):
 		return
 
 	# 关键词与筛选项都会进 httpx 查询参数：孤立代理项在编码阶段才会失败，

@@ -7,6 +7,7 @@
 ### Fixed
 - `hr greet` / `hr location` 遇到连接、代理、协议选择等确定未发出的异常时释放本地预约并按可重试的 `NETWORK_ERROR` 上报；招呼正文含不可编码字符时在入口按 `INVALID_PARAM` 拒绝，不再让一次断网或坏参数永久锁死候选人会话。可能已发出的读写超时仍保持结果未知、禁止自动重发（Issue #2596）。
 - `hr accept-resume` 的前置只读请求（`historyMsg` / `friendDetail`）失败时按只读错误契约输出，`accepted=false`，限流可重试；同意 POST 从未发出时不再让人去官方页面核对一个不存在的结果（Issue #2597）。
+- `hr applications` / `hr chat` / `hr last-messages` / `hr candidates` 对显式传空的 `--job-id` / `--city` 按 `INVALID_PARAM` 拒绝，不再静默退化为全职位或全国筛选；省略选项仍保持原语义（Issue #2598）。
 
 ## [3.4.170] - 2026-11-23
 

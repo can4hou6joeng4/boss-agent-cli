@@ -16,7 +16,7 @@ from boss_agent_cli.services.pagination import (
 	page_can_advance,
 	rows_from,
 )
-from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._hints import hint_command, reject_blank_options
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
@@ -517,6 +517,8 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 	"""查看与候选人的沟通列表"""
 	if not require_compliance_allowed(ctx, "recruiter-chat"):
 		return
+	if reject_blank_options(ctx, "recruiter-chat", job_id=job_id):
+		return
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -614,6 +616,8 @@ def recruiter_last_messages_cmd(
 ) -> None:
 	"""批量查看候选人最近消息摘要"""
 	if not require_compliance_allowed(ctx, "recruiter-last-messages"):
+		return
+	if reject_blank_options(ctx, "recruiter-last-messages", job_id=job_id):
 		return
 
 	data_dir = ctx.obj["data_dir"]
