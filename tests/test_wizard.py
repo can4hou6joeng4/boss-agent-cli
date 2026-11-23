@@ -2831,6 +2831,86 @@ def test_execute_candidate_detail_falls_back_to_job_card_when_detail_rejects_par
 	assert job["security_id"] == "sec-1"
 
 
+class _DetailCachePlatform:
+	def __init__(self):
+		self.calls = []
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, *args):
+		return None
+
+	def job_detail(self, job_id):
+		self.calls.append(("job_detail", job_id))
+		return {
+			"code": 0,
+			"zpData": {"jobInfo": {"jobName": "职位甲", "encryptJobId": job_id}, "brandComInfo": {}, "bossInfo": {}},
+		}
+
+	def job_card(self, security_id, lid=""):
+		self.calls.append(("job_card", security_id, lid))
+		return {"code": 0, "zpData": {"jobCard": {"encryptJobId": "card-job", "jobName": "职位甲"}}}
+
+	def is_success(self, response):
+		return response.get("code") == 0
+
+	def unwrap_data(self, response):
+		return response.get("zpData") or {}
+
+
+def test_candidate_detail_uses_cached_job_id_before_job_card(tmp_path):
+	"""与顶层 `detail` 同口径：缓存命中走 job_detail，不消耗浏览器卡片通道（Issue #2628）。"""
+	platform = _DetailCachePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
+		cache.record_greet("sec-1", "cached-job")
+
+	result = DEFAULT_ACTIONS["candidate_detail"](context, {"security_id": "sec-1"}, {})
+
+	assert platform.calls == [("job_detail", "cached-job")]
+	assert result.data["job"]["channel"] == "job_detail"
+
+
+@pytest.mark.parametrize("cached", [None, 123, "   ", "\ud800"])
+def test_candidate_detail_ignores_invalid_cached_job_id(tmp_path, monkeypatch, cached):
+	"""缓存漂移 / 坏值按未命中继续走卡片通道，不当参数发给平台（Issue #1817 / #2549）。"""
+	platform = _DetailCachePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+	monkeypatch.setattr(CacheStore, "get_job_id", lambda self, security_id: cached)
+
+	result = DEFAULT_ACTIONS["candidate_detail"](context, {"security_id": "sec-1"}, {})
+
+	assert platform.calls == [("job_card", "sec-1", "")]
+	assert result.data["job"]["channel"] == "job_card"
+
+
+@pytest.mark.parametrize("job_id", [123, {"id": "x"}, "\ud800"])
+def test_candidate_detail_rejects_non_string_or_unencodable_job_id(tmp_path, job_id):
+	"""显式 job_id 不能经 str() 变成 repr 或把孤立代理项带进请求（Issue #2628）。"""
+	platform = _DetailCachePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowInputError, match="job_id"):
+		DEFAULT_ACTIONS["candidate_detail"](
+			context, {"security_id": "sec-1", "job_id": job_id}, {}
+		)
+
+	assert platform.calls == []
+
+
+def test_candidate_detail_blank_job_id_falls_back_to_cache(tmp_path):
+	"""显式空白 job_id 按未提供处理，与顶层 `--job-id "   "` 一致（Issue #1817）。"""
+	platform = _DetailCachePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
+		cache.record_greet("sec-1", "cached-job")
+
+	DEFAULT_ACTIONS["candidate_detail"](context, {"security_id": "sec-1", "job_id": "   "}, {})
+
+	assert platform.calls == [("job_detail", "cached-job")]
+
+
 def test_error_message_prefers_platform_chinese_text():
 	from boss_agent_cli.wizard.renderer import error_message, recovery_message
 

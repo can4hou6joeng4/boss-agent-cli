@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 / MCP `boss_wizard` 的 `candidate_detail` 与顶层 `boss detail` 同口径：未提供 job_id 时从缓存取有效值走 `job_detail` 快速通道，缓存里的非字符串 / 空白 / 不可编码值按未命中处理；显式 job_id 的非字符串与不可编码值按 `INVALID_PARAM` 拒绝（Issue #2628）。
+
 ## [3.4.177] - 2026-11-24
 
 ### Fixed
