@@ -7,6 +7,7 @@
 ### Fixed
 - MCP 的 `boss_wizard` 按 `action` 区分中断后的恢复方式：`status` 只读本地断点，可重新查询；`stop` 可能已写入本地停止标记，应先查同一任务的状态，不自动重放。`run`、`resume` 和省略 `action`（默认执行 `run`）仍按可能产生写入处理（Issue #2552）。
 - MCP 将以 `--` 开头的选项值与选项名合并为单个 argv 元素，避免误判结束符或开关，同时原样保留 `-o` 的输出路径；参数入口拒绝非有限数、超出 `2^53-1` 的整值浮点及不在工具声明 `enum` 中的取值。`preset_add active=""` 不再被静默丢弃，`search` 仍支持 CLI 的活跃度别名与显式清除筛选（Issue #2553）。
+- MCP 调用在 CLI 子进程启动期间或运行中被取消时，宿主仍会停止并回收自己启动的进程，保留已返回的断点信息，不把派发过的写调用标为安全重试。超时估算失败改在启动前拒绝，不再先启动子进程（Issue #2555）。
 - `search` 读取缓存时，单行 `response` 存了非法 UTF-8 不再被归成「缓存库损坏」并引导删除整库（候选池、预设、断点都在里面）：`CacheRowDecodeError` 让该行按缓存未命中处理并删除，本次搜索重新请求覆盖；`response` 列类型漂移（BLOB / 数字）同样按未命中；缓存里的 `pagination` 字段类型漂移（`page=true` / `has_more` 为字符串等）不再原样进入成功信封（Issue #2545）。
 - 平台职位字段含孤立代理项时，搜索缓存文本改用默认 JSON 转义后落库：SQLite 绑定阶段不再抛 `UnicodeEncodeError` 被兜成带磁盘指引的 `LOCAL_IO_ERROR`，普通搜索与加 `--with-score` 一样能返回结果（Issue #2545）。
 - `search --page` 与 URL 里的 `page` 统一钳制到 `MAX_TRUSTED_PAGE`，达到上限时保留平台的 `has_more` 证据但不再生成必然重复同一请求的下一页命令；4300 位页码在发出请求前按 `INVALID_PARAM` 拒绝。格式错误的 `--url`（如无效 IPv6 主机名）转成 `SearchUrlParseError`，按 `INVALID_PARAM` 提示修正链接，不再是可重试的 `NETWORK_ERROR`（Issue #2546）。

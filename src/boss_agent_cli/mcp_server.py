@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from anyio import CancelScope
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
@@ -699,6 +700,17 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 		_option_value(args, flag) is not None for flag in ("--timeout", "--status", "--stop")
 	):
 		args = (*args, "--timeout", str(_CLI_TIMEOUT_SECONDS))
+	# 估算在启动前完成，参数错误不会启动可能产生写入的子进程。
+	try:
+		timeout = _cli_timeout(args)
+	except (ArithmeticError, ValueError) as exc:
+		return _cli_failure(
+			args,
+			"INVALID_PARAM",
+			f"参数超出本地估算范围：{exc}",
+			outcome_unknown=False,
+			recovery_action="减小 count / summary-limit 后重试；本次子进程未启动",
+		)
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
 	spawn = asyncio.create_task(
 		asyncio.create_subprocess_exec(
@@ -713,40 +725,29 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 	except OSError as exc:
 		return _spawn_failure(args, exc)
 	except asyncio.CancelledError:
-		try:
-			process = await asyncio.shield(spawn)
-		except OSError as exc:
-			# The child never ran, so the interrupted call left no platform effect.
-			# Point at installation/path, not at a checkpoint that cannot exist
-			# (Issue #1000).
-			return _cli_failure(
-				args,
-				"WORKFLOW_STOPPED",
-				f"无法启动底层 boss CLI：{exc}",
-				outcome_unknown=False,
-				recovery_action=_SPAWN_FAILURE_RECOVERY,
-			)
-		output = asyncio.create_task(process.communicate())
-		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
+		# asyncio.shield 保护启动任务，却不保护等待者。MCP SDK 的 AnyIO 取消域
+		# 会在之后每次 await 再抛取消；必须保护取回句柄及清理，不能遗留仍运行的 CLI。
+		with CancelScope(shield=True):
+			try:
+				process = await asyncio.shield(spawn)
+			except OSError as exc:
+				# 启动失败未产生平台操作，应指向安装或路径（Issue #1000）。
+				return _cli_failure(
+					args,
+					"WORKFLOW_STOPPED",
+					f"无法启动底层 boss CLI：{exc}",
+					outcome_unknown=False,
+					recovery_action=_SPAWN_FAILURE_RECOVERY,
+				)
+			output = asyncio.create_task(process.communicate())
+			stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		return _interrupted_failure(args, "WORKFLOW_STOPPED", stdout, may_write=may_write)
 	output = asyncio.create_task(process.communicate())
-	# 超时估算必须在 spawn 之后仍可安全求值：异常先停子进程并回标准失败信封，
-	# 不能把 OverflowError 漏成 MCP 内部错误（Issue #1609）。
-	try:
-		timeout = _cli_timeout(args)
-	except (ArithmeticError, ValueError) as exc:
-		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
-		return _cli_failure(
-			args,
-			"INVALID_PARAM",
-			f"参数超出本地估算范围：{exc}",
-			outcome_unknown=False,
-			recovery_action="减小 count / summary-limit 后重试；本次子进程已停止，未返回结果",
-		)
 	try:
 		stdout, stderr = await asyncio.wait_for(asyncio.shield(output), timeout)
 	except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
-		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
+		with CancelScope(shield=True):
+			stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		code = "WORKFLOW_STOPPED" if isinstance(exc, asyncio.CancelledError) else "WORKFLOW_TIMEOUT"
 		return _interrupted_failure(args, code, stdout, may_write=may_write)
 	return _parse_cli_output(
