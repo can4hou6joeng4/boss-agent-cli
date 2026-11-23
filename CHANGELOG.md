@@ -6,6 +6,7 @@
 
 ### Fixed
 - `search` / `export` 的关键词与 `watch add` / `preset add` 的写入参数在入口校验 UTF-8 可编码性：argv 的孤立代理项按 `INVALID_PARAM` 拒绝，不再等到 `httpx` 组 URL 参数时被兜成带磁盘指引的 `LOCAL_IO_ERROR`。存量记录的可编码性纳入 `validate_stored_search_params`，`watch run` / `search --preset` 对坏记录报 `SAVED_SEARCH_INVALID` 并给删除重建指引，`watch run --all` 不再因一条坏记录中止整批；编码无效的预设关键词同样按预设失效处理（Issue #2528）。
+- `watch list` / `preset list` / `watch run --all` 的坏记录标签改用解码后的名称：BLOB 存储类的名称不再显示为 `b'legacy'` 并给出必然失败的删除命令，名称本身不是有效 UTF-8 时明确提示需手工清理本地数据库。`search --preset` 与向导 `candidate_watch run` 把 name / 时间戳等元数据损坏与参数损坏同口径报 `SAVED_SEARCH_INVALID` 并附删除重建指引，不再落成与预设无关的 `CACHE_RECORD_INVALID`（Issue #2529）。
 
 ## [3.4.160] - 2026-11-23
 

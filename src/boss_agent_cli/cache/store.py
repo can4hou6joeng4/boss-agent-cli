@@ -267,6 +267,25 @@ def saved_search_name_error(name: str) -> str | None:
 	return None
 
 
+def _saved_search_corrupt_label(raw: Any) -> str:
+	"""坏记录列表里的展示名称必须能直接用于 remove（Issue #2529）。
+
+	name 列允许 BLOB 存储类（#2147）：``str(row[0])`` 得到 ``b'legacy'``，
+	照抄到 ``watch remove b'legacy'`` / ``preset remove b'legacy'`` 只会返回
+	``removed: false``，坏记录永远留在库里。按读取侧同一解码口径还原 BLOB，
+	使恢复提示可直接执行；BLOB 不是有效 UTF-8 时保留可读转义并说明需手工
+	清理，不能给出必然失败的删除命令。
+	"""
+	try:
+		decoded = _decode_text_column("saved_search", "", "name", raw, allow_surrogates=True)
+	except CacheRecordInvalid:
+		return f"{sanitize_surrogates(str(raw))}（名称不是有效 UTF-8，需手工清理本地数据库）"
+	assert isinstance(decoded, str)
+	if not is_utf8_encodable(decoded):
+		return f"{sanitize_surrogates(decoded)}（名称不是有效 UTF-8，需手工清理本地数据库）"
+	return decoded
+
+
 def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
 	"""调度用时间戳的容错读取：漂移值按无历史处理（与 Issue #1206 同口径）。
 
@@ -1941,7 +1960,7 @@ class CacheStore:
 				created_at = _decode_timestamp_column("saved_search", name, "created_at", row[2])
 				updated_at = _decode_timestamp_column("saved_search", name, "updated_at", row[3])
 			except (SavedSearchParamsError, CacheRecordInvalid):
-				corrupt.append(str(row[0]))
+				corrupt.append(_saved_search_corrupt_label(row[0]))
 				continue
 			items.append(
 				{
