@@ -220,3 +220,18 @@ def test_path_stats_link_uses_lstat(tmp_path: Path) -> None:
 
 	assert count == 1
 	assert size == link.lstat().st_size
+
+
+def test_path_stats_nested_link_counts_link_only_and_does_not_descend(tmp_path: Path) -> None:
+	target_dir = tmp_path / "outside"
+	target_dir.mkdir()
+	target = target_dir / "target.bin"
+	target.write_bytes(b"x" * 4096)
+	root = tmp_path / "tree"
+	nested = root / "nested"
+	nested.mkdir(parents=True)
+	file_link = nested / "file-link"
+	os.symlink(target, file_link)
+	os.symlink(target_dir, nested / "dir-link", target_is_directory=True)
+
+	assert clean_mod._path_stats(root) == (file_link.lstat().st_size, 1)

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `clean --privacy --dry-run` 无法枚举子目录时返回 `LOCAL_IO_ERROR`，不再静默漏算数据；递归统计只计算嵌套文件链接本身的大小，不把未删除的目标文件计为已释放（Issue #2572）。
+
 ## [3.4.164] - 2026-11-23
 
 ### Fixed
