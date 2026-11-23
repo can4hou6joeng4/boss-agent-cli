@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.166 (2026-11-23): recruiter automation checks existing local and shared-budget risk locks before marking actions as executing. A lock still stops the run and leaves pending actions unchanged; in-flight replay protection remains in place (Issue #2577).
+
 v3.4.165 (2026-11-23): privacy cleanup previews report unreadable subdirectories, and recursive statistics count nested file symlinks by link size, not target size; crawls ignore malformed deduplication keys and fill in missing detail identifiers when a page is fetched again; date-named directories no longer hide earlier chat snapshots (Issues #2572, #2574, #2575).
 
 v3.4.164 (2026-11-23): the risk-lock envelope's `persisted` flag now matches what actually reached disk (a successful main-lock or group-directory write reports true); deterministic 4xx responses on read requests are no longer reported as retryable `NETWORK_ERROR` (parameter-class 4xx report `INVALID_PARAM`, other 4xx report `INTERNAL_ERROR`, while 5xx and 408 stay retryable); exports and snapshots null only integers that truly exceed 4300 digits and cannot be stringified; `resume list` and the wizard's resume enumeration report `LOCAL_IO_ERROR` instead of an empty list when the resumes directory is unreadable (Issues #2566, #2567, #2568, #2569).
