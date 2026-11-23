@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- `agent review reject` 不再因 `pending-actions.jsonl` 里 `approved_review_id` 类型漂移而漏拦已批准动作：`null` / 容器值此前经 `str()` 变成 `"None"` / `"{...}"`，拒绝时找不到关联行，复核项写成 `rejected` 但那条待派发动作仍留在 `pending`。现在与 `status` / `confidence` 同口径按状态损坏 fail-closed，并在改写复核之前报错（Issue #2562）。
+- `crawl resume` 预检失败后的状态还原不再顶替原始错误：还原写库失败（磁盘满 / 库锁冲突）时保留预检异常的类型与文案，还原失败以 note 附加并提示先核对 `crawl status`，不再让操作者只看到本地 IO 错误而 run 停在 `running`（Issue #2562）。
+- 自动化执行器的陈旧状态快照不再复活操作者已清除的停止闩锁：`write_state` 重建 `stop.json` 前重读磁盘 `state.json`，磁盘熔断已解除时不复活旧熔断，也不把快照里的旧 `circuit_breaker` 写回；磁盘仍熔断时沿用磁盘原因（Issue #2562）。
 - MCP 的 `boss_wizard` 按 `action` 区分中断后的恢复方式：`status` 只读本地断点，可重新查询；`stop` 可能已写入本地停止标记，应先查同一任务的状态，不自动重放。`run`、`resume` 和省略 `action`（默认执行 `run`）仍按可能产生写入处理（Issue #2552）。
 - MCP 将以 `--` 开头的选项值与选项名合并为单个 argv 元素，避免误判结束符或开关，同时原样保留 `-o` 的输出路径；参数入口拒绝非有限数、超出 `2^53-1` 的整值浮点及不在工具声明 `enum` 中的取值。`preset_add active=""` 不再被静默丢弃，`search` 仍支持 CLI 的活跃度别名与显式清除筛选（Issue #2553）。
 - MCP 调用在 CLI 子进程启动期间或运行中被取消时，宿主仍会停止并回收自己启动的进程，保留已返回的断点信息，不把派发过的写调用标为安全重试。超时估算失败改在启动前拒绝，不再先启动子进程（Issue #2555）。

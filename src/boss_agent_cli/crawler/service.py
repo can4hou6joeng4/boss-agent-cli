@@ -759,17 +759,32 @@ class CrawlService:
 				self._preflight()
 			self._check_risk_lock()
 			self._cache.update_crawl_run_params(run_id, settings.as_dict())
-		except BaseException:
+		except BaseException as original:
+			# 还原本身也可能失败（磁盘满 / 库锁冲突）：不能让还原异常顶替原始
+			# 预检错误，否则操作者看不到真正原因，run 还停在 running。原始异常
+			# 类型与文案保持不变，还原失败以 note 附加（Issue #2562）。
+			restore_failures: list[str] = []
 			if clear_stop and previous_stop:
 				# 预检 / 参数落库失败：放回清除前的 stop，失败的调用不改动任务。
-				self._cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
-			self._cache.restore_crawl_run_state(
-				run_id,
-				status=previous_status,
-				error=previous_error,
-				updated_at=previous_updated_at,
-				marked_at=marked_at,
-			)
+				try:
+					self._cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
+				except Exception as exc:
+					restore_failures.append(f"stop 标记还原失败（{type(exc).__name__}: {exc}）")
+			try:
+				self._cache.restore_crawl_run_state(
+					run_id,
+					status=previous_status,
+					error=previous_error,
+					updated_at=previous_updated_at,
+					marked_at=marked_at,
+				)
+			except Exception as exc:
+				restore_failures.append(f"运行状态还原失败（{type(exc).__name__}: {exc}）")
+			if restore_failures:
+				original.add_note(
+					"恢复失败后的状态还原未完成：" + "；".join(restore_failures)
+					+ "。先核对 crawl status，再决定是否手工修正断点"
+				)
 			raise
 		return self._run(
 			run_id,

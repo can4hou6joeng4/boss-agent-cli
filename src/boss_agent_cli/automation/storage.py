@@ -422,8 +422,31 @@ class AutomationStore:
 				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker.open 必须是布尔值")
 			stop = self.read_stop()
 			if breaker.get("open") and not stop:
-				self._set_stop(str(breaker.get("reason", "熔断已打开")))
-				stop = self.read_stop()
+				# 内存快照可能来自周期开始时：操作者可能已显式清除闩锁
+				# （agent resume / 手工删除 stop.json）。磁盘 state.json 存在时以它
+				# 为准——仍熔断才重建 stop，已解除则不复活（Issue #2562）。
+				try:
+					state_mode = _path_mode(self.state_path)
+				except (OSError, ValueError) as exc:
+					raise AutomationStateError(
+						self.state_path, f"无法读取 state.json 的路径状态（{exc}）"
+					) from exc
+				disk_breaker: Any = {}
+				if state_mode is not None:
+					disk_breaker = self.read_state().get("autonomy", {}).get("circuit_breaker", {})
+				if isinstance(disk_breaker, dict) and disk_breaker.get("open") is True:
+					self._set_stop(str(disk_breaker.get("reason", "熔断已打开")))
+					stop = self.read_stop()
+				elif state_mode is None:
+					# 没有磁盘状态可比对：保留 legacy 调用方经 write_state 打开熔断的
+					# 行为（首次写入），闩锁照常落盘。
+					self._set_stop(str(breaker.get("reason", "熔断已打开")))
+					stop = self.read_stop()
+				else:
+					# 磁盘熔断已解除：不复活 stop，也不把快照里的旧熔断写回。
+					state.setdefault("autonomy", {})["circuit_breaker"] = (
+						disk_breaker if isinstance(disk_breaker, dict) else {}
+					)
 			if "open" in stop:
 				state.setdefault("autonomy", {})["circuit_breaker"] = stop
 			self._write_json_atomic(self.state_path, state)
@@ -951,6 +974,14 @@ def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
 			path, f"记录 {str(row.get('id', ''))!r} 的 status {status!r} 不是已知状态"
 		)
 	action = str(row.get("action", ""))
+	approved_review_id = row.get("approved_review_id", "")
+	if not isinstance(approved_review_id, str):
+		# 漂移成 null / 容器时 str() 会生成 "None" / "{...}"：reject 按 review_id
+		# 找不到关联行，复核项写成 rejected 后已批准动作仍留在 pending 被下一轮
+		# 派发。与 status / confidence 同口径 fail-closed（Issue #2562）。
+		raise AutomationStateError(
+			path, f"记录 {str(row.get('id', ''))!r} 的 approved_review_id 不是字符串"
+		)
 	return PendingAction(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
@@ -961,6 +992,6 @@ def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
 		confidence=_row_confidence(row, path),
 		reason=_row_text(row, "reason", path),
 		message=_row_text(row, "message", path),
-		approved_review_id=str(row.get("approved_review_id", "")),
+		approved_review_id=approved_review_id,
 		updated_at=str(row.get("updated_at", "")),
 	)
