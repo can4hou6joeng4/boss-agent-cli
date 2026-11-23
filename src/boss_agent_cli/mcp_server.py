@@ -523,8 +523,30 @@ def _spawn_failure(args: tuple[str, ...], exc: OSError) -> dict[str, Any]:
 	)
 
 
+_CLI_ENVELOPE_KEYS = frozenset({"ok", "schema_version", "command", "data", "pagination", "error", "hints"})
+
+
+def _is_cli_envelope(payload: dict[str, Any], returncode: int | None) -> bool:
+	if payload.keys() != _CLI_ENVELOPE_KEYS or type(payload["ok"]) is not bool:
+		return False
+	if not isinstance(payload["schema_version"], str) or not isinstance(payload["command"], str):
+		return False
+	ok = payload["ok"]
+	if returncode is not None and returncode != (0 if ok else 1):
+		return False
+	error = payload["error"]
+	if ok:
+		return error is None
+	return (
+		isinstance(error, dict)
+		and isinstance(error.get("code"), str)
+		and type(error.get("recoverable")) is bool
+		and "recovery_action" in error
+	)
+
+
 def _parse_cli_output(
-	args: tuple[str, ...], stdout: str, stderr: str, *, may_write: bool = True,
+	args: tuple[str, ...], stdout: str, stderr: str, *, returncode: int | None = None, may_write: bool = True,
 ) -> dict[str, Any]:
 	try:
 		parsed = json.loads(stdout)
@@ -532,16 +554,14 @@ def _parse_cli_output(
 		# 超长整数抛裸 ValueError、超深嵌套抛 RecursionError，都不是
 		# JSONDecodeError；逃逸出去会让 handler 抛异常而不是返回信封（Issue #1942）。
 		parsed = None
-	if isinstance(parsed, dict):
+	if isinstance(parsed, dict) and _is_cli_envelope(parsed, returncode):
 		return parsed
-	# CLI 契约保证 stdout 是 JSON 信封对象；拿到别的形状（解析失败或非对象）
-	# 一律按命令失败处理，而不是把非 dict 结果透传给调用方。进程已经运行过：
-	# 写工具的结果此时未知，与超时 / 取消同样标 outcome_unknown；只读工具没有
-	# 平台写入，不能套用「未确认的写操作不要直接重试」（Issue #962）。
+	# 可解码的对象也可能不是信封；退出码与 ok 矛盾时同样不能确认结果。
+	# 进程已经运行过，不能把缺失或失真的写结果当作未发出（Issue #962）。
 	return _cli_failure(
 		args,
 		"CLI_ERROR",
-		stderr or "命令执行失败",
+		stderr or "底层 CLI 未返回与退出码一致的 JSON 信封",
 		recovery_action=_write_interrupt_recovery(args) if may_write else _READ_UNPARSEABLE_RECOVERY,
 		outcome_unknown=may_write,
 	)
@@ -625,7 +645,7 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 		)
 	except OSError as exc:
 		return _spawn_failure(args, exc)
-	return _parse_cli_output(args, result.stdout, result.stderr, may_write=may_write)
+	return _parse_cli_output(args, result.stdout, result.stderr, returncode=result.returncode, may_write=may_write)
 
 
 async def _stop_cli_process(
@@ -754,6 +774,7 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 		args,
 		stdout.decode("utf-8", errors="replace"),
 		stderr.decode("utf-8", errors="replace"),
+		returncode=process.returncode,
 		may_write=may_write,
 	)
 
