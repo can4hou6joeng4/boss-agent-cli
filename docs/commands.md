@@ -275,7 +275,7 @@ boss hr location 10001 --yes
 
 ### 自动化停止与显式恢复
 
-`boss agent stop --reason <原因>` 保存独立的停止标志，运行中的旧状态快照不能覆盖它。招聘者自动化在动作边界重新读取停止状态，每个已确认动作及时保存防重结果；风险、正常超时或中断时保存已取得的 checkpoint。平台请求已提交但没有确认结果时，先在官方页面核对，禁止自动重发。写动作派发前先落盘 `executing` 标记：请求发出后中断（Ctrl+C、进程被杀、页面风控）时该行保持 `executing`，下一轮按结果未知转成 `verification-required` 并打开熔断。自动化的页面写动作返回 `ACTION_UNCONFIRMED` 时，本轮事件记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，对应待执行项标记为 `verification-required` 退出 `pending` 队列；`--resume` 不会把它变回待执行，避免重发可能已生效的动作。
+`boss agent stop --reason <原因>` 保存独立的停止标志，运行中的旧状态快照不能覆盖它。招聘者自动化在动作边界重新读取停止状态，每个已确认动作及时保存防重结果；风险、正常超时或中断时保存已取得的 checkpoint。平台请求已提交但没有确认结果时，先在官方页面核对，禁止自动重发。写动作派发前先落盘 `executing` 标记：请求发出后中断（Ctrl+C、进程被杀、页面风控）时该行保持 `executing`，下一轮按结果未知转成 `verification-required` 并打开熔断。停止判定同时读取 `automation/state.json` 的 `autonomy.circuit_breaker`：即使 `stop.json` 被手工移除，只要磁盘快照仍熔断，所有招聘写入口（含 wizard / MCP 的写动作）都在派发前返回 `CIRCUIT_BREAKER_OPEN`；状态损坏同样按熔断处理（Issue #2612）。自动化的页面写动作返回 `ACTION_UNCONFIRMED` 时，本轮事件记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，对应待执行项标记为 `verification-required` 退出 `pending` 队列；`--resume` 不会把它变回待执行，避免重发可能已生效的动作。
 
 直接扫描路径（没有待执行队列行）同样在派发前把 `automation/state.json` 会话里的 `inflight_action`（动作、消息 hash、时间、会话 ref）落盘；发送成功后与 `questionnaire_sent_at` / `follow_up_sent_at` / `exchange_contact_at` 一起原子清除。发送后进程被杀或 checkpoint 撞控制锁时标记保留，下一轮不再凭 transcript 重新决策，直接转 `verification-required`、打开熔断并给出核对指引；只有确定请求未发出的异常（聊天页 / CDP 不可达、`request_sent=false` 的预算停止）才释放标记。暂停自动化周期并在官方聊天页核对结果。确认已发出时，先在 `automation/state.json` 写入该会话对应的 ISO 格式阶段时间（`questionnaire_sent_at` / `follow_up_sent_at` / `exchange_contact_at`）。如果 `automation/pending-actions.jsonl` 有对应队列行，再把它标记为 `executed`。确认未发出时，如果有对应队列行，把它恢复为 `pending`。完成上述更新后，删除该会话的 `inflight_action` 标记。只要还有 `verification-required` 队列行，自动化就会跳过该会话的扫描和队列写入（Issue #2452）。
 

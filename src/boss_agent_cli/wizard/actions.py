@@ -19,6 +19,7 @@ from boss_agent_cli.api.models import (
 	scalar_or_none,
 )
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
+from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
@@ -716,6 +717,20 @@ def _write_call(
 
 	不经 runner 直接调用动作时没有步骤可记，直接执行。
 	"""
+	stop = AutomationStore.stop_reason_for(context.data_dir)
+	if stop is not None:
+		# 顶层 hr 写命令在派发前检查停止闩锁；wizard / MCP 走同一动作时不能例外
+		# （Issue #2612）。请求未发出，不写「结果未知」标记，也不自动重试。
+		raise WorkflowActionError(
+			"CIRCUIT_BREAKER_OPEN",
+			f"停止开关已打开（{stop}），本次不会发出写请求",
+			recoverable=True,
+			recovery_action=(
+				f"人工核对未确认动作后执行 {_hint_command(context, 'agent run --resume')} 关闭熔断，"
+				"再由操作者显式重试；不要自动重发"
+			),
+			auto_retry=False,
+		)
 	control = context.workflow_control
 	if control is not None:
 		control.begin_write(_unconfirmed_write_recovery(context, check_command))

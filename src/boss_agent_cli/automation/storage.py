@@ -338,7 +338,16 @@ class AutomationStore:
 				connection.close()
 
 	def read_state(self) -> dict[str, Any]:
-		path = self.state_path
+		state = AutomationStore.read_state_snapshot(self.root.parent)
+		stop = self.read_stop()
+		if "open" in stop:
+			state.setdefault("autonomy", {})["circuit_breaker"] = stop
+		return state
+
+	@staticmethod
+	def read_state_snapshot(data_dir: Path) -> dict[str, Any]:
+		"""只读 ``state.json`` 本身，不把 stop.json 叠加进熔断快照。"""
+		path = data_dir / _AUTOMATION_DIR / "state.json"
 		try:
 			mode = _path_mode(path)
 		except (OSError, ValueError) as exc:
@@ -356,48 +365,66 @@ class AutomationStore:
 			except (ValueError, OSError, RecursionError) as exc:
 				raise AutomationStateError(path, str(exc)) from exc
 			if not isinstance(loaded, dict):
-				raise AutomationStateError(self.state_path, "顶层必须是 JSON object")
+				raise AutomationStateError(path, "顶层必须是 JSON object")
 			state = cast("dict[str, Any]", loaded)
 			# 后续读取按 object 逐层取值：嵌套容器类型漂移在这里报成状态损坏，
 			# 而不是让 AttributeError 被兜成 INTERNAL_ERROR（Issue #1130）。
 			for key in ("conversations", "autonomy", "safety"):
 				if key in state and not isinstance(state[key], dict):
-					raise AutomationStateError(self.state_path, f"{key} 必须是 JSON object")
+					raise AutomationStateError(path, f"{key} 必须是 JSON object")
 			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
 			if not isinstance(breaker, dict):
-				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+				raise AutomationStateError(path, "autonomy.circuit_breaker 必须是 JSON object")
 			if breaker and "open" not in breaker:
 				# 熔断快照缺少开关字段 = 停止状态未知：SafetyGuard 的 ``.get("open")``
 				# 会把它当「已关闭」继续自动化写操作；与 stop.json 的缺字段口径一致
 				# fail-closed（Issue #1598、#2397）。空对象表示没有熔断。
 				raise AutomationStateError(
-					self.state_path,
+					path,
 					"autonomy.circuit_breaker 缺少 open 字段；停止状态未知，"
 					"请先核对平台实际状态，再修正该字段或移除 circuit_breaker",
 				)
 			if "open" in breaker and not isinstance(breaker["open"], bool):
 				# 真值语义会让 0 / null 关闭熔断、"false" 打开熔断（Issue #1242）；
 				# 与 consecutive_errors 一样按状态损坏处理。
-				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker.open 必须是布尔值")
+				raise AutomationStateError(path, "autonomy.circuit_breaker.open 必须是布尔值")
 			for candidate_key, prior in state.get("conversations", {}).items():
 				if not isinstance(prior, dict):
-					raise AutomationStateError(self.state_path, f"conversations[{candidate_key!r}] 必须是 JSON object")
+					raise AutomationStateError(path, f"conversations[{candidate_key!r}] 必须是 JSON object")
 			errors = state.get("safety", {}).get("consecutive_errors", 0)
 			if isinstance(errors, bool) or not isinstance(errors, int):
-				raise AutomationStateError(self.state_path, "safety.consecutive_errors 必须是整数")
+				raise AutomationStateError(path, "safety.consecutive_errors 必须是整数")
 			if errors < 0:
 				# 失败计数只递增、归零；负值（外部编辑 / 迁移）会让连续失败熔断
 				# 需要更多次失败才打开，削弱安全闩锁，按状态损坏 fail-closed
 				# （Issue #1242、#1330、#2173）。
 				raise AutomationStateError(
-					self.state_path,
+					path,
 					"safety.consecutive_errors 必须是非负整数；连续失败熔断按该计数判断，"
 					"负值会让熔断不按预期打开。请先备份 state.json，再修正该字段或移除它",
 				)
-		stop = self.read_stop()
-		if "open" in stop:
-			state.setdefault("autonomy", {})["circuit_breaker"] = stop
 		return state
+
+	@staticmethod
+	def stop_reason_for(data_dir: Path) -> str | None:
+		"""统一的停止判定：stop.json 与 state.json 任一熔断都不放行（Issue #2612）。
+
+		状态读不出来（损坏、权限、类型漂移）时按熔断返回原因，不能让写请求在
+		停止状态未知时发出。读操作不创建目录，保持与只读命令相同的副作用边界。
+		"""
+		stop = AutomationStore.read_stop_for(data_dir)
+		if stop.get("open") is True:
+			reason = stop.get("reason")
+			return reason.strip() if isinstance(reason, str) and reason.strip() else "招聘自动化已停止"
+		try:
+			state = AutomationStore.read_state_snapshot(data_dir)
+		except AutomationStateError as exc:
+			return f"自动化状态损坏，已按熔断处理：{exc}"
+		breaker = state.get("autonomy", {}).get("circuit_breaker", {})
+		if isinstance(breaker, dict) and breaker.get("open") is True:
+			reason = breaker.get("reason")
+			return reason.strip() if isinstance(reason, str) and reason.strip() else "熔断已打开"
+		return None
 
 	def write_state(self, state: dict[str, Any]) -> None:
 		# Preserve legacy callers that set the breaker through write_state. A stale

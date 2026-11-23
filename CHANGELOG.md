@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 招聘写入口统一读取 `stop.json` 与 `state.json` 的熔断状态：`stop.json` 被移除但持久化熔断仍打开、状态损坏或 wizard / MCP 写动作都返回 `CIRCUIT_BREAKER_OPEN`，不再派发请求（Issue #2612）。
+
 ## [3.4.173] - 2026-11-23
 
 ### Fixed
