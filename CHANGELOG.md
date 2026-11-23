@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- `search` 读取缓存时，单行 `response` 存了非法 UTF-8 不再被归成「缓存库损坏」并引导删除整库（候选池、预设、断点都在里面）：`CacheRowDecodeError` 让该行按缓存未命中处理并删除，本次搜索重新请求覆盖；`response` 列类型漂移（BLOB / 数字）同样按未命中；缓存里的 `pagination` 字段类型漂移（`page=true` / `has_more` 为字符串等）不再原样进入成功信封（Issue #2545）。
+- 平台职位字段含孤立代理项时，搜索缓存文本改用默认 JSON 转义后落库：SQLite 绑定阶段不再抛 `UnicodeEncodeError` 被兜成带磁盘指引的 `LOCAL_IO_ERROR`，普通搜索与加 `--with-score` 一样能返回结果（Issue #2545）。
+- `search --page` 与 URL 里的 `page` 统一钳制到 `MAX_TRUSTED_PAGE`，达到上限时保留平台的 `has_more` 证据但不再生成必然重复同一请求的下一页命令；4300 位页码在发出请求前按 `INVALID_PARAM` 拒绝。格式错误的 `--url`（如无效 IPv6 主机名）转成 `SearchUrlParseError`，按 `INVALID_PARAM` 提示修正链接，不再是可重试的 `NETWORK_ERROR`（Issue #2546）。
+- `export --format json` 遇到单个职位包含深嵌套字段时逐条降级：坏条目保留仍可序列化的标量字段并标注 `export_error`，其余职位照常写出，不再因 `RecursionError` 让整份导出失败并给出磁盘权限指引（Issue #2546）。
 - 联系人身份判定在 CLI 与向导之间统一到 `services/contact_lookup`：向导的 `candidate_exchange` / `candidate_mark` / `candidate_chat_history` 不再把漂移成布尔 / 容器的 `securityId` / `uid` 经 `str()` 变成 `"True"` / `"{'a': 1}"` 发给平台（`candidate_exchange` 属写请求），类型漂移与缺失一律按 `NETWORK_ERROR`、`recoverable=false` 停止；`current_friend_uid_or_emit` 对超过 4300 位的整数不再落成可重试错误，与 `stable_uid` 同口径按缺失 uid 处理（Issue #2543）。
 - `preset add` / `watch add` 在写库前调用读取侧同一份 `validate_stored_search_params`：`--welfare "\udcff"` 之类不可编码的筛选参数不再能保存成「每次运行都报 `SAVED_SEARCH_INVALID`、删除重建仍然失败」的记录（此前入口只校验关键词，Issue #2543）。
 - `chat --page` 与其它列表命令同口径钳制到可信页码上限（`MAX_TRUSTED_PAGE`）：4300 位页码不再通过 Click 解析后在 `page + 1` 字符串化时抛 `ValueError` 被兜成可重试的 `NETWORK_ERROR`，信封 `pagination.page` 不再回显未钳制的请求页，达到上限时也不再给出必然重复同一请求的下一页提示；`boss schema` 中 `chat` 的 `--page` 补上 `maximum`（Issue #2542）。

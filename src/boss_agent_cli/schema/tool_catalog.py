@@ -207,7 +207,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"enum": ["", "online", "today", "3d", "week", "2w", "month", "half-year"],
 						"description": "只保留 HR 活跃度不低于该档的职位；online 只看列表、请求量与普通搜索相同，其余档位列表看不出时会逐个查详情（更慢、风控风险更高），活跃度未知的职位会被排除并写进 hints.active_filter；空串表示清除 preset 保存的活跃度筛选",
 					},
-					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "页码", "default": 1},
 					"no_cache": {"type": "boolean", "description": "跳过缓存，强制重新请求", "default": False},
 					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 					"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},

@@ -371,6 +371,15 @@ class CacheDatabaseInvalid(Exception):
 		self.detail = detail
 
 
+class CacheRowDecodeError(CacheDatabaseInvalid):
+	"""单行文本列无法按 UTF-8 解码（如 ``search_cache.response`` 存了非法字节）。
+
+	库本身健康（``integrity_check`` 通过），只影响该行缓存：调用方按未命中
+	处理并删除该行，不能升级成「库损坏、备份后删库」——那会连带丢掉候选池、
+	预设与任务断点（Issue #2545）。
+	"""
+
+
 class CacheBusyError(Exception):
 	"""缓存库正被其他连接写入，SQLite 在 busy timeout 内拿不到写锁。
 
@@ -566,6 +575,10 @@ class _GuardedConnection(sqlite3.Connection):
 			# 引导用户备份并删除完好的缓存库（Issue #2225）。按调用方可修正的
 			# 写入拒绝上报，不给删库指引。
 			return CacheWriteRejected(self.db_path, str(exc))
+		if "could not decode to utf-8" in str(exc).lower():
+			# TEXT 列里存了非法 UTF-8 字节：只有该行读不出来，库本身完好。
+			# 读取方可以按未命中处理并删除该行（Issue #2545）。
+			return CacheRowDecodeError(self.db_path, str(exc))
 		return CacheDatabaseInvalid(self.db_path, str(exc))
 
 	def _raise_translated(self, exc: sqlite3.DatabaseError) -> NoReturn:
@@ -1796,17 +1809,27 @@ class CacheStore:
 
 	def get_search(self, params: dict[str, Any]) -> str | None:
 		key = self._make_search_key(params)
-		row = self._conn.execute(
-			"SELECT response, created_at FROM search_cache WHERE cache_key = ?",
-			(key,),
-		).fetchone()
+		try:
+			row = self._conn.execute(
+				"SELECT response, created_at FROM search_cache WHERE cache_key = ?",
+				(key,),
+			).fetchone()
+		except CacheRowDecodeError:
+			# 该行 TEXT 存了非法 UTF-8：只影响这一条缓存，删除后按未命中处理，
+			# 本次搜索会重新请求并覆盖同一键。真正的库损坏会在删除时继续抛出
+			# CacheDatabaseInvalid，仍按删库指引上报（Issue #2545）。
+			self._conn.execute("DELETE FROM search_cache WHERE cache_key = ?", (key,))
+			self._conn.commit()
+			return None
 		if row is None:
 			return None
 		if _cache_entry_expired(row[1], self._search_ttl):
 			self._conn.execute("DELETE FROM search_cache WHERE cache_key = ?", (key,))
 			self._conn.commit()
 			return None
-		return cast("str", row[0])
+		# response 列类型漂移（BLOB / 数字）按未命中处理：上层只接受 JSON 文本。
+		response = row[0]
+		return response if isinstance(response, str) else None
 
 	def put_search(self, params: dict[str, Any], response: str) -> None:
 		key = self._make_search_key(params)

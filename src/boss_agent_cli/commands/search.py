@@ -24,6 +24,7 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
@@ -77,10 +78,33 @@ def _parse_cached_result(raw: str) -> dict[str, Any] | None:
 	if not all(isinstance(item, dict) for item in parsed["data"]):
 		return None
 	# pagination 只能是对象或 null：形状漂移的缓存按未命中处理，不让非法类型
-	# 原样进入成功信封（Issue #1136）。
-	if parsed.get("pagination") is not None and not isinstance(parsed["pagination"], dict):
-		return None
+	# 原样进入成功信封（Issue #1136）。字段级类型漂移（page=true / has_more 为
+	# 字符串）同样按未命中处理，本次搜索会覆盖同一坏行（Issue #2545）。
+	pagination = parsed.get("pagination")
+	if pagination is not None:
+		if not isinstance(pagination, dict) or not _valid_cached_pagination(pagination):
+			return None
 	return parsed
+
+
+def _valid_cached_pagination(pagination: dict[str, Any]) -> bool:
+	"""缓存里的分页证据是否仍是可信形态（Issue #2545）。
+
+	只校验会被原样放进成功信封的字段；未知键（如旧版本写入的额外信息）忽略。
+	"""
+	page = pagination.get("page")
+	if page is not None and (type(page) is not int or not 1 <= page <= MAX_TRUSTED_PAGE):
+		return False
+	has_more = pagination.get("has_more")
+	if has_more is not None and not isinstance(has_more, bool):
+		return False
+	total = pagination.get("total")
+	if total is not None and (type(total) is not int or total < 0):
+		return False
+	total_kind = pagination.get("total_kind")
+	if total_kind is not None and not isinstance(total_kind, str):
+		return False
+	return True
 
 
 def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
@@ -215,7 +239,9 @@ def _result_hints(
 		],
 	}
 	next_page_command = ""
-	if has_next_page:
+	if has_next_page and page_can_advance({"page": page}):
+		# 达到可信页码上限时保留平台的 has_more 证据，但不再生成必然重复同一
+		# 请求的下一页命令（Issue #2546，与 #2434 同口径）。
 		next_page_command = _build_next_page_command(ctx, page=page, params=params)
 		hints["next_actions"].append(next_page_command)
 	elif has_more_unknown:
@@ -276,7 +302,7 @@ def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
 	default=None,
 	help="只保留 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）；online 只看列表，其余档位列表看不出时会逐个查职位详情（更慢、风险更高）",
 )
-@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1, max=MAX_TRUSTED_PAGE), help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.option("--sort", "sort_mode", default="relevance", type=click.Choice(["relevance", "score"]), help="排序方式")
@@ -718,8 +744,12 @@ def search_cmd(
 					"account": account,
 				}
 				# 只缓存结果与分页证据；hints 取决于调用上下文，命中时重建。
+				# 缓存文本要能绑定进 SQLite TEXT：平台字段里的孤立代理项在
+				# ensure_ascii=False 时会原样保留，绑定阶段抛 UnicodeEncodeError，
+				# 被兜成带磁盘指引的 LOCAL_IO_ERROR（Issue #2545）。转义后的
+				# JSON 读取时还原成同样的值，输出层已有 ensure_ascii 回退。
 				cache_data = {"data": cache_items, "pagination": pagination}
-				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))
+				cache.put_search(search_params, json.dumps(cache_data))
 
 			# 快照身份只对本次返回有效，不写进搜索缓存；取本次写入的值，
 			# 保存后不再读回可变文件（Issue #2292）。

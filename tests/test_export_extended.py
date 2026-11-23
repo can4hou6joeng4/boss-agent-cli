@@ -101,15 +101,19 @@ def test_write_export_file_csv_writes_single_crlf(tmp_path):
 	assert b"\r\r\n" not in data
 
 
-def test_write_export_file_keeps_existing_file_on_serialization_failure(tmp_path):
-	"""序列化失败不能截断已有文件：写临时文件后原子替换（Issue #1134）。"""
+def test_write_export_file_keeps_existing_file_on_write_failure(tmp_path, monkeypatch):
+	"""写入失败不能截断已有文件：写临时文件后原子替换（Issue #1134）。"""
 	path = tmp_path / "jobs.json"
 	path.write_text("previous export", encoding="utf-8")
 
-	# 序列化失败统一按本地 IO 错误上报（Issue #2220）：TypeError 裸穿出命令层
-	# 会让 stdout 无信封、stderr 裸 traceback。
+	# 单个无法序列化的字段已按降级处理（Issue #2546），这里模拟序列化完成后的
+	# 原子写入失败：目标文件必须原样保留，且不留下临时文件。
+	def _fail(path, body, **kwargs):
+		raise OSError("disk full")
+
+	monkeypatch.setattr("boss_agent_cli.services.job_export.write_text_atomic", _fail)
 	with pytest.raises(OSError):
-		write_export_file([{"value": object()}], "json", str(path))
+		write_export_file([{"title": "ok"}], "json", str(path))
 
 	assert path.read_text(encoding="utf-8") == "previous export"
 	assert sorted(item.name for item in tmp_path.iterdir()) == ["jobs.json"]

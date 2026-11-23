@@ -232,7 +232,7 @@ def test_invalid_option_value_is_reported_in_chinese(tmp_path):
 	"""
 	runner = CliRunner()
 	for args, command, expected, path in (
-		(("search", "golang", "--page", "0"), "search", "boss search 的 --page 取值无效：0 不在范围 x>=1 内", "boss search"),
+		(("search", "golang", "--page", "0"), "search", "boss search 的 --page 取值无效：0 不在范围 1<=x<=1000000 内", "boss search"),
 		(
 			("export", "golang", "--format", "pdf"),
 			"export",
