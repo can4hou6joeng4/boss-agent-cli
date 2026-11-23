@@ -263,7 +263,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"from_who": {"type": "string", "enum": ["boss", "me"], "description": "筛选发起方"},
 					"days": {"type": "integer", "minimum": 0, "maximum": 36500, "description": "只显示最近 N 天的记录"},
-					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "页码", "default": 1},
 					"format": {
 						"type": "string",
 						"enum": ["html", "md", "csv", "json"],

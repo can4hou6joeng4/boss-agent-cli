@@ -7,6 +7,8 @@
 ### Fixed
 - 联系人身份判定在 CLI 与向导之间统一到 `services/contact_lookup`：向导的 `candidate_exchange` / `candidate_mark` / `candidate_chat_history` 不再把漂移成布尔 / 容器的 `securityId` / `uid` 经 `str()` 变成 `"True"` / `"{'a': 1}"` 发给平台（`candidate_exchange` 属写请求），类型漂移与缺失一律按 `NETWORK_ERROR`、`recoverable=false` 停止；`current_friend_uid_or_emit` 对超过 4300 位的整数不再落成可重试错误，与 `stable_uid` 同口径按缺失 uid 处理（Issue #2543）。
 - `preset add` / `watch add` 在写库前调用读取侧同一份 `validate_stored_search_params`：`--welfare "\udcff"` 之类不可编码的筛选参数不再能保存成「每次运行都报 `SAVED_SEARCH_INVALID`、删除重建仍然失败」的记录（此前入口只校验关键词，Issue #2543）。
+- `chat --page` 与其它列表命令同口径钳制到可信页码上限（`MAX_TRUSTED_PAGE`）：4300 位页码不再通过 Click 解析后在 `page + 1` 字符串化时抛 `ValueError` 被兜成可重试的 `NETWORK_ERROR`，信封 `pagination.page` 不再回显未钳制的请求页，达到上限时也不再给出必然重复同一请求的下一页提示；`boss schema` 中 `chat` 的 `--page` 补上 `maximum`（Issue #2542）。
+- `chat` 的时间列不再因时间戳边界让整条命令失败：本地时区偏移把 UTC 边界时间推过 year 10000 时 `astimezone()` 的 `OverflowError` 按「无时间」输出 `-`（与 #1295 的 `fromtimestamp` 越界同口径），`chat --export` 因此不再整体失败；未来时间戳不再渲染成负的「N天前」，改为绝对日期（Issue #2542）。
 
 ## [3.4.162] - 2026-11-23
 
