@@ -14,6 +14,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.commands.recruiter._hints import blank_option_names, hint_command
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
@@ -24,6 +25,7 @@ from boss_agent_cli.display import (
 	risk_error_contract,
 	shell_argument,
 )
+from boss_agent_cli.services.candidate_actions import candidate_action_provably_unsent
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
@@ -174,6 +176,20 @@ def greet_cmd(
 			hints={"next_actions": [rec_cmd]},
 		)
 		return
+	# 招呼标识与正文都会进平台请求：孤立代理项在编码阶段才失败，入口先按
+	# 参数错误拒绝，避免预约一个从未发出的写请求（Issue #2596）。
+	if reject_unencodable_params(
+		ctx,
+		"recruiter-greet",
+		geek_id=geek_id,
+		job_id=job_id,
+		expect_id=expect_id,
+		lid=lid,
+		security_id=security_id,
+		suid=suid,
+		message=message,
+	):
+		return
 	if dry_run:
 		operator_actions = ["核对候选人和话术；明确批准后才可加 --yes 发送"]
 		handle_output(
@@ -225,8 +241,13 @@ def greet_cmd(
 			# 否则一次瞬态预算耗尽就会把该候选人永久锁成「结果未知」。停止契约由装饰器输出。
 			_release_unsent_reservation(cache, geek_id, job_id)
 			raise
-		except Exception:
-			# 仅此不可逆写入边界兜底未知异常：响应丢失也可能已建联，保留 pending。
+		except Exception as exc:
+			# 连接 / 代理 / 协议错误与编码失败都证明请求未发出：释放预约后交给
+			# 装饰器按 NETWORK_ERROR / INVALID_PARAM 收口，不能永久挡住重试
+			# （Issue #2596）。其余异常仍按不可逆写入的结果未知处理。
+			if candidate_action_provably_unsent(exc):
+				_release_unsent_reservation(cache, geek_id, job_id)
+				raise
 			_send_error(ctx, code="GREET_RESULT_UNKNOWN", job_id=job_id, details=data)
 			return
 		if not platform.is_success(result):

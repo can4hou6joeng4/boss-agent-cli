@@ -69,6 +69,16 @@ _UNSENT_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
 )
 
 
+def was_request_provably_unsent(exc: BaseException) -> bool:
+	"""异常是否证明 HTTP 请求尚未发出（一个字节都没送出，平台无副作用）。
+
+	只覆盖连接建立 / 代理 / 协议选择阶段的 ``httpx`` 传输异常；读 / 写超时与
+	远端协议错误可能发生在请求发出之后，不能据此释放写预约。供命令层区分
+	「确定未发出」与「结果未知」（Issue #2216、#2596）。
+	"""
+	return isinstance(exc, _UNSENT_TRANSPORT_ERRORS)
+
+
 class BrowserChannelRequired(RuntimeError):
 	"""CDP / 显式浏览器来源下，该操作只有 httpx 实现，拒绝用 httpx 携带浏览器凭据发送。"""
 

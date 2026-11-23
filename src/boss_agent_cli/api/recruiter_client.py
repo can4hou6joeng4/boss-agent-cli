@@ -1777,9 +1777,19 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""
 		if friend_id <= 0 or message_id <= 0:
 			raise ResumeValidationError("friend_id 和 message_id 必须为正整数")
+
+		# 写之前的只读失败必须带阶段标记：同意 POST 尚未发出，命令层不能把
+		# 限流 / 参数错误报成结果未知并让人去核对不存在的写操作（Issue #2597）。
+		def precheck_failure(response: dict[str, Any]) -> dict[str, Any]:
+			return {
+				**response,
+				"__cli_error_stage__": "precheck",
+				"__cli_error_details__": {"accepted": False, "stage": "precheck"},
+			}
+
 		history = self.chat_history(friend_id, count=100, max_msg_id=message_id + 1, retry=False)
 		if not is_platform_success_code(history.get("code")):
-			return history
+			return precheck_failure(history)
 		message = incoming_message(history.get("zpData"), friend_id, message_id)
 		body = message.get("body") or {}
 		dialog = body.get("dialog") if isinstance(body, dict) else None
@@ -1789,7 +1799,7 @@ class BossRecruiterClient(_BaseHttpClient):
 			raise ResumeValidationError("该请求已处理或状态不明，不会重复同意")
 		friends = self.friend_detail([friend_id], retry=False)
 		if not is_platform_success_code(friends.get("code")):
-			return friends
+			return precheck_failure(friends)
 		friend = resume_friend(friends.get("zpData"), friend_id)
 		if not isinstance(friend.get("securityId"), str) or not friend["securityId"]:
 			raise ResumeValidationError("无法取得指定候选人的当前会话 securityId")
