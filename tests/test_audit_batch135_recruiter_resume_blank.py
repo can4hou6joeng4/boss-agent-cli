@@ -76,3 +76,33 @@ def test_recruiter_resume_preserves_padded_identifiers(tmp_path: Path) -> None:
 
 	# 空串 security_id 与 CLI 的空 --security-id 同义：按缺失传给平台。
 	assert platform.calls == [("view_geek", " synthetic-geek ", " synthetic-job ", None)]
+
+
+@pytest.mark.parametrize("value", [123, True, 1.5, ["sid"], {"a": 1}])
+def test_recruiter_resume_rejects_non_string_security_id(tmp_path: Path, value: object) -> None:
+	"""非字符串 security_id 不得转成 repr 后进入 effect: unknown 请求（Issue #2633）。"""
+	from boss_agent_cli.wizard.models import WorkflowInputError
+
+	platform = _FakeRecruiterPlatform()
+
+	with pytest.raises(WorkflowInputError, match="security_id 必须是字符串"):
+		DEFAULT_ACTIONS["recruiter_resume"](
+			_context(tmp_path, recruiter=platform),
+			{"geek_id": "synthetic-geek", "job_id": "synthetic-job", "security_id": value},
+			{},
+		)
+
+	assert platform.calls == []
+
+
+@pytest.mark.parametrize("inputs", [{}, {"security_id": None}, {"security_id": "synthetic-sid"}])
+def test_recruiter_resume_passes_string_or_absent_security_id(tmp_path: Path, inputs: dict[str, object]) -> None:
+	platform = _FakeRecruiterPlatform()
+
+	DEFAULT_ACTIONS["recruiter_resume"](
+		_context(tmp_path, recruiter=platform),
+		{"geek_id": "synthetic-geek", "job_id": "synthetic-job", **inputs},
+		{},
+	)
+
+	assert platform.calls == [("view_geek", "synthetic-geek", "synthetic-job", inputs.get("security_id"))]
