@@ -3,12 +3,12 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api._base_client import RequestTextEncodingError
-from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
+from boss_agent_cli.api._base_client import RequestTextEncodingError, parameter_status_code
+from boss_agent_cli.api.client import PlatformRateLimitError, RISK_ERROR_BY_CODE
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_text
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, CacheStore, CacheWriteRejected
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.display import (
@@ -23,8 +23,12 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.platforms import Platform
 from boss_agent_cli.services.job_card import build_job_from_card, scalar_or_none, text_items
+from boss_agent_cli.services.text_files import is_utf8_encodable
 
 DetailError = tuple[str, str, dict[str, Any] | None]
+
+# 响应字典形态的停止码：风控码与限流都不能换通道再取一次（Issue #2548）。
+_DETAIL_STOP_CODES = frozenset(RISK_ERROR_BY_CODE) | {"RATE_LIMITED"}
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -40,6 +44,18 @@ def _platform_error_details(response: Any) -> dict[str, Any] | None:
 			if isinstance(details, dict):
 				return details
 	return None
+
+
+def _handle_parameter_status(ctx: click.Context, status: int) -> None:
+	"""参数类 4xx 是确定性失败：换通道与重试都会复现（Issue #2548）。"""
+	handle_error_output(
+		ctx,
+		"detail",
+		code="INVALID_PARAM",
+		message=f"平台拒绝了请求参数（HTTP {status}），换通道或重试不会改变结果",
+		recovery_action=f"核对 security_id / lid / job-id 后重试；编号可从 {_hint_command(ctx, 'search <关键词>')} 重新获取",
+		hints={"next_actions": [_hint_command(ctx, "search <关键词>")]},
+	)
 
 
 @click.command("detail")
@@ -79,6 +95,12 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 				cached_job_id = cache.get_job_id(security_id)
 			job_id = cached_job_id if isinstance(cached_job_id, str) and cached_job_id.strip() else ""
+			# 缓存里的 job_id 可能是坏的历史值（surrogatepass 还原出的孤立代理项）：
+			# 它来自本地而不是用户输入，按未命中处理并继续用 security_id 走卡片
+			# 通道；显式 --job-id 仍由入口按参数错误拒绝（Issue #2549）。
+			if job_id and not is_utf8_encodable(job_id):
+				logger.info("缓存中的 job_id 无法按 UTF-8 编码，按未命中处理")
+				job_id = ""
 			if job_id:
 				logger.info("从缓存命中 job_id，走 httpx 快速通道")
 
@@ -90,14 +112,32 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			except Exception as e:
 				# 风控、预算与超时都是停止信号：继续降级会再发一次请求。
 				# 请求参数不可编码同理：换浏览器通道仍会带同一组坏参数
-				# （Issue #2533）。
-				if is_request_stop(e) or isinstance(e, RequestTextEncodingError):
+				# （Issue #2533）。限流耗尽后换通道会立刻再撞限流窗口
+				# （Issue #2548）。
+				if is_request_stop(e) or isinstance(e, (RequestTextEncodingError, PlatformRateLimitError)):
+					raise
+				status = parameter_status_code(e)
+				if status is not None:
+					_handle_parameter_status(ctx, status)
+					return
+				# 本地缓存异常不是「httpx 通道不可用」：换通道会再读同一把锁，
+				# 也会把 CACHE_BUSY 掩盖成浏览器侧的错误（Issue #2548）。
+				if isinstance(e, (CacheBusyError, CacheDatabaseInvalid, CacheWriteRejected)):
 					raise
 				logger.info(f"httpx 快速通道失败（{e}），降级到浏览器通道")
 				result = None
-		# 风控码以响应字典形态返回时同样终止，不换通道再取一次
-		if result is None and not (last_error and last_error[0] in RISK_ERROR_BY_CODE):
-			result, browser_error = _detail_via_browser(platform, security_id, lid, data_dir, job_id=job_id, account=account)
+		# 风控码与限流以响应字典形态返回时同样终止，不换通道再取一次
+		if result is None and not (last_error and last_error[0] in _DETAIL_STOP_CODES):
+			try:
+				result, browser_error = _detail_via_browser(
+					platform, security_id, lid, data_dir, job_id=job_id, account=account
+				)
+			except Exception as e:
+				status = parameter_status_code(e)
+				if status is not None:
+					_handle_parameter_status(ctx, status)
+					return
+				raise
 			if browser_error and (last_error is None or browser_error[0] != "NOT_SUPPORTED"):
 				last_error = browser_error
 

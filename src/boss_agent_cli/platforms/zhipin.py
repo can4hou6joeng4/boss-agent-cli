@@ -45,6 +45,11 @@ class BossPlatform(Platform):
 		return response.get("zpData")
 
 	def parse_error(self, response: dict[str, Any]) -> tuple[str, str]:
+		raw_code = response.get("code")
+		if isinstance(raw_code, bool):
+			# 布尔不是状态码（与 is_platform_success_code 同口径，Issue #1599）：
+			# 响应形状异常，同一响应重试必然复现（Issue #2548）。
+			return "INTERNAL_ERROR", "平台响应的 code 不是状态码（布尔值），无法判定操作结果"
 		if response.get("code") in (CODE_IP_RESTRICTED, str(CODE_IP_RESTRICTED)):
 			return "ENVIRONMENT_RISK", response_message(response)
 		if response.get("code") in (

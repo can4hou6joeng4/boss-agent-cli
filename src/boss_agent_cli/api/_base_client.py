@@ -93,6 +93,24 @@ class RequestTextEncodingError(ValueError):
 	"""
 
 
+# 参数类 4xx：同一组参数换通道 / 重试都会复现（Issue #2548）。404 是「对象
+# 不存在」、401/403 是认证 / 风控、408/429 是暂时性失败，都不在此列。
+_PARAMETER_STATUS_CODES = frozenset({400, 406, 409, 410, 422})
+
+
+def parameter_status_code(error: BaseException) -> int | None:
+	"""``httpx.HTTPStatusError`` 的确定性参数类 4xx 状态码；其它异常返回 None。
+
+	命令层据此拒绝「换了浏览器通道就能好」的假设：400 / 422 等是平台对同一组
+	参数的直接拒绝，回退只会白起一次浏览器（Issue #2548）。
+	"""
+	response = getattr(error, "response", None)
+	status = getattr(response, "status_code", None)
+	if type(status) is int and status in _PARAMETER_STATUS_CODES:
+		return status
+	return None
+
+
 def _status_error_without_query(exc: httpx.HTTPStatusError) -> httpx.HTTPStatusError:
 	"""重建不带查询参数的 ``HTTPStatusError``，保留类型、状态码与路径。
 

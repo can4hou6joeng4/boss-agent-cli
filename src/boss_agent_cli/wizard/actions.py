@@ -8,6 +8,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
+from boss_agent_cli.api._base_client import parameter_status_code
+from boss_agent_cli.api.client import PlatformRateLimitError
 from boss_agent_cli.api.models import (
 	dict_items,
 	field_dict,
@@ -808,6 +810,25 @@ def execute_candidate_detail(
 			recoverable=True,
 			recovery_action="切换平台或改用其他事项",
 		) from exc
+	except Exception as exc:
+		# 与单次命令同口径：参数类 4xx 与限流是确定性 / 停止信号，换通道或
+		# 自动重试都不会改变结果（Issue #2548）。
+		status = parameter_status_code(exc)
+		if status is not None:
+			text = f"平台拒绝了请求参数（HTTP {status}）"
+			code, recoverable, recovery = _classify_action_error("INVALID_PARAM", text)
+			raise WorkflowActionError(
+				code,
+				text,
+				recoverable=recoverable,
+				recovery_action=recovery,
+				auto_retry=False,
+			) from exc
+		if isinstance(exc, PlatformRateLimitError):
+			text = str(exc) or "平台限流，请稍后重试"
+			code, recoverable, recovery = _classify_action_error("RATE_LIMITED", text)
+			raise WorkflowActionError(code, text, recoverable=recoverable, recovery_action=recovery) from exc
+		raise
 
 	if platform.is_success(raw_card):
 		card = field_dict(platform.unwrap_data(raw_card), "jobCard")

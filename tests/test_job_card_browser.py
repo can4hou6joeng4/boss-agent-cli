@@ -41,14 +41,15 @@ def test_job_card_browser_does_not_call_httpx():
 
 
 def test_job_card_httpx_first_behavior_unchanged():
-	"""既有 job_card() 仍是 httpx 优先——防止本 PR 意外改变其语义。"""
+	"""job_card() 仍是 httpx 优先：成功且载荷完整时不调用浏览器（Issue #2548）。"""
 	client = _bare_client()
+	payload = {"code": 0, "zpData": {"jobCard": {"encryptJobId": "j1"}}}
 	with (
-		patch.object(client, "job_card_httpx", return_value={"code": 0, "zpData": {"ok": True}}) as mock_httpx,
+		patch.object(client, "job_card_httpx", return_value=payload) as mock_httpx,
 		patch.object(client, "_browser_request") as mock_browser,
 	):
 		result = client.job_card("sec1", "lid1")
 
-	assert result == {"code": 0, "zpData": {"ok": True}}
+	assert result == payload
 	mock_httpx.assert_called_once_with("sec1", "lid1")
 	mock_browser.assert_not_called()

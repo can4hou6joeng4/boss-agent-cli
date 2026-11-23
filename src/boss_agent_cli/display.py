@@ -37,6 +37,7 @@ from boss_agent_cli.services.browser_runtime import (
 	patchright_headless_shell_command,
 	patchright_install_command,
 )
+from boss_agent_cli.services.text_files import sanitize_surrogates
 
 #: C0（保留 ``\t`` / ``\n``）与 C1 控制字符。Rich 只处理 markup，不会剥离原始
 #: 转义字节：平台文本里的 ESC / OSC / CSI 会原样写进终端，可改写标题、伪造
@@ -120,7 +121,7 @@ def escape_markup(value: Any) -> str:
 	悬空的 ``[`` 够不到值外的 ``]``；结尾反斜杠加倍后恰好还原成原数量，
 	闭合标签保持有效。
 	"""
-	text = strip_control(str(value))
+	text = strip_control(sanitize_surrogates(str(value)))
 	if "[" not in text and not text.endswith("\\"):
 		return text
 	parts: list[str] = []
@@ -1371,7 +1372,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 			from boss_agent_cli.ai.config import AIConfigValueError
 			from boss_agent_cli.api._base_client import BrowserChannelRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
-			from boss_agent_cli.api.client import PlatformRiskError
+			from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
 			from boss_agent_cli.api.proxy import ProxyConfigurationError
 			from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
@@ -1486,6 +1487,19 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=True,
 					recovery_action=login_action,
 					hints=auth_required_hints(ctx),
+				)
+			except PlatformRateLimitError as e:
+				# 限流不是风控、也不是认证失效：等待限流窗口即可（Issue #2237）。
+				# 泛化兜底会把它报成可重试的 NETWORK_ERROR，丢掉登记表的恢复指引
+				# （Issue #2548）。
+				rate_recoverable, rate_recovery = error_contract_for_code("RATE_LIMITED")
+				handle_error_output(
+					ctx,
+					command_name,
+					code="RATE_LIMITED",
+					message=str(e) or "平台限流，请稍后重试",
+					recoverable=rate_recoverable,
+					recovery_action=rate_recovery,
 				)
 			except PlatformRiskError as e:
 				recovery_action, contract_hints = risk_error_contract(e.code, ctx=ctx)
