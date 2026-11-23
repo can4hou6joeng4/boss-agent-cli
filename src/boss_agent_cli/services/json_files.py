@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import errno
+import io
 import json
 import math
 import os
@@ -26,6 +27,14 @@ from boss_agent_cli.services.output_path import refuse_non_regular_target
 #: （Issue #2568）。
 _MAX_JSON_INT_BITS = 14284
 _MAX_JSON_INT_DIGITS = 4300
+
+
+class JsonSerializationError(OSError):
+	"""值本身无法序列化为 JSON；与磁盘 / 权限类 OSError 区分，便于精确降级。
+
+	仍是 ``OSError`` 子类，既有按 ``OSError`` 收口成 ``LOCAL_IO_ERROR`` 的
+	命令路径与错误文案不变（Issue #1891）。
+	"""
 
 
 def path_mode(path: Path) -> int | None:
@@ -130,7 +139,7 @@ def _serialize_into(handle: Any, value: Any, *, indent: int | None, null_oversiz
 	# 错误就会裸穿出命令层，stdout 无信封、stderr 裸 traceback（Issue #2220，
 	# 与 #1891 的深嵌套 / 超长整数同类）。
 	except (RecursionError, ValueError, TypeError) as exc:
-		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
+		raise JsonSerializationError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
 
 
 def _json_safe_value(value: Any, *, null_oversized_ints: bool = False) -> Any:
@@ -214,5 +223,51 @@ def strict_json_text(value: Any, *, indent: int | None = 2, null_oversized_ints:
 			indent=indent,
 		)
 	except (RecursionError, ValueError, TypeError) as exc:
-		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
+		raise JsonSerializationError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
 	return escape_lone_surrogates(text)
+
+
+def _can_serialize_for_write(value: Any) -> bool:
+	"""按快照 / 导出实际落盘的调用栈试写，避免递归余量判断错位。
+
+	``strict_json_text(record)`` 只包一层字典，而真正落盘是
+	``write_json_atomic(list)`` -> ``_serialize_into`` -> ``json.dump``；临界
+	深度的单条记录可能「试写通过、放进列表又失败」（Issue #2593）。这里用
+	同样的 ``_serialize_into`` 与列表包装试写，两者栈深一致。
+	"""
+	try:
+		_serialize_into(io.StringIO(), [value], indent=2, null_oversized_ints=True)
+	except JsonSerializationError:
+		return False
+	return True
+
+
+def degrade_unserializable_records(
+	records: list[Any],
+	*,
+	marker: str = "export_error",
+	message: str = "该条记录包含无法序列化的字段（如嵌套过深），已省略问题字段",
+) -> list[dict[str, Any]]:
+	"""整体序列化失败时逐条降级：只丢坏记录里无法序列化的字段。
+
+	深嵌套 / 循环引用会让 :func:`strict_json_text` 抛 ``RecursionError``，
+	单个平台条目不能中止整份快照或导出（Issue #2546、#2593）。先整条试写，
+	失败时再逐字段试写；判定都走 :func:`_can_serialize_for_write`，与最终
+	落盘的栈深一致，正常记录与正常容器字段原样保留。
+	"""
+	degraded: list[dict[str, Any]] = []
+	for record in records:
+		if not isinstance(record, dict):
+			degraded.append({marker: "该条记录不是对象，已省略原始内容"})
+			continue
+		if _can_serialize_for_write(record):
+			degraded.append(record)
+			continue
+		kept: dict[str, Any] = {}
+		for key, value in record.items():
+			if not _can_serialize_for_write({key: value}):
+				continue
+			kept[key] = value
+		kept[marker] = message
+		degraded.append(kept)
+	return degraded

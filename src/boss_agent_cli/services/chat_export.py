@@ -9,8 +9,14 @@ from typing import Any
 
 from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
-from boss_agent_cli.services.json_files import strict_json_text
+from boss_agent_cli.services.json_files import (
+	degrade_unserializable_records,
+	JsonSerializationError,
+	strict_json_text,
+)
 from boss_agent_cli.services.text_files import sanitize_surrogates
+
+_DEGRADED_EXPORT_MESSAGE = "该联系人包含无法序列化的字段（如嵌套过深），已省略问题字段"
 
 
 def _sanitize_surrogates(text: str) -> str:
@@ -218,7 +224,19 @@ def render_export(
 	if fmt == "json":
 		# 严格 JSON：平台数值漂移（NaN / Infinity）归一为 null，
 		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。
-		return _sanitize_surrogates(strict_json_text(friends, null_oversized_ints=True))
+		# 非对象条目与其他格式一样跳过：不能因为列表里恰好有另一条坏记录
+		# 触发降级，就从 null 变成带 export_error 的对象（Issue #2593）。
+		records = [item for item in friends if isinstance(item, dict)]
+		# 单个联系人的深嵌套字段逐条降级，与职位导出同口径（Issue #2546、
+		# #2593）：其余联系人原样写出，坏记录只丢问题字段并标注原因。
+		try:
+			text = strict_json_text(records, null_oversized_ints=True)
+		except JsonSerializationError:
+			text = strict_json_text(
+				degrade_unserializable_records(records, message=_DEGRADED_EXPORT_MESSAGE),
+				null_oversized_ints=True,
+			)
+		return _sanitize_surrogates(text)
 	if fmt == "csv":
 		rendered = _render_csv(friends)
 	elif fmt == "html":
