@@ -223,7 +223,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "页码", "default": 1},
 					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 				},
 				"required": [],
@@ -323,8 +323,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
 					"friend_uid": {"type": "string", "description": "已知稳定 uid 时直接读取消息：security_id 按本次请求的令牌使用，跳过沟通列表扫描"},
-					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
-					"count": {"type": "integer", "minimum": 1, "description": "每页消息数量", "default": 20},
+					"page": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "页码", "default": 1},
+					"count": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "每页消息数量", "default": 20},
 					"raw": {"type": "boolean", "description": "输出保真结构化消息字段（仍受合规门控）", "default": False},
 				},
 				"required": ["security_id"],
@@ -337,8 +337,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
-					"page": {"type": "integer", "minimum": 1, "description": "消息页码", "default": 1},
-					"count": {"type": "integer", "minimum": 1, "description": "每页消息数量", "default": 20},
+					"page": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "消息页码", "default": 1},
+					"count": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "每页消息数量", "default": 20},
 				},
 				"required": ["security_id"],
 			},

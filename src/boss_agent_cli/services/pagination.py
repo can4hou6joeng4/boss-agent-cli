@@ -13,6 +13,22 @@ UNKNOWN_HAS_MORE_OPERATOR_ACTION = "平台未提供可靠的下一页标记，�
 #: ``page + 1`` 的字符串化会撞上整数转换上限并报成可重试错误（Issue #1824）。
 MAX_TRUSTED_PAGE = 1_000_000
 
+#: 单页数量与页码共用同一个可信上限：只阻止无界整数进入平台参数 / 本地
+#: JSON（整数转字符串的 4300 位限制），不代表平台接受这么大的值。
+MAX_TRUSTED_COUNT = MAX_TRUSTED_PAGE
+
+
+def clamp_trusted(value: Any, limit: int = MAX_TRUSTED_PAGE) -> int:
+	"""把外部数值钳制到 ``[1, limit]``；非整数（含布尔）按 1。
+
+	直接调用命令回调时不经过 Click 的 ``IntRange``。
+	超长整数一旦进入 httpx 参数序列化或 ``page + 1`` 提示，就会撞上
+	Python 3.11+ 的整数转字符串上限（Issue #2550）。
+	"""
+	if not isinstance(value, int) or isinstance(value, bool):
+		return 1
+	return min(max(value, 1), limit)
+
 
 def list_pagination(
 	platform_data: Any,
