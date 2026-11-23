@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 / MCP `boss_wizard` 的招聘者动作对显式空白筛选项按 `INVALID_PARAM` 拒绝（`recruiter_candidates` 的 `city` / `job_id`、`recruiter_applications` / `recruiter_chat` / `recruiter_last_messages` 的 `job_id`），与顶层 `hr ...` 命令同口径，不再静默按「不筛选」执行（Issue #2618）。
+
 ## [3.4.175] - 2026-11-24
 
 ### Fixed

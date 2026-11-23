@@ -435,6 +435,27 @@ def _optional_str_strict(inputs: Mapping[str, Any], name: str) -> str | None:
 	return raw
 
 
+def _optional_nonblank_str(inputs: Mapping[str, Any], name: str) -> str | None:
+	"""读取可选的招聘者筛选项：缺省 / null 为空，显式空白按参数错误拒绝。
+
+	顶层 `hr candidates` / `hr applications` / `hr chat` / `hr last-messages`
+	已在平台调用前拒绝显式空筛选项（Issue #2600）；向导入口若把空串归一成
+	``None``，同一条件会静默按「不筛选」执行，Agent 会以为过滤已生效
+	（Issue #2618）。非空白值原样透传，不 strip。
+	"""
+	raw = _optional_str_strict(inputs, name)
+	if raw is None:
+		return None
+	if not raw.strip():
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"wizard 输入 {name} 不能只有空白字符",
+			recoverable=True,
+			recovery_action=f"在 inputs 中补上有效的 {name} 后重试；不按该条件筛选时省略该字段",
+		)
+	return raw
+
+
 def _validate_search_filters(params: Mapping[str, Any]) -> None:
 	"""按保存入口同口径校验搜索筛选（城市名 + 标签取值域）。
 
@@ -2346,6 +2367,10 @@ def _recruiter_call(
 
 
 def _recruiter_candidates(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# 与 `hr candidates --city ""` / `--job-id ""` 同口径：显式空白筛选在
+	# 构造平台客户端之前按参数错误拒绝，不能静默按「不筛选」搜索（Issue #2618）。
+	_optional_nonblank_str(inputs, "city")
+	_optional_nonblank_str(inputs, "job_id")
 	return _recruiter_call(
 		context,
 		lambda platform: execute_recruiter_candidate_search(platform, inputs),
@@ -2355,12 +2380,15 @@ def _recruiter_candidates(context: ActionContext, inputs: Mapping[str, Any], pri
 
 
 def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# `hr applications` / `hr chat` 对显式空 --job-id 返回 INVALID_PARAM
+	# （Issue #2600），向导路径保持同一语义（Issue #2618）。
+	job_id = _optional_nonblank_str(inputs, "job_id")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.friend_list(
 			page=_int_input(inputs, "page", 1, minimum=1),
 			label_id=_int_input(inputs, "label_id", 0),
-			job_id=_optional_str(inputs.get("job_id")),
+			job_id=job_id,
 		),
 		"投递申请获取失败",
 		list_keys=("friendList", "result", "list", "items"),
@@ -2388,6 +2416,8 @@ def _recruiter_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 
 def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# `hr last-messages --job-id ""` 在平台调用前拒绝（Issue #2600），向导同口径。
+	job_id = _optional_nonblank_str(inputs, "job_id")
 	with context.recruiter_platform() as platform:
 		friend_data = platform_data_dict(
 			_unwrap(
@@ -2395,7 +2425,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 				platform.friend_list(
 					page=_int_input(inputs, "page", 1, minimum=1),
 					label_id=_int_input(inputs, "label_id", 0),
-					job_id=_optional_str(inputs.get("job_id")),
+					job_id=job_id,
 				),
 				"沟通列表获取失败",
 				context=context,
