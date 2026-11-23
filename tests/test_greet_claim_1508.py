@@ -431,3 +431,29 @@ def test_wizard_candidate_apply_success_settles_and_blocks_repeat(tmp_path):
 
 	assert excinfo.value.code == "ALREADY_APPLIED"
 	assert platform.calls == [("apply", "sec-1", "job-1", "l1")]
+
+
+@pytest.mark.parametrize("lid", [123, True, ["l1"], {"a": 1}])
+def test_wizard_candidate_apply_rejects_non_string_lid(tmp_path, lid):
+	"""非字符串 lid 不得转成 repr 后进入投递写请求，也不得留下本地预约。"""
+	from boss_agent_cli.wizard.models import WorkflowInputError
+
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, platform)
+
+	with pytest.raises(WorkflowInputError, match="lid 必须是字符串"):
+		DEFAULT_ACTIONS["candidate_apply"](context, {"security_id": "sec-1", "job_id": "job-1", "lid": lid}, {})
+
+	assert platform.calls == []
+	with CacheStore(_db(tmp_path)) as cache:
+		assert cache.is_applied("sec-1", "job-1") is False
+
+
+@pytest.mark.parametrize("inputs", [{}, {"lid": None}, {"lid": ""}])
+def test_wizard_candidate_apply_treats_absent_lid_as_empty(tmp_path, inputs):
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, platform)
+
+	DEFAULT_ACTIONS["candidate_apply"](context, {"security_id": "sec-1", "job_id": "job-1", **inputs}, {})
+
+	assert len(platform.calls) == 1
