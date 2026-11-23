@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.178 (2026-11-24): the wizard / MCP `boss_wizard` detail action reuses a valid cached job_id for the httpx fast path and tightens job_id / lid type, blank and encoding checks, matching the top-level `boss detail` command (Issue #2628).
+
 v3.4.177 (2026-11-24): the wizard / MCP `boss_wizard` chat-history action rejects explicit `max_msg_id: 0` / negative cursors, the greet action rejects explicit blank `message`, and candidate paging actions reject pages above `MAX_TRUSTED_PAGE`, all matching the top-level commands (Issue #2621 / #2623 / #2625).
 
 v3.4.176 (2026-11-24): recruiter actions in the wizard / MCP `boss_wizard` path reject explicit blank filters with `INVALID_PARAM`, matching the top-level `hr ...` commands (Issue #2618).
