@@ -75,6 +75,7 @@ from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_craw
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
 from boss_agent_cli.services.saved_searches import validate_stored_search_params
+from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
@@ -827,6 +828,17 @@ def execute_candidate_detail(
 	greeted = False
 	if data_dir is not None:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+			if not job_id:
+				# 与顶层 `detail` 同一优先级：显式 job_id > 缓存 job_id > 职位卡片。
+				# 缓存里的非字符串 / 空白 / 孤立代理项按未命中处理（Issue #1817 /
+				# #2549），不把坏值当参数发给平台。
+				cached = cache.get_job_id(security_id)
+				if (
+					isinstance(cached, str)
+					and cached.strip()
+					and is_utf8_encodable(cached)
+				):
+					job_id = cached
 			greeted = cache.is_greeted(security_id, job_id=job_id or "", account=account)
 
 	last_error: WorkflowActionError | None = None
@@ -1001,8 +1013,13 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	# 与 CLI `detail` 同口径：空 security_id 不是「查不到」，而是参数构造错了；
 	# 照常发请求只会换来一次注定失败的平台往返（Issue #2516）。
 	security_id = _required_nonblank_value(inputs, "security_id")
-	job_id = _optional_str(inputs.get("job_id"))
-	lid = str(inputs.get("lid") or "")
+	# job_id / lid 也是直接进平台参数与本地缓存的自由输入：非字符串不能经 str()
+	# 变成 repr，纯空白 job_id 按未提供处理（与顶层 --job-id 一致，Issue #1817）。
+	raw_job_id = _optional_str_strict(inputs, "job_id")
+	job_id = raw_job_id if raw_job_id is not None and raw_job_id.strip() else None
+	if job_id is not None and not is_utf8_encodable(job_id):
+		raise WorkflowInputError("wizard 输入 job_id 不能包含无法按 UTF-8 编码的字符")
+	lid = _optional_str_strict(inputs, "lid") or ""
 	with busy_status("正在读取职位详情…"):
 		with context.candidate_platform() as platform:
 			data = execute_candidate_detail(
