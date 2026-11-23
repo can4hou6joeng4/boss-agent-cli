@@ -1489,7 +1489,10 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			raise WorkflowActionError("INVALID_PARAM", f"未知的 watch 动作: {action}（可选: add、remove、run）")
 		try:
 			record = cache.get_saved_search(name)
-		except SavedSearchParamsError as exc:
+		except (SavedSearchParamsError, CacheRecordInvalid) as exc:
+			# 参数写坏与 name / 时间戳等元数据漂移同口径：本地记录损坏是确定性
+			# 失败，必须报 SAVED_SEARCH_INVALID 并给出删除重建指引，不能落成
+			# CACHE_RECORD_INVALID（Issue #2011、#2529）。
 			raise _saved_search_invalid_error(context, name, str(exc)) from exc
 		if record is None:
 			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")

@@ -4,7 +4,7 @@ from typing import Any, NamedTuple
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError, saved_search_name_error
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore, SavedSearchParamsError, saved_search_name_error
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.display import (
@@ -362,8 +362,10 @@ def search_cmd(
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			try:
 				record = cache.get_saved_search(preset)
-			except SavedSearchParamsError as exc:				# 预设参数写坏时给可执行的删除重建指引，而不是把 JSON 解析错误
-				# 兜成 NETWORK_ERROR 让 Agent 无限重试。
+			except (SavedSearchParamsError, CacheRecordInvalid) as exc:
+				# 参数写坏与 name / 时间戳等元数据漂移同口径：本地记录损坏是
+				# 确定性失败，给可执行的删除重建指引，不能落成与预设无关的
+				# CACHE_RECORD_INVALID 并诱导重试（Issue #2011、#2529）。
 				handle_error_output(
 					ctx, "search", code="SAVED_SEARCH_INVALID", message=str(exc),
 					hints={"next_actions": [
