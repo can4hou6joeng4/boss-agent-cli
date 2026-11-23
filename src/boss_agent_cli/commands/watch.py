@@ -39,6 +39,7 @@ from boss_agent_cli.search_filters import (
 	detail_channel_for,
 	detail_filter_max_pages,
 	ensure_supported_city,
+	ensure_text_encodable,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
@@ -139,6 +140,9 @@ def watch_add_cmd(
 	# 未知薪资 / 经验 / 学历在 `*_CODES.get(...)` 处返回 None，参数被静默丢弃，
 	# 之后每次 run 都在「没有筛选」的结果上报告新职位。
 	try:
+		# 关键词原样进入 httpx 的 URL 参数：孤立代理项必须在写库前拒绝，
+		# 否则每次 run 都落成带磁盘指引的 LOCAL_IO_ERROR（Issue #2528）。
+		ensure_text_encodable("搜索关键词", query)
 		ensure_supported_city(city)
 		resolve_search_code_params(
 			salary=salary, experience=experience, education=education,

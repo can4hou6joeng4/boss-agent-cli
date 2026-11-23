@@ -31,6 +31,7 @@ from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchUrlParseError,
 	ensure_supported_city,
+	ensure_text_encodable,
 	parse_boss_search_url,
 	prefilter_platform_job_type,
 	resolve_search_code_params,
@@ -139,6 +140,15 @@ def export_cmd(
 		)
 		return
 	query = query or ""
+
+	# 与 search 同口径：关键词原样进入 httpx 的 URL 参数，孤立代理项会在组
+	# 参数时抛 UnicodeEncodeError，被兜成带磁盘指引的 LOCAL_IO_ERROR
+	# （Issue #2528）。
+	try:
+		ensure_text_encodable("搜索关键词", query)
+	except ValueError as exc:
+		emit_filter_error(ctx, "export", exc)
+		return
 
 	try:
 		ensure_supported_city(city)
