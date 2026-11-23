@@ -68,9 +68,13 @@ def process_pending(
 	的多条动作只占一个名额，与 ``--limit`` 的「多少个会话」语义一致。
 	"""
 	actions = store.read_pending()
-	awaiting_verification = {
+	# 结果未知的在途行无论排在同源 pending 的前面还是后面，都不能让同源
+	# pending 先行派发（Issue #2586）：executing 行只有循环到它时才转
+	# verification-required 并 break，若只认后者，排在它前面的 pending 会先把
+	# 可能重复的消息发出去。
+	claimed_inflight = {
 		item.candidate_key for item in actions
-		if item.platform == platform and item.status == "verification-required"
+		if item.platform == platform and item.status in {"verification-required", "executing"}
 	}
 	events: list[AutomationEvent] = []
 	dispatched_conversations: set[str] = set()
@@ -133,7 +137,7 @@ def process_pending(
 					events.append(event)
 					if stop:
 						break
-		if item.status != "pending" or item.candidate_key in awaiting_verification:
+		if item.status != "pending" or item.candidate_key in claimed_inflight:
 			continue
 		action = queued_action(item, store.pending_path)
 		ref = ConversationRef(id=item.candidate_key, tab="pending")

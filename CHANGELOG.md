@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 待执行队列中同一候选人存在 `executing`（结果未知）行时，排在它前面的 `pending` 行不再派发消息；该 pending 保持原状等待人工核对，在途行照常转 `verification-required` 并熔断，其他候选人的动作不受影响（Issue #2586）。
+
 ## [3.4.167] - 2026-11-23
 
 ### Fixed
