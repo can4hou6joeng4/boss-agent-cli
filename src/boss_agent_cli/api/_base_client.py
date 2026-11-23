@@ -274,6 +274,10 @@ class _BaseHttpClient:
 			return Path(data_dir)
 		return None
 
+	def check_local_risk(self) -> None:
+		"""只读验证本地风控状态；供流程在记录在途操作前停止。"""
+		self._check_cdp_risk_lock()
+
 	def _check_cdp_risk_lock(self, browser: Any = None) -> None:
 		"""仅查本地锁，不读 Cookie、不连接浏览器；摘要变化或换通道不能恢复。"""
 		from boss_agent_cli.api import cdp_risk_lock

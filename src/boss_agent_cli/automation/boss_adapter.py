@@ -51,8 +51,14 @@ class BossRecruiterAutomationPlatform:
 
 	name = "zhipin"
 
-	def __init__(self, recruiter: BossRecruiterPlatformLike | None = None) -> None:
+	def __init__(
+		self,
+		recruiter: BossRecruiterPlatformLike | None = None,
+		*,
+		check_local_risk: Callable[[], None] | None = None,
+	) -> None:
 		self._recruiter = recruiter
+		self._check_local_risk = check_local_risk
 		self._warning = ""
 		self._risk: PlatformRiskError | None = None
 
@@ -73,11 +79,14 @@ class BossRecruiterAutomationPlatform:
 
 		auth = AuthManager(data_dir, platform="zhipin")
 		client = BossRecruiterClient(auth, delay=delay, cdp_url=cdp_url)
-		return cls(BossRecruiterPlatform(client))
+		return cls(BossRecruiterPlatform(client), check_local_risk=client.check_local_risk)
 
 	def ensure_session(self) -> None:
 		if self._recruiter is None:
 			self._warning = "zhipin recruiter live adapter is not attached"
+		elif self._check_local_risk is not None:
+			# 只读检查先于队列的 executing 写入；底层派发检查不变（Issue #2577）。
+			self._check_local_risk()
 
 	def scan_conversations(
 		self,
