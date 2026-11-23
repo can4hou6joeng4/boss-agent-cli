@@ -145,13 +145,24 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 
 		# 3) 聊天快照
 		current_target = "聊天快照"
-		freed, count, skipped = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
+		# --privacy --dry-run 时这两个目录由第 5 步整目录统计：预览不删除文件，
+		# 这里再按 --days 统计一次会与实际释放量不一致（Issue #2639）。
+		previewed: set[Path] = set()
+		freed, count, skipped = 0, 0, 0
+		if not (privacy and dry_run):
+			freed, count, skipped = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
+		else:
+			previewed.add(data_dir / "chat-history")
 		results.append(_clean_result("聊天快照", freed, count, skipped))
 		total_freed += freed
 
 		# 4) 导出文件
 		current_target = "导出文件"
-		freed, count, skipped = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
+		freed, count, skipped = 0, 0, 0
+		if not (privacy and dry_run):
+			freed, count, skipped = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
+		else:
+			previewed.add(data_dir / "chat-export")
 		results.append(_clean_result("导出文件", freed, count, skipped))
 		total_freed += freed
 
@@ -173,6 +184,7 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 						failed=[{"target": target, "path": str(path), "reason": str(exc)}],
 						remaining=[name for name, _ in targets[index + 1:]] + [crawl_target[0]],
 						message=f"隐私清理在删除{target}时失败: {exc}",
+						risk_lock_info=risk_lock_info,
 					)
 					return
 				entry = _clean_result(target, freed, count, skipped)
@@ -191,6 +203,7 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 					failed=[{"target": crawl_target[0], "path": str(crawl_target[1]), "reason": str(exc)}],
 					remaining=[],
 					message=f"隐私清理在删除{crawl_target[0]}时失败: {exc}",
+					risk_lock_info=risk_lock_info,
 				)
 				return
 			entry = _clean_result(crawl_target[0], freed, count, skipped)
@@ -598,6 +611,7 @@ def _emit_privacy_failure(
 	failed: list[dict[str, str]],
 	remaining: list[str],
 	message: str,
+	risk_lock_info: dict[str, Any] | None = None,
 ) -> None:
 	"""隐私清理失败时输出错误信封，并带回已完成 / 失败 / 未处理项。
 
@@ -614,17 +628,21 @@ def _emit_privacy_failure(
 		"failed": failed,
 		"remaining": remaining,
 	}
+	operator_actions = [
+		"隐私清理在完成前失败：按 failed 中的路径确认权限或改用可写的数据目录后重新执行 clean --privacy"
+	]
+	# 清锁先于隐私清理执行：后续失败也要交代锁的真实状态（Issue #1830 口径，#2639）。
+	if risk_lock_info is not None and risk_lock_info.get("local_lock_removed"):
+		data["risk_lock"] = dict(risk_lock_info)
+		message += "；本地风控锁此前已清除，该部分不会回滚"
+		operator_actions.append("本地风控锁已清除，不需要因为本次失败重新执行 clean --risk-lock")
 	handle_error_output(
 		ctx,
 		"clean",
 		code="LOCAL_IO_ERROR",
 		message=message,
 		data=data,
-		hints={
-			"operator_actions": [
-				"隐私清理在完成前失败：按 failed 中的路径确认权限或改用可写的数据目录后重新执行 clean --privacy"
-			]
-		},
+		hints={"operator_actions": operator_actions},
 	)
 
 
