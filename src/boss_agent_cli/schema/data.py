@@ -202,6 +202,7 @@ SCHEMA_DATA = {
 					"type": "int",
 					"default": 1,
 					"minimum": 1,
+					"maximum": 1000000,
 					"description": "页码",
 				},
 				"--with-score": {

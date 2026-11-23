@@ -16,6 +16,7 @@ from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, is_request_stop, request_control, request_controls_active
 from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem, field_list, is_boss_online
 from boss_agent_cli.services.job_identity import deduplicate_job_result
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
 from boss_agent_cli.services.text_files import is_utf8_encodable
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
@@ -301,7 +302,13 @@ def _first_query_value(parsed: dict[str, list[str]], key: str) -> str:
 
 def parse_boss_search_url(search_url: str) -> ParsedSearchUrl:
 	"""Parse a user-copied BOSS search URL into whitelisted API search params."""
-	parts = urlparse(search_url)
+	try:
+		parts = urlparse(search_url)
+	except ValueError as exc:
+		# 畸形链接（如无效 IPv6 主机名）会让 urlparse 同步抛 ValueError，
+		# 此前被命令层兜成可重试的 NETWORK_ERROR，指引只会让人重试
+		# （Issue #2546）。
+		raise SearchUrlParseError("搜索 URL 格式无效，请检查链接是否完整") from exc
 	if parts.scheme not in {"http", "https"} or parts.netloc not in _BOSS_SEARCH_HOSTS:
 		raise SearchUrlParseError("仅支持 zhipin.com 的职位搜索 URL")
 	if parts.path.rstrip("/") not in _BOSS_SEARCH_PATHS:
@@ -321,6 +328,9 @@ def parse_boss_search_url(search_url: str) -> ParsedSearchUrl:
 			page = max(1, int(raw_page))
 		except ValueError as exc:
 			raise SearchUrlParseError("URL 中的 page 参数不是有效数字") from exc
+		# URL 里的页码与 --page 同口径钳制：它会被原样带进搜索请求与下一页
+		# 提示，超长页码在 `page + 1` 字符串化时会抛 ValueError（Issue #2546）。
+		page = min(page, MAX_TRUSTED_PAGE)
 
 	if not query and not any(key in params for key in _URL_SEARCH_PARAM_KEYS):
 		raise SearchUrlParseError("URL 中没有可用的搜索参数")

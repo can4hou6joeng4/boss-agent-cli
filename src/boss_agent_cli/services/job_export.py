@@ -81,11 +81,52 @@ def _join_cells(value: list[Any]) -> str:
 	return ", ".join(text for item in value if (text := _cell_text(item)))
 
 
+def _degrade_unserializable(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""整体序列化失败时逐条筛选：坏的条目只保留仍可序列化的标量字段。
+
+	深嵌套 / 自引用容器会让 ``strict_json_text`` 抛 ``RecursionError``；单个
+	职位不能中止整份导出（Issue #2546）。
+	"""
+	degraded: list[dict[str, Any]] = []
+	for item in items:
+		try:
+			strict_json_text(item, null_oversized_ints=True)
+		except OSError:
+			degraded.append(_degraded_item(item))
+		else:
+			degraded.append(item)
+	return degraded
+
+
+def _degraded_item(item: Any) -> dict[str, Any]:
+	"""保留可序列化的标量字段，并标注该条被降级的原因。"""
+	if not isinstance(item, dict):
+		return {"export_error": "该条记录不是对象，已省略原始内容"}
+	kept: dict[str, Any] = {}
+	for key, value in item.items():
+		if isinstance(value, (dict, list, tuple)):
+			continue
+		try:
+			strict_json_text(value, null_oversized_ints=True)
+		except OSError:
+			continue
+		kept[key] = value
+	kept["export_error"] = "该条职位包含无法序列化的字段（如嵌套过深），已省略原始内容"
+	return kept
+
+
 def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 	if fmt == "json":
 		# 导出产物的单个数值漂移不应中止整份文件：超长整数按 null 输出，
-		# 与 CSV / HTML 通道的降级口径一致（Issue #2387）。
-		write_text_atomic(path, strict_json_text(items, null_oversized_ints=True))
+		# 与 CSV / HTML 通道的降级口径一致（Issue #2387）。深嵌套字段会让
+		# 整体序列化抛 RecursionError（strict_json_text 包装成 EINVAL 的
+		# OSError）：逐条降级，坏条目保留标量字段并标注省略原因，其余职位
+		# 照常写出（Issue #2546）。
+		try:
+			text = strict_json_text(items, null_oversized_ints=True)
+		except OSError:
+			text = strict_json_text(_degrade_unserializable(items), null_oversized_ints=True)
+		write_text_atomic(path, text)
 	elif fmt == "csv":
 		if not items:
 			write_text_atomic(path, "")
