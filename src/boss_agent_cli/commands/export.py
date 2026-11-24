@@ -25,6 +25,8 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 from boss_agent_cli.services.job_export import (
+	export_is_truncated,
+	export_stop_reason,
 	prepare_export_items,
 	public_html_export_item_from_api,
 	public_html_export_item_from_job,
@@ -74,10 +76,7 @@ def _truncation_note(stop_reason: str) -> str:
 
 
 #: 管线终止原因 → export 既有 stop_reason 词汇（Issue #2706）。
-_PIPELINE_STOP_REASONS = {
-	"limit_reached": "count_reached",
-	"has_more_false": "platform_has_more_false",
-}
+#: 映射与截断判定都在 services/job_export.py，向导 export 共用同一份（Issue #2712）。
 
 
 def _welfare_conditions(raw: str | None) -> list[tuple[str, list[str]]] | None:
@@ -154,7 +153,7 @@ def _collect_with_detail_filters(
 				hints=error_hints,
 			)
 			return None, "", None
-	return result.items, _PIPELINE_STOP_REASONS.get(result.stop_reason, result.stop_reason), result
+	return result.items, export_stop_reason(result.stop_reason), result
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -428,7 +427,8 @@ def export_cmd(
 			stop_reason = "count_reached"
 		# 页数预算耗尽，或活跃度筛选按设计提前停止且没取满 --count：两者都不完整。
 		# `active_target_reached` 若恰好取满 count 已被上面的 count_reached 覆盖。
-		truncated = stop_reason in {"page_budget_exhausted", "active_target_reached"}
+		# 判定下沉到 services/job_export.py，向导 export 共用同一份（Issue #2712）。
+		truncated = export_is_truncated(stop_reason, item_count=len(collected), requested=count)
 
 		if output is not None:
 			output = str(prepare_output_path(output))

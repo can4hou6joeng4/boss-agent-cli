@@ -1855,27 +1855,23 @@ def _export_output_path(context: ActionContext, inputs: Mapping[str, Any], fmt: 
 	raise WorkflowActionError(code, message, recovery_action=recovery_action)
 
 
-_EXPORT_STOP_REASON_MAP = {
-	# 管线内部原因 → 顶层 `boss export` 信封的同一套词汇（Issue #907 / #2657）。
-	"limit_reached": "count_reached",
-	"has_more_false": "platform_has_more_false",
-}
-
-
 def _export_stop_reason(result: Any) -> str:
 	"""把管线终止原因映射成 CLI 导出的 ``stop_reason`` 词汇。
 
 	自定义管线（测试替身 / Python API）没有 ``stop_reason`` 时退回旧的
 	``has_more`` 判定：仍有下一页就按预算耗尽处理，不能静默当完整结果。
+	映射表与顶层 `boss export` 共用同一份实现（Issue #2712）。
 	"""
+	from boss_agent_cli.services.job_export import export_stop_reason
+
 	raw = getattr(result, "stop_reason", "")
 	if not isinstance(raw, str) or not raw:
 		return "page_budget_exhausted" if getattr(result, "has_more", False) else ""
-	return _EXPORT_STOP_REASON_MAP.get(raw, raw)
+	return export_stop_reason(raw)
 
 
 def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	from boss_agent_cli.services.job_export import prepare_export_items, write_export_file
+	from boss_agent_cli.services.job_export import export_is_truncated, prepare_export_items, write_export_file
 
 	# 参数与路径必须在平台请求之前校验：非法 format 不能先翻完页才发现，
 	# `output` 指向目录也不能消耗一次受限请求（与命令层 `-o` 预检同口径）。
@@ -1937,11 +1933,12 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	data: dict[str, Any] = {"path": str(output), "format": fmt, "count": len(items)}
 	if count is not None:
 		# 少于请求条数时区分「平台已没有更多」「空页」「取满」与「页数预算
-		# 耗尽」：只有后者才是截断，调用方不能把前缀当完整结果（Issue #2657）。
+		# 耗尽 / 活跃度提前停止」：只有后两者才是截断，调用方不能把前缀当
+		# 完整结果（Issue #2657 / #2710）。判定与顶层 `boss export` 共用。
 		stop_reason = _export_stop_reason(result)
 		data["requested"] = count
 		data["stop_reason"] = stop_reason
-		data["truncated"] = len(items) < count and stop_reason == "page_budget_exhausted"
+		data["truncated"] = export_is_truncated(stop_reason, item_count=len(items), requested=count)
 	return StepResult(data, artifacts=(str(output),))
 
 
