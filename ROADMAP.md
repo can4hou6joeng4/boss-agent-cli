@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.188（2026-11-24）：向导 / MCP `job_search`（`candidate_search`）支持 `sort`，缺省保持平台顺序，`score` 按本地匹配分降序且类型漂移按 0；非法 / 显式空值在平台请求前返回 `INVALID_PARAM`，排序实现与顶层 `boss search --sort` 共用（Issue #2660）。
+
 v3.4.187（2026-11-24）：向导 / MCP 的 `export` 在平台响应缺失 `hasMore` 时按顶层导出语义继续扫描，`count` 请求不再只导出首屏；`data` 增加与顶层同词汇的 `stop_reason`，`truncated` 只在页数预算耗尽时为 true（Issue #2657）。
 
 v3.4.186（2026-11-24）：向导 / MCP 的 `welfare` 输入要求字符串或字符串数组，数字 / 嵌套数组不再变成永不命中的标签，`false` / `0` / 对象不再被真值判断当成「不筛选」，在平台请求前返回参数错误（Issue #2654）。

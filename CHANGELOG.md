@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.188] - 2026-11-24
+
 ### Added
 - 向导 / MCP `job_search`（`candidate_search`）支持 `sort`：缺省保持平台顺序，`score` 按本地 `match_score` 降序（类型漂移按 0）；显式空串或其他取值在平台请求前返回 `INVALID_PARAM`，不再静默忽略。排序实现与顶层 `boss search --sort` 共用 `services/search_order.py`（Issue #2660）。
 
