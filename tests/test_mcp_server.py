@@ -1990,6 +1990,24 @@ def test_build_args_watch_run():
 	assert _build_args("boss_watch_run", {"name": "daily"}) == ["watch", "run", "daily"]
 
 
+@pytest.mark.parametrize(
+	("arguments", "expected"),
+	[
+		# `--all` 与 CLI 同口径：只认布尔 true，字符串漂移不生成开关（#2695）。
+		({"all": True}, ["watch", "run", "--all"]),
+		({"all": False}, ["watch", "run"]),
+		({"all": "false"}, ["watch", "run"]),
+		# 两者同时给出时原样下发，由 CLI 按 #1561 拒绝；MCP 不吞参数。
+		({"name": "daily", "all": True}, ["watch", "run", "--all", "daily"]),
+		# 以连字符开头的名称仍由 `_literal_positionals` 放到 `--` 之后（#1102）。
+		({"name": "--daily"}, ["watch", "run", "--", "--daily"]),
+		({"name": "--daily", "all": True}, ["watch", "run", "--all", "--", "--daily"]),
+	],
+)
+def test_build_args_watch_run_all(arguments, expected):
+	assert _build_args("boss_watch_run", arguments) == expected
+
+
 def test_build_args_preset_list():
 	assert _build_args("boss_preset_list", {}) == ["preset", "list"]
 

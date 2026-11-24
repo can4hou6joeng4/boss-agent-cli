@@ -616,7 +616,17 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return ["watch", "list"]
 
 	if name == "watch_run":
-		return _literal_positionals(["watch", "run", arguments["name"]], start=2)
+		# `--all` 与 name 同时给出时原样下发，由 CLI 按 #1561 拒绝：MCP 层
+		# 吞掉任一个参数都会让 Agent 以为点名的 watch 已执行（或误跑全部）。
+		args = ["watch", "run"]
+		# 只认布尔 true：schema 的类型是 boolean，字符串 "false" 等漂移值不能
+		# 靠真值判断变成「跑全部」（Issue #2695）。
+		if arguments.get("all") is True:
+			args.append("--all")
+		if (watch_name := arguments.get("name")) is not None:
+			args.append(str(watch_name))
+			return _literal_positionals(args, start=len(args) - 1)
+		return args
 
 	if name == "preset_list":
 		return ["preset", "list"]
