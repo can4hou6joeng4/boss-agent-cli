@@ -1209,6 +1209,11 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		# 传 true 仍只返回管线内嵌的 match_score、没有匹配原因（Issue #2665）。
 		# 类型错误同样在平台请求前拒绝。
 		with_score = _bool_input(inputs, "with_score")
+		# 页码 / 页数预算在构造平台实例前校验（Issue #2692，与 `_candidate_recommend`
+		# 的 #2625 口径一致）：`execute_candidate_search` 内部也会读这两个键，但
+		# 那时平台实例已构造，CDP 模式会先启动浏览器或做登录探测。
+		page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
+		_int_input(inputs, "max_pages", 1, minimum=1)
 		account = account_scope(context.auth())
 		search_kwargs: dict[str, Any] = {}
 		if with_score:
@@ -1224,7 +1229,7 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			# sort」一致（匹配分类型漂移按 0 处理）。
 			"items": sort_search_items(list(result.items), sort_mode),
 			"pagination": {
-				"page": _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE),
+				"page": page,
 				# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。
 				"has_more": result.has_more_reported,
 				"has_more_source": "platform_hasMore" if result.has_more_reported is not None else "unknown",
@@ -1887,6 +1892,12 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		if fmt not in {"json", "csv"}:
 			raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
 		output_path = _export_output_path(context, inputs, fmt)
+		# 页码 / 页数预算在构造平台实例前校验（Issue #2692，与 `_candidate_chat`
+		# 的 #2625 口径一致）：`execute_candidate_search` 内部也会读这两个键，但
+		# 那时平台实例已构造，CDP 模式会先启动浏览器或做登录探测。这里只校验
+		# 显式值；缺省预算仍由 `export_page_budget(count)` 决定。
+		_int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
+		_int_input(inputs, "max_pages", 1, minimum=1)
 		search_inputs = {**inputs, "account": account_scope(context.auth())}
 		if count is not None and search_inputs.get("max_pages") in (None, ""):
 			# 与顶层 `boss export` 同一页数口径：只给默认页数预算时按 count 估页，
