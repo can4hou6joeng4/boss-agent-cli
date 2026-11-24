@@ -767,6 +767,52 @@ def test_candidate_watch_stores_string_params(tmp_path):
 	assert "query" in str(exc_info.value)
 
 
+@pytest.mark.parametrize("value", [False, 0, [], {}, 1.5])
+def test_candidate_watch_rejects_non_string_active(tmp_path, value):
+	"""非字符串 active 不得被真值判断吞掉、按「不筛选」静默保存（Issue #2645）。"""
+	context = _action_context(tmp_path)
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_watch"](
+			context, {"action": "add", "name": "daily", "query": "Python", "active": value}, {}
+		)
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert "active 必须是字符串" in str(exc_info.value)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_saved_search("daily") is None
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_candidate_watch_rejects_blank_active(tmp_path, value):
+	"""active 的 schema 是 minLength 1：空白应点名拒绝，而不是当作未设置（Issue #2645）。"""
+	context = _action_context(tmp_path)
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_watch"](
+			context, {"action": "add", "name": "daily", "query": "Python", "active": value}, {}
+		)
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert "省略该字段" in str(exc_info.value)
+
+
+def test_candidate_watch_accepts_active_alias_and_omission(tmp_path):
+	"""合法 active 按标准键保存；缺省与 null 表示不筛选（Issue #2645）。"""
+	context = _action_context(tmp_path)
+	DEFAULT_ACTIONS["candidate_watch"](
+		context, {"action": "add", "name": "daily", "query": "Python", "active": "3day"}, {}
+	)
+	DEFAULT_ACTIONS["candidate_watch"](
+		context, {"action": "add", "name": "plain", "query": "Python", "active": None}, {}
+	)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		record = cache.get_saved_search("daily")
+		plain = cache.get_saved_search("plain")
+	assert record is not None and record["params"]["active"] == "3d"
+	assert plain is not None and "active" not in plain["params"]
+
+
 def test_candidate_watch_corrupt_params_reports_recovery(tmp_path):
 	"""wizard 复用本地 watch 时参数写坏要给删除重建指引，而不是 NETWORK_ERROR。"""
 	context = _action_context(tmp_path)

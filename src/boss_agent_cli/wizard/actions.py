@@ -1627,9 +1627,23 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 						"INVALID_PARAM", f"watch 参数 {key} 必须是字符串（收到 {type(value).__name__}）"
 					)
 				params[key] = value
-			if inputs.get("active"):
+			# active 与 `boss_watch_add` 的 schema 同口径（string、minLength 1）：
+			# `false` / `0` / `[]` 曾被真值判断吞掉、按「不筛选」静默保存；
+			# 空串与空白同样拒绝，提示省略该字段表示不筛选（Issue #2645）。
+			raw_active = inputs.get("active")
+			if raw_active is not None:
+				if not isinstance(raw_active, str):
+					raise WorkflowActionError(
+						"INVALID_PARAM",
+						f"watch 参数 active 必须是字符串（收到 {type(raw_active).__name__}）",
+					)
+				if not raw_active.strip():
+					raise WorkflowActionError(
+						"INVALID_PARAM",
+						"watch 参数 active 不能为空白；不设筛选请省略该字段",
+					)
 				try:
-					params["active"] = resolve_active_level(str(inputs.get("active")))
+					params["active"] = resolve_active_level(raw_active)
 				except ValueError as exc:
 					raise WorkflowActionError("INVALID_PARAM", str(exc)) from exc
 			# 与 CLI `watch add` 同口径：纯空白关键词会让 run 发起空泛搜索并

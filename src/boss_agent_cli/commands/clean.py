@@ -147,12 +147,9 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		current_target = "聊天快照"
 		# --privacy --dry-run 时这两个目录由第 5 步整目录统计：预览不删除文件，
 		# 这里再按 --days 统计一次会与实际释放量不一致（Issue #2639）。
-		previewed: set[Path] = set()
 		freed, count, skipped = 0, 0, 0
 		if not (privacy and dry_run):
 			freed, count, skipped = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
-		else:
-			previewed.add(data_dir / "chat-history")
 		results.append(_clean_result("聊天快照", freed, count, skipped))
 		total_freed += freed
 
@@ -161,8 +158,6 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		freed, count, skipped = 0, 0, 0
 		if not (privacy and dry_run):
 			freed, count, skipped = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
-		else:
-			previewed.add(data_dir / "chat-export")
 		results.append(_clean_result("导出文件", freed, count, skipped))
 		total_freed += freed
 
