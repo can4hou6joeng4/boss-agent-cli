@@ -32,6 +32,23 @@ def friend_uid(item: Mapping[str, Any]) -> str:
 	return stable_uid(item.get("uid"))
 
 
+def friend_display_name(item: Mapping[str, Any]) -> str:
+	"""读取联系人显示名：只认非空白字符串（去首尾空白），否则回落 ``-``。
+
+	``name`` 会进 ``exchange_contact`` 写请求与输出文案。CLI ``exchange`` 已按
+	此口径收口（Issue #1812），但向导 ``exchange`` 仍用 ``str(name or "-")``
+	把对象 / 数组 / 布尔 / NaN 的 Python repr 发给平台，``mark`` /
+	``chat-summary`` / ``chatmsg`` 用 ``name or "-"`` 把容器原样写进信封
+	（Issue #2748）。判定只留这一处真源。
+	"""
+	raw = item.get("name")
+	if isinstance(raw, str):
+		name = raw.strip()
+		if name:
+			return name
+	return "-"
+
+
 class FriendLookupLimitExceeded(RuntimeError):
 	"""Raised when paginated friend lookup cannot prove completion safely."""
 

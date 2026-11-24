@@ -19,7 +19,8 @@ from boss_agent_cli.display import (
 	render_simple_list,
 	shell_argument,
 )
-from boss_agent_cli.services.chat_utils import int_code, message_list, safe_local_time
+from boss_agent_cli.services.chat_utils import int_code, message_list, message_text_value, safe_local_time, stable_uid
+from boss_agent_cli.services.contact_lookup import friend_display_name
 from boss_agent_cli.services.pagination import (
 	MAX_TRUSTED_COUNT,
 	MAX_TRUSTED_PAGE,
@@ -127,7 +128,9 @@ def chatmsg_cmd(
 			if resolved_gid is None:
 				return
 			gid = resolved_gid
-			friend_name = friend_item.get("name") or "-"
+			# `name or "-"` 只挡假值：对象 / 数组 / 布尔会原样进每条消息的 from
+			# 与 TTY 标题（Issue #2748）。
+			friend_name = friend_display_name(friend_item)
 			# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值，
 			# 否则会拿一个已失效的令牌去请求消息历史。
 			resolved_security_id = current_friend_security_id_or_emit(ctx, "chatmsg", friend_item)
@@ -207,10 +210,16 @@ def _normalize_message(
 ) -> dict[str, Any]:
 	from_obj = msg.get("from", {})
 	sender_uid = ""
-	sender_name: Any = None
+	sender_name = ""
 	if isinstance(from_obj, dict):
-		sender_uid = str(from_obj.get("uid") or "").strip()
-		sender_name = from_obj.get("name")
+		# 与 gid 的来源（contact_lookup.friend_uid）同口径：只认非空字符串或非
+		# 布尔整数。旧实现 ``str(uid or "")`` 把布尔 / 容器 / 浮点变成 ``"True"``
+		# / ``"{'n': 1}"`` / ``"1.5"``，与 gid 不相等就落进「我」（Issue #2749）。
+		sender_uid = stable_uid(from_obj.get("uid"))
+		# 名字只认非空白字符串：容器 / 布尔不能原样进信封的 from（Issue #2748）。
+		raw_sender_name = from_obj.get("name")
+		if isinstance(raw_sender_name, str):
+			sender_name = raw_sender_name.strip()
 	# 发送方 uid 缺失（含 null）时无法判断是谁：旧实现用 ``"" != gid`` 把
 	# 这类消息误标成「我」（Issue #1352）。缺失按「未知」处理，只有明确的
 	# 非空 uid 才能判定发送方。
@@ -230,7 +239,7 @@ def _normalize_message(
 		msg_time = msg_dt.strftime("%m-%d %H:%M") if msg_dt is not None else ""
 
 	body = _message_body(msg)
-	text = msg.get("text") or body.get("text", "") or ""
+	text = _message_text(msg, body)
 	msg_type = msg.get("type")
 	normalized: dict[str, Any] = {
 		"from": from_name,
@@ -257,6 +266,26 @@ def _message_body(msg: dict[str, Any]) -> dict[str, Any]:
 	if isinstance(body, dict):
 		return body
 	return {}
+
+
+def _message_text(msg: dict[str, Any], body: dict[str, Any]) -> str:
+	"""消息正文：按顶层 ``text`` → ``body.text`` 取第一个可用文本，恒为字符串。
+
+	旧实现 ``msg.get("text") or body.get("text", "") or ""`` 让真值但不是文本
+	的顶层 ``text``（对象 / 数组 / ``true`` / NaN）吞掉合法的 ``body.text``，
+	坏值还原样进信封（Issue #2749）。真正的字符串优先；两个键都没有字符串时
+	才把有限数字转成文本，布尔 / 容器 / 非有限浮点按缺失处理。``--raw`` 的
+	``raw`` / ``body`` 仍保留平台原值。
+	"""
+	values = (msg.get("text"), body.get("text"))
+	for value in values:
+		if isinstance(value, str) and value:
+			return value
+	for value in values:
+		text = message_text_value(value)
+		if text is not None:
+			return text
+	return ""
 
 
 def _message_type_label(msg_type: Any) -> str:

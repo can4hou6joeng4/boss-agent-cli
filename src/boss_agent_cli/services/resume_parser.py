@@ -19,6 +19,20 @@ def _safe_str(val: Any) -> str:
 	return val if isinstance(val, str) else ""
 
 
+def _first_str(item: dict[str, Any], *keys: str) -> str:
+	"""按优先级取第一个非空字符串字段；都不可用时为空串。
+
+	``_safe_str(item.get(a) or item.get(b))`` 在 ``a`` 是真值但不是字符串
+	（数组 / 对象 / 数字）时由 ``or`` 先选中它，再被 ``_safe_str`` 归空串，
+	合法的回退键 ``b`` 不再被读取（Issue #2750；与 #2723 / #2740 同类）。
+	"""
+	for key in keys:
+		value = item.get(key)
+		if isinstance(value, str) and value:
+			return value
+	return ""
+
+
 def _parse_base(info: dict[str, Any]) -> dict[str, Any]:
 	base = field_dict(info, "geekBaseInfo")
 	gender = base.get("gender")
@@ -82,9 +96,9 @@ def _parse_education(info: dict[str, Any]) -> list[dict[str, Any]]:
 		result.append({
 			"school": _safe_str(e.get("school")),
 			"major": _safe_str(e.get("major")),
-			"degree": _safe_str(e.get("degreeDesc") or e.get("degreeName")),
-			"start": _safe_str(e.get("startYearMonStr") or e.get("startDateDesc")),
-			"end": _safe_str(e.get("endYearMonStr") or e.get("endDateDesc")),
+			"degree": _first_str(e, "degreeDesc", "degreeName"),
+			"start": _first_str(e, "startYearMonStr", "startDateDesc"),
+			"end": _first_str(e, "endYearMonStr", "endDateDesc"),
 		})
 	return result
 

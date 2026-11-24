@@ -5,6 +5,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, positional_hint, render_message_panel
+from boss_agent_cli.services.contact_lookup import friend_display_name
 
 
 @click.command("exchange")
@@ -31,9 +32,9 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 		uid = current_friend_uid_or_emit(ctx, "exchange", friend_item)
 		if uid is None:
 			return
-		# name 会进写请求与输出文案：非字符串或纯空白一律回落占位符（Issue #1812）。
-		raw_name = friend_item.get("name")
-		friend_name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else "-"
+		# name 会进写请求与输出文案：非字符串或纯空白一律回落占位符（Issue #1812）；
+		# 判定与向导 exchange / mark / chat-summary / chatmsg 共用（Issue #2748）。
+		friend_name = friend_display_name(friend_item)
 		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值。
 		fresh_security_id = current_friend_security_id_or_emit(ctx, "exchange", friend_item)
 		if fresh_security_id is None:
