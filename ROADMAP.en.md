@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.183 (2026-11-24): the wizard / MCP `boss_wizard` watch save action rejects a non-string or blank `active` as a parameter error before writing, instead of silently saving no filter (Issue #2645).
+
 v3.4.182 (2026-11-24): the `crawl` detail cache no longer treats an explicit null job_id in the checkpoint as a shared key, a failed background resume preflight keeps its original error even if the state restore fails, and a queued run with a live executor lock no longer reports queue overdue (Issue #2642).
 
 v3.4.181 (2026-11-24): `clean --risk-lock --privacy` reports the real cleared state of the local risk lock when the privacy step fails, and `clean --privacy --dry-run` no longer counts aged snapshots and exports twice, matching the real run (Issue #2639).
