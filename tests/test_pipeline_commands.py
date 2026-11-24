@@ -231,3 +231,20 @@ def test_pipeline_and_follow_up_are_exposed_in_schema():
 	parsed = json.loads(result.output)
 	assert "pipeline" in parsed["data"]["commands"]
 	assert "follow-up" in parsed["data"]["commands"]
+
+
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_pipeline_reports_not_supported_when_interview_data_missing(mock_auth_cls, mock_client_cls, legacy_args):
+	"""平台未实现 interview_data 是确定性能力缺口（Issue #2745），与 interviews 命令同口径。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_chat_item(unread=1)])
+	mock_client.interview_data.side_effect = NotImplementedError("zhipin platform does not implement interview_data")
+
+	result = CliRunner().invoke(cli, ["--json", *legacy_args, "pipeline"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"]

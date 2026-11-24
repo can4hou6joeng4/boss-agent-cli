@@ -1663,6 +1663,13 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 						"本次写入被本地缓存库拒绝（约束冲突或非法绑定值），库本身完好、无需删除；修正调用参数后重试"
 					),
 				)
+			except NotImplementedError as e:
+				# 平台适配器未实现该能力（platforms/base.py / recruiter_base.py 的
+				# 默认实现）是确定性能力缺口：与 interviews 命令的显式捕获、wizard
+				# runner 的 except NotImplementedError 分支同口径。此前 digest /
+				# pipeline 漏掉本地捕获，异常落进通用分支成了可重试 NETWORK_ERROR，
+				# Agent 会对同一失败无界重试（Issue #2745）。
+				handle_not_supported(ctx, command_name, e, fallback_message="当前平台不支持该能力")
 			except INTERNAL_ERROR_TYPES as e:
 				status = parameter_status_code(e)
 				if isinstance(e, PlatformStatusRejected) and status is not None:

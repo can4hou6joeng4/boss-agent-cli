@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `interviews` 的职位、公司、面试时间、地址与状态字段改走 `field_text`：`.get(key, "-")` 的默认值只挡键缺失，平台返回显式 `null` / `NaN` / `Infinity` / 容器时会原样进 JSON 信封与 TTY 表格（显示 `None` / `nan` / dict repr），与 `pipeline` / `digest` 对同一 payload 的形状不一致（Issue #2744）。
+- `handle_auth_errors` 增加统一的 `NotImplementedError` → `NOT_SUPPORTED` 分支：`digest` / `pipeline` / `follow-up` 调用平台未实现的 `interview_data` 时不再被通用 `except Exception` 兜成可重试的 `NETWORK_ERROR` + 「重试」，与 `interviews` 命令和 wizard runner 的既有分类一致（Issue #2745）。
+
 ## [3.4.205] - 2026-11-25
 
 ### Fixed

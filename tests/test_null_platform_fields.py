@@ -183,6 +183,38 @@ def test_non_object_list_elements_are_skipped(module, args, method, payload):
 		assert envelope["data"] == []
 
 
+def test_interviews_normalizes_null_nonfinite_and_container_fields():
+	"""显式 null / 非有限浮点 / 容器按缺失处理（Issue #2744），与 pipeline 同形状。"""
+
+	def setup(platform):
+		platform.interview_data.return_value = {
+			"code": 0,
+			"zpData": {
+				"interviewList": [
+					{
+						"jobName": None,
+						"brandName": float("nan"),
+						"interviewTime": {"t": 1},
+						"address": None,
+						"statusDesc": float("inf"),
+					}
+				]
+			},
+		}
+
+	result, _ = _invoke("interviews", ["interviews"], setup)
+	envelope = _envelope(result)
+	assert envelope["data"] == [
+		{
+			"jobName": "-",
+			"brandName": "-",
+			"interviewTime": "-",
+			"address": "-",
+			"statusDesc": "-",
+		}
+	]
+
+
 @pytest.mark.parametrize("section", ["bossInfo", "brandComInfo"])
 def test_detail_null_section_returns_detail_without_browser_fallback(section):
 	"""以前这里抛 AttributeError，被吞掉后改走浏览器通道多请求一次，最后误报 JOB_NOT_FOUND。"""
