@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `pipeline` / `follow-up` / `digest` 的公司、标题、最后一条消息、面试时间与身份字段统一走 `field_text`：`raw.get(k) or 默认值` 会让 `nan` / `inf` 穿过（真值）并把容器 `str()` 成 Python repr 写进 `data.items` 与 Markdown 正文；现在非有限数与容器按缺失处理（Issue #2739）。
+- `recommend --with-score` 的求职期望回退链按优先级逐个键取第一个可用字符串：此前 `expect_data.get("city") or expect_data.get("cityName")` 先把真值容器选中再校验类型，合法的 camelCase 回退永远不会被读取，匹配分最多少 65 分且原因为空（Issue #2740）。
+
 ## [3.4.204] - 2026-11-25
 
 ### Fixed
