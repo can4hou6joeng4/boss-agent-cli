@@ -75,6 +75,7 @@ from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_craw
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
 from boss_agent_cli.services.saved_searches import validate_stored_search_params
+from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items
 from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import (
@@ -1020,13 +1021,25 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	# #2511、#2514）：`execute_candidate_search` 里 `_optional_str_strict(...) or ""`
 	# 会原样接受它，平台按「无关键词」返回推荐并向动作报成功。
 	_required_nonblank_str(inputs, "query")
+	# sort 与顶层 `search --sort` 同一枚举：缺省 / null 保持平台顺序；显式空串
+	# 或其他取值在平台请求前拒绝，不能静默按 relevance 返回（Issue #2660）。
+	raw_sort = _optional_str_strict(inputs, "sort")
+	sort_mode = "relevance" if raw_sort is None else raw_sort
+	if sort_mode not in SEARCH_SORT_MODES:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"wizard 输入 sort 仅支持 {' / '.join(SEARCH_SORT_MODES)}，收到 {sort_mode!r}",
+			recoverable=True,
+			recovery_action="将 sort 改为 relevance 或 score 后重试；省略表示保持平台顺序",
+		)
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
 			result = execute_candidate_search(platform, cache, context.logger, {**inputs, "account": account})
 	return StepResult(
 		{
-			"items": result.items,
+			# 排序与顶层 `search` 共用同一份实现（匹配分类型漂移按 0 处理）。
+			"items": sort_search_items(list(result.items), sort_mode),
 			"pagination": {
 				"page": _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE),
 				# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。

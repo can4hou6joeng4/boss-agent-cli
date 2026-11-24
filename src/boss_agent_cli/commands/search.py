@@ -25,6 +25,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
+from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items as _sort_search_items
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
@@ -105,18 +106,6 @@ def _valid_cached_pagination(pagination: dict[str, Any]) -> bool:
 	if total_kind is not None and not isinstance(total_kind, str):
 		return False
 	return True
-
-
-def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
-	if sort == "score":
-		# match_score 由本工具写成整数；缓存被改坏成字符串时会与整数混合
-		# 比较抛 TypeError（Issue #1318）。
-		def _score(item: dict[str, Any]) -> int:
-			value = item.get("match_score")
-			return value if type(value) is int else 0
-
-		return sorted(items, key=_score, reverse=True)
-	return items
 
 
 def _refresh_greeted(items: list[dict[str, Any]], cache: CacheStore, account: str) -> list[dict[str, Any]]:
@@ -305,7 +294,7 @@ def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
 @click.option("--page", default=1, type=click.IntRange(min=1, max=MAX_TRUSTED_PAGE), help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
-@click.option("--sort", "sort_mode", default="relevance", type=click.Choice(["relevance", "score"]), help="排序方式")
+@click.option("--sort", "sort_mode", default="relevance", type=click.Choice(list(SEARCH_SORT_MODES)), help="排序方式")
 @click.pass_context
 @handle_auth_errors("search")
 def search_cmd(
