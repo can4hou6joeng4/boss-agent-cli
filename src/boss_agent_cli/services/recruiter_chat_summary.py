@@ -116,21 +116,41 @@ def message_status_label(item: dict[str, Any], friend_id: int | None = None) -> 
 	return RECRUITER_MSG_STATUS_LABELS.get(status)
 
 
+def _message_text_value(value: Any) -> str | None:
+	"""把平台消息文本归一成字符串；布尔 / 容器 / 非有限数值按缺失处理。
+
+	``1e400`` / ``Infinity`` / ``NaN`` 在 JSON 里变成 ``inf`` / ``nan``，裸
+	``str()`` 会把 ``"inf"`` / ``"nan"`` 当最后一条消息写进 friendList
+	（Issue #2730）。超过 4300 位的整数连 ``str()`` 都会抛 ``ValueError``；
+	正常 JSON 解析到不了这里，但服务被直接调用时也不能让整批摘要失败
+	（与 ``_as_int`` / ``format_chat_time`` 同口径）。
+	"""
+	if isinstance(value, bool):
+		return None
+	if isinstance(value, str):
+		return value or None
+	if isinstance(value, int):
+		return str(value) if value.bit_length() <= 14284 else None
+	if isinstance(value, float):
+		return str(value) if math.isfinite(value) else None
+	return None
+
+
 def message_text(item: dict[str, Any]) -> str | None:
 	for key in ("last_msg", "lastMsg", "lastText", "content", "text", "message", "msgContent"):
-		value = item.get(key)
-		if isinstance(value, str | int | float) and not isinstance(value, bool) and value != "":
-			return str(value)
+		text = _message_text_value(item.get(key))
+		if text is not None:
+			return text
 	body = item.get("body")
 	if isinstance(body, dict):
-		value = body.get("text")
-		if isinstance(value, str | int | float) and not isinstance(value, bool) and value != "":
-			return str(value)
+		text = _message_text_value(body.get("text"))
+		if text is not None:
+			return text
 	info = last_info(item)
 	for key in ("showText", "text"):
-		value = info.get(key)
-		if isinstance(value, str | int | float) and not isinstance(value, bool) and value != "":
-			return str(value)
+		text = _message_text_value(info.get(key))
+		if text is not None:
+			return text
 	return None
 
 
