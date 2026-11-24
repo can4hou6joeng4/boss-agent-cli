@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 向导 / MCP `recommendations`（`candidate_recommend`）支持 `with_score`：为 true 时按顶层 `boss recommend --with-score` 同一口径读取求职期望、把 `jobList` 归一为 `JobItem`（按当前账号计算 `greeted`）并附加 `match_score` / 匹配原因，平台不支持求职期望时返回 `NOT_SUPPORTED`；缺省保持原始列表且不额外请求，非布尔值在平台请求前返回参数错误。归一与评分实现与命令层共用 `services/recommend_items.py`（Issue #2662）。
+
 ## [3.4.188] - 2026-11-24
 
 ### Added
