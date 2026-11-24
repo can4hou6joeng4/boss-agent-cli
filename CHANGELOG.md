@@ -4,13 +4,16 @@
 
 ## [Unreleased]
 
+### Added
+- 向导 / MCP（招聘者）`last_messages` 补齐与 `hr last-messages` 同口径的 `limit`（默认 100、上限 300）与 `friend_ids` 直查：先按 `limit` 截断再请求并回显 `skipped`；请求按 friendSource 分组、每批 50 串行（此前把整页 friendId 一次请求，超过平台单批上限会被拒），回显 `requests`，部分批次失败给 `partial_error`；`friend_ids` 直查跳过沟通列表且不产出 `pagination`。批量查询实现下沉 `services/recruiter_last_messages.py` 与命令层共用（Issue #2675）。
+
+### Fixed
+- login curl 解析回归测试改用临时数据目录：此前读取真实 `~/.boss-agent`，本机存在风险锁时会拿到 `ACCOUNT_RISK` 而不是预期的 `INVALID_PARAM`，导致本地门禁出现与本机状态相关的假红（Issue #2677）。
+
 ## [3.4.191] - 2026-11-24
 
 ### Added
 - 其余列表类向导 goal 补齐分页证据：`chat_history`（求职者）与 `candidates` / `applications` / `communication` / `last_messages` / `jobs_list`（招聘者）的步骤 `data` 新增与 CLI 同词汇的 `pagination`，`has_more` 只认平台布尔 `hasMore`（缺失 / 类型漂移为 `null`）；`jobs_list` 同时补齐 `page` 输入（此前传入第 2 页仍返回第一页），`last_messages` 的分页证据取自沟通列表页。不新增平台请求（Issue #2672）。
-
-### Fixed
-- login curl 解析回归测试改用临时数据目录：此前读取真实 `~/.boss-agent`，本机存在风险锁时会拿到 `ACCOUNT_RISK` 而不是预期的 `INVALID_PARAM`，导致本地门禁出现与本机状态相关的假红（Issue #2677）。
 
 ## [3.4.190] - 2026-11-24
 

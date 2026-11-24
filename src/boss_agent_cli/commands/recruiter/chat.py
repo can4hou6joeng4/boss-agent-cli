@@ -4,12 +4,20 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS, message_list, safe_local_time
+from boss_agent_cli.services.recruiter_last_messages import (
+	DEFAULT_SUMMARY_LIMIT,
+	MAX_SUMMARY_LIMIT,
+	as_friend_int,
+	fetch_last_messages,
+	friend_id_for,
+	friend_sources,
+	list_dict_items,
+)
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
@@ -26,12 +34,6 @@ from boss_agent_cli.display import (
 
 
 _RECRUITER_MSG_STATUS_LABELS = {0: "发送中", **MSG_STATUS_LABELS}
-
-# userLastMsg 批量：前端自己每页最多 100 个；一次塞 300+ 个会被拒（「未知的非法参数」）。
-# CDP 模式下请求串行，这里再保守一点：每批 50 个，默认只补前 100 个会话（最多 2 次请求）。
-LAST_MESSAGES_BATCH_SIZE = 50
-DEFAULT_SUMMARY_LIMIT = 100
-MAX_SUMMARY_LIMIT = 300
 
 
 def _format_chat_time(value: Any) -> str | None:
@@ -56,36 +58,6 @@ def _format_chat_time(value: Any) -> str | None:
 			return text or None
 		return _format_chat_time(parsed)
 	return text or None
-
-
-def _as_int(value: Any) -> int | None:
-	if value in (None, "") or isinstance(value, bool):
-		return None
-	try:
-		return int(str(value))
-	except (TypeError, ValueError):
-		return None
-
-
-def _friend_id_for(item: dict[str, Any], known_ids: set[int] | None = None) -> int | None:
-	for key in ("friendId", "friend_id", "uid", "gid"):
-		value = _as_int(item.get(key))
-		if value is not None:
-			return value
-	# userLastMsg 可能直接返回消息对象（from/to 两端 uid），取其中属于本次请求的那个候选人。
-	if known_ids:
-		for side in ("from", "to"):
-			party = item.get(side)
-			uid = _as_int(party.get("uid")) if isinstance(party, dict) else None
-			if uid is not None and uid in known_ids:
-				return uid
-	return None
-
-
-def _list_dict_items(value: Any) -> list[dict[str, Any]]:
-	if isinstance(value, list):
-		return [item for item in value if isinstance(item, dict)]
-	return []
 
 
 def _message_cursor_id(value: Any) -> int | None:
@@ -131,30 +103,8 @@ def _friend_data(data: Any) -> dict[str, Any]:
 	if isinstance(data, dict):
 		return data
 	if isinstance(data, list):
-		return {"friendList": _list_dict_items(data)}
+		return {"friendList": list_dict_items(data)}
 	return {}
-
-
-def _message_items(data: Any) -> list[dict[str, Any]]:
-	if isinstance(data, list):
-		return _list_dict_items(data)
-	if not isinstance(data, dict):
-		return []
-	for key in ("lastMessageList", "lastMsgList", "messages", "messageList", "msgList", "result", "friendList", "list"):
-		value = data.get(key)
-		if isinstance(value, list):
-			return _list_dict_items(value)
-	# 也兼容 {friendId: 消息} 的映射形状。
-	items: list[dict[str, Any]] = []
-	for key, value in data.items():
-		friend_id = _as_int(key)
-		if friend_id is None:
-			continue
-		if isinstance(value, dict):
-			items.append({"friendId": friend_id, **value})
-		elif isinstance(value, str):
-			items.append({"friendId": friend_id, "lastMsg": value})
-	return items
 
 
 def _last_info(item: dict[str, Any]) -> dict[str, Any]:
@@ -170,7 +120,7 @@ def _last_is_self(item: dict[str, Any], friend_id: int | None) -> bool | None:
 	flag = item.get("lastIsSelf")
 	if isinstance(flag, bool):
 		return flag
-	from_id = _as_int(_last_info(item).get("fromId"))
+	from_id = as_friend_int(_last_info(item).get("fromId"))
 	if from_id is None or friend_id is None:
 		return None
 	return from_id != friend_id
@@ -236,7 +186,7 @@ def _message_time(item: dict[str, Any]) -> str | None:
 
 
 def _normalize_last_message(item: dict[str, Any], known_ids: set[int] | None = None) -> dict[str, Any]:
-	friend_id = _friend_id_for(item, known_ids)
+	friend_id = friend_id_for(item, known_ids)
 	return {
 		"friendId": friend_id,
 		"unread": _unread_count(item),
@@ -273,11 +223,11 @@ def _merge_last_messages(
 	> 沟通列表条目自身字段（friend_list，只有 updateTime 时 last_time 取它）。
 	拿不到的字段一律给 null，不再填「-」「未知」这类占位。
 	"""
-	known_ids = {fid for item in friend_items if (fid := _friend_id_for(item)) is not None}
+	known_ids = {fid for item in friend_items if (fid := friend_id_for(item)) is not None}
 	api_summaries = _summaries_by_friend(message_items, known_ids)
 	counts: dict[str, int] = {}
 	for item in friend_items:
-		friend_id = _friend_id_for(item)
+		friend_id = friend_id_for(item)
 		own = _normalize_last_message(item)
 		if friend_id is not None and page_summaries and friend_id in page_summaries:
 			message, used = page_summaries[friend_id], "page"
@@ -300,20 +250,20 @@ def _merge_last_messages(
 
 def _friend_items(data: Any) -> list[dict[str, Any]]:
 	if isinstance(data, list):
-		return _list_dict_items(data)
+		return list_dict_items(data)
 	if not isinstance(data, dict):
 		return []
 	for key in ("friendList", "result", "list"):
 		value = data.get(key)
 		if isinstance(value, list):
-			return _list_dict_items(value)
+			return list_dict_items(value)
 	return []
 
 
 def _friend_ids_from_items(items: list[dict[str, Any]]) -> list[int]:
 	ids: list[int] = []
 	for item in items:
-		friend_id = _friend_id_for(item)
+		friend_id = friend_id_for(item)
 		if friend_id is not None and friend_id not in ids:
 			ids.append(friend_id)
 	return ids
@@ -329,7 +279,7 @@ def _fetch_friend_ids(
 	data = _friend_data(platform.unwrap_data(result))
 	items = _friend_items(data)
 	ids = _friend_ids_from_items(items)
-	return ids, _friend_sources(items), None, data
+	return ids, friend_sources(items), None, data
 
 
 def _last_messages_page(
@@ -398,7 +348,7 @@ def _page_summaries(platform: Any) -> tuple[dict[int, dict[str, Any]], dict[str,
 		return {}, None
 	if not isinstance(snapshot, dict) or not snapshot.get("ok"):
 		return {}, None
-	summaries = _summaries_by_friend(_list_dict_items(snapshot.get("items")))
+	summaries = _summaries_by_friend(list_dict_items(snapshot.get("items")))
 	meta: dict[str, Any] = {"loaded": len(summaries)}
 	unread_by_tab = _clean_unread_by_tab(snapshot.get("unread_by_tab"))
 	if unread_by_tab is not None:
@@ -408,61 +358,6 @@ def _page_summaries(platform: Any) -> tuple[dict[int, dict[str, Any]], dict[str,
 	if isinstance(snapshot.get("has_more"), bool):
 		meta["has_more"] = snapshot["has_more"]
 	return summaries, meta
-
-
-def _fetch_last_messages(
-	platform: Any,
-	friend_ids: list[int],
-	*,
-	sources: dict[int, int] | None = None,
-	batch_size: int = LAST_MESSAGES_BATCH_SIZE,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-	"""按 friendSource 分组、按批串行调 userLastMsg；任一批失败立即停止，不再继续发请求。
-
-	返回 (消息条目, 统计)；统计里带 requests，失败时另带 error/error_code/failed_response。
-	"""
-	groups: dict[int, list[int]] = {}
-	for fid in friend_ids:
-		src = 1 if (sources or {}).get(fid) == 1 else 0
-		groups.setdefault(src, []).append(fid)
-	items: list[dict[str, Any]] = []
-	stats: dict[str, Any] = {"requests": 0}
-	for src in sorted(groups):
-		ids = groups[src]
-		for start in range(0, len(ids), batch_size):
-			batch = ids[start:start + batch_size]
-			try:
-				result = platform.last_messages(batch, src=src) if src else platform.last_messages(batch)
-			except NotImplementedError:
-				return items, stats
-			stats["requests"] += 1
-			if isinstance(result, dict) and platform.is_success(result):
-				items.extend(_message_items(platform.unwrap_data(result) or {}))
-				continue
-			stats["failed_response"] = result
-			if isinstance(result, dict):
-				code, message = platform.parse_error(result)
-				risk_cls = RISK_ERROR_BY_CODE.get(code)
-				if risk_cls is not None:
-					# 响应字典形态的风控同样是停止信号：不能降级成 partial_error 后继续输出 ok:true。
-					raise risk_cls(message or code)
-				stats["error"] = message or f"code={result.get('code')}"
-				if code is not None:
-					stats["error_code"] = code
-			else:
-				stats["error"] = "最近消息接口无响应"
-			return items, stats
-	return items, stats
-
-
-def _friend_sources(friend_items: list[dict[str, Any]]) -> dict[int, int]:
-	sources: dict[int, int] = {}
-	for item in friend_items:
-		fid = _friend_id_for(item)
-		src = _as_int(item.get("friendSource"))
-		if fid is not None and src is not None:
-			sources[fid] = src
-	return sources
 
 
 def _enrich_chat_summaries(
@@ -483,12 +378,12 @@ def _enrich_chat_summaries(
 	missing = [fid for fid in friend_ids if fid not in page]
 	limit = max(0, min(summary_limit, MAX_SUMMARY_LIMIT))
 	wanted = missing[:limit]
-	message_items: list[dict[str, Any]] = []
+	msg_items: list[dict[str, Any]] = []
 	hint: dict[str, Any] = {}
 	if page_meta is not None:
 		hint["page_snapshot"] = page_meta
 	if wanted:
-		message_items, stats = _fetch_last_messages(platform, wanted, sources=_friend_sources(friend_items))
+		msg_items, stats = fetch_last_messages(platform, wanted, sources=friend_sources(friend_items))
 		hint["last_messages_requests"] = stats["requests"]
 		if "error" in stats:
 			hint["last_messages_error"] = stats["error"]
@@ -497,7 +392,7 @@ def _enrich_chat_summaries(
 	if len(missing) > len(wanted):
 		hint["last_messages_skipped"] = len(missing) - len(wanted)
 		hint["summary_limit"] = limit
-	counts = _merge_last_messages(friend_items, message_items, page_summaries=page)
+	counts = _merge_last_messages(friend_items, msg_items, page_summaries=page)
 	hint.update({"counts": counts})
 	return hint
 
@@ -659,7 +554,7 @@ def recruiter_last_messages_cmd(
 
 		skipped = max(0, len(ids) - limit)
 		ids = ids[:limit]
-		items, stats = _fetch_last_messages(platform, ids, sources=sources)
+		items, stats = fetch_last_messages(platform, ids, sources=sources)
 		if "error" in stats and not items:
 			handle_platform_error_output(
 				ctx, "recruiter-last-messages", platform,

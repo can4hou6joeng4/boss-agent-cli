@@ -12,7 +12,8 @@ from boss_agent_cli.api import recruiter_client as rc
 from boss_agent_cli.api.client import EnvironmentRiskError
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
-from boss_agent_cli.commands.recruiter.chat import _merge_last_messages, _message_items, _normalize_last_message
+from boss_agent_cli.commands.recruiter.chat import _merge_last_messages, _normalize_last_message
+from boss_agent_cli.services.recruiter_last_messages import message_items
 from boss_agent_cli.main import cli
 
 UPDATE_TIME = 1791516891255
@@ -143,7 +144,7 @@ def test_last_messages_message_object_shape_maps_by_from_to_uid():
 
 
 def test_last_messages_map_shape():
-	items = _message_items({"66001": {"lastMsg": "好的"}, "66002": "收到", "hasMore": False})
+	items = message_items({"66001": {"lastMsg": "好的"}, "66002": "收到", "hasMore": False})
 	assert {item["friendId"]: item["lastMsg"] for item in items} == {66001: "好的", 66002: "收到"}
 
 

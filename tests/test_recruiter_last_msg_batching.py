@@ -7,10 +7,10 @@ from click.testing import CliRunner
 
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
-from boss_agent_cli.commands.recruiter.chat import (
+from boss_agent_cli.services.recruiter_last_messages import (
 	DEFAULT_SUMMARY_LIMIT,
 	LAST_MESSAGES_BATCH_SIZE,
-	_fetch_last_messages,
+	fetch_last_messages,
 )
 from boss_agent_cli.main import cli
 
@@ -118,7 +118,7 @@ def test_failed_batch_stops_further_requests():
 
 def test_friend_source_one_goes_to_src_1():
 	platform = _platform([], _ok)
-	items, stats = _fetch_last_messages(platform, [1, 2, 3], sources={1: 0, 2: 1, 3: 0})
+	items, stats = fetch_last_messages(platform, [1, 2, 3], sources={1: 0, 2: 1, 3: 0})
 	assert stats == {"requests": 2}
 	calls = platform.last_messages.call_args_list
 	assert calls[0].args[0] == [1, 3] and calls[0].kwargs == {}
