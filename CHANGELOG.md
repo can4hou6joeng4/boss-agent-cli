@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- CLI `boss export` 与 MCP `boss_export` 新增 `--welfare` / `--active`（`welfare` / `active`），与 `search`、`watch add` 及向导 export 同口径：福利与活跃度筛选复用 `run_search_pipeline` 的详情探测、间隔预算与风控停止语义，活跃度未知文案的职位被排除并计入 `hints.active_filter`；`boss schema` 与中英文命令文档同步。此前向导 export 已支持这两个筛选，CLI / MCP 用户无法按同样条件复现导出结果（Issue #2706）。
+
 ## [3.4.198] - 2026-11-25
 
 ### Added

@@ -350,6 +350,19 @@ SCHEMA_DATA = {
 				"--scale": {"type": "string", "default": None, "description": "公司规模，支持逗号分隔多选"},
 				"--stage": {"type": "string", "default": None, "description": "融资阶段，支持逗号分隔多选"},
 				"--job-type": {"type": "string", "default": None, "description": "职位类型，支持逗号分隔多选"},
+				"--welfare": {
+					"type": "string",
+					"default": None,
+					"description": "福利筛选关键词（如 双休、五险一金）。启用后会逐个检查职位详情，页数上限与 search 相同；达到上限仍未匹配时返回已扫描结果",
+					"examples": ["双休", "五险一金", "年终奖", "餐补", "住房补贴"],
+				},
+				"--active": {
+					"type": "string",
+					"default": None,
+					"description": "只导出 HR 活跃度不低于该档的职位；未知文案的职位被排除并计入 hints.active_filter。需要逐个查详情时更慢、风控风险更高",
+					"choices": ["online", "today", "3d", "week", "2w", "month", "half-year"],
+					"examples": ["3d", "week", "3day", "3日"],
+				},
 				"--count": {"type": "int", "default": 50, "minimum": 1, "description": "导出数量"},
 				"--format": {
 					"type": "string",

@@ -550,6 +550,32 @@ class SearchPipelineResult:
 	active_unknown_descs: dict[str, int] = field(default_factory=dict)
 
 
+def active_filter_hint(level: str, pipeline_result: SearchPipelineResult) -> dict[str, Any]:
+	"""把活跃度筛选的统计写进 hints，未知文案单独列出，方便调用方判断是否放宽条件。
+
+	search / export 共用（Issue #2706）：两者都通过 ``run_search_pipeline``
+	做活跃度筛选，统计与「为什么被排除」的口径必须一致。
+	"""
+	stats = pipeline_result.stats
+	hint: dict[str, Any] = {
+		"level": level,
+		"rejected": stats.active_rejected,
+		"unknown_excluded": stats.active_unknown,
+	}
+	unknown = getattr(pipeline_result, "active_unknown_descs", None) or {}
+	if unknown:
+		hint["unknown_descs"] = dict(unknown)
+		hint["note"] = "活跃度文案无法识别或详情未返回的职位已排除"
+	detail_requests = getattr(stats, "detail_requests", 0) or 0
+	if detail_requests:
+		hint["detail_lookups"] = detail_requests
+		hint["detail_note"] = (
+			f"列表看不出活跃度，逐个查了 {detail_requests} 个职位详情；"
+			"非 online 档位更慢、风控风险更高，低风险场景建议用 --active online"
+		)
+	return hint
+
+
 class SearchPipelinePlatformError(Exception):
 	def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
 		self.code = code

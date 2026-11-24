@@ -26,6 +26,7 @@ from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
 from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items as _sort_search_items
 from boss_agent_cli.search_filters import (
+	active_filter_hint as _active_filter_hint,
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
 	SearchUrlParseError,
@@ -248,28 +249,6 @@ def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any, act
 	if active:
 		parts.append(f"HR 活跃 ≥ {active}")
 	return " · ".join(parts)
-
-
-def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
-	"""把活跃度筛选的统计写进 hints，未知文案单独列出，方便调用方判断是否放宽条件。"""
-	stats = pipeline_result.stats
-	hint: dict[str, Any] = {
-		"level": level,
-		"rejected": stats.active_rejected,
-		"unknown_excluded": stats.active_unknown,
-	}
-	unknown = getattr(pipeline_result, "active_unknown_descs", None) or {}
-	if unknown:
-		hint["unknown_descs"] = dict(unknown)
-		hint["note"] = "活跃度文案无法识别或详情未返回的职位已排除"
-	detail_requests = getattr(stats, "detail_requests", 0) or 0
-	if detail_requests:
-		hint["detail_lookups"] = detail_requests
-		hint["detail_note"] = (
-			f"列表看不出活跃度，逐个查了 {detail_requests} 个职位详情；"
-			"非 online 档位更慢、风控风险更高，低风险场景建议用 --active online"
-		)
-	return hint
 
 
 @click.command("search")

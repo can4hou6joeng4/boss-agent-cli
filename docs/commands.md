@@ -344,7 +344,7 @@ AI 命令同样读取 `--data-dir` 中的 AI 配置、`resumes/`、候选池与�
 | `boss config list/set/reset` | 配置管理 |
 | `boss clean` | 清理缓存；`--all` 清理全部缓存（含搜索缓存、打招呼/投递记录、招聘者打招呼记录、职位描述缓存和工作地点发送记录）；`--risk-lock` 在用户确认官方目标业务页恢复后显式清除本地风险锁，`--dry-run` 不解除锁，不宣称平台解封 |
 | `boss stats` | 投递转化漏斗统计（greeted/applied/shortlist） |
-| `boss export <query>` | 导出结果（CSV/JSON/HTML，支持 `--url` 网页筛选） |
+| `boss export <query>` | 导出结果（CSV/JSON/HTML，支持 `--url` 网页筛选；`--welfare` / `--active` 与 `search` 同口径，逐个查详情后过滤） |
 
 `clean --dry-run` 返回的执行提示会去掉 `--dry-run`，保留本次 `--data-dir`、`--all` / `--privacy` 与 `--days`；路径会正确转义，照提示执行时仍操作预演的数据目录与清理范围。清理后的登录、自检提示也沿用该目录。带 `--risk-lock` 的预演只在 `hints.operator_actions` 提供保留范围的人工执行命令。
 

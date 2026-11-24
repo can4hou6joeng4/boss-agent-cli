@@ -326,7 +326,7 @@ AI commands likewise read the AI config, `resumes/`, shortlist and job-descripti
 | `boss config list/set/reset` | Configuration management |
 | `boss clean` | Clean caches; `--all` clears all caches (search cache, greeting/application records, recruiter greeting records, job description cache, and work-location send records); `--risk-lock` explicitly clears the local risk lock after the user confirms the intended official business page has recovered; `--dry-run` keeps the lock, and cleanup does not establish server recovery |
 | `boss stats` | Funnel stats from local state (greeted/applied/shortlist) |
-| `boss export <query>` | Export results (CSV/JSON/HTML, supports `--url` web filters) |
+| `boss export <query>` | Export results (CSV/JSON/HTML, supports `--url` web filters; `--welfare` / `--active` work like `search` and check job details before filtering) |
 
 The execution hint returned by `clean --dry-run` removes `--dry-run` and preserves the current `--data-dir`, `--all` / `--privacy`, and `--days`. Paths are quoted so following the hint uses the same data directory and cleanup scope as the preview. Login and diagnostic hints after cleanup also keep that directory. A preview with `--risk-lock` provides its scoped execution command only in `hints.operator_actions` for the operator.
 

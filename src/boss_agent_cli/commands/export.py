@@ -3,8 +3,11 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.models import dict_items, JobItem, field_list
+from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.output import write_document_stdout
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
@@ -14,6 +17,9 @@ from boss_agent_cli.display import (
 	handle_output,
 	handle_platform_error_output,
 	json_forced,
+	platform_error_contract,
+	platform_error_message,
+	read_only_platform_code,
 	render_export_summary,
 	render_job_table,
 )
@@ -21,6 +27,7 @@ from boss_agent_cli.services.job_identity import deduplicate_job_result
 from boss_agent_cli.services.job_export import (
 	prepare_export_items,
 	public_html_export_item_from_api,
+	public_html_export_item_from_job,
 	redact_export_item,
 	render_html_export,
 	write_export_file,
@@ -29,13 +36,21 @@ from boss_agent_cli.services.job_export import (
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.pagination import export_page_budget
 from boss_agent_cli.search_filters import (
+	ACTIVE_LEVELS,
 	SearchFilterCriteria,
+	SearchPipelinePlatformError,
 	SearchUrlParseError,
+	active_filter_hint,
+	detail_channel_for,
+	detail_filter_max_pages,
 	ensure_supported_city,
 	ensure_text_encodable,
 	parse_boss_search_url,
 	prefilter_platform_job_type,
+	resolve_active_level,
 	resolve_search_code_params,
+	resolve_welfare_keywords,
+	run_search_pipeline,
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
@@ -43,6 +58,90 @@ from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 _TRUNCATED_OPERATOR_ACTION = (
 	"本次导出扫描到内部页数上限，结果可能不完整；请缩小筛选条件后重试，或用 --url 精确筛选"
 )
+
+
+#: 管线终止原因 → export 既有 stop_reason 词汇（Issue #2706）。
+_PIPELINE_STOP_REASONS = {
+	"limit_reached": "count_reached",
+	"has_more_false": "platform_has_more_false",
+}
+
+
+def _welfare_conditions(raw: str | None) -> list[tuple[str, list[str]]] | None:
+	"""把 `--welfare` 的逗号分隔标签转成管线用条件；无标签返回 None。"""
+	if not raw:
+		return None
+	labels = [label.strip() for label in raw.split(",") if label.strip()]
+	if not labels:
+		return None
+	return [(label, resolve_welfare_keywords(label)) for label in labels]
+
+
+def _collect_with_detail_filters(
+	ctx: click.Context,
+	platform: Any,
+	data_dir: Any,
+	logger: Any,
+	criteria: SearchFilterCriteria,
+	*,
+	count: int,
+	welfare_conditions: list[tuple[str, list[str]]] | None,
+	active: str | None,
+) -> tuple[list[dict[str, Any]] | None, str, Any]:
+	"""`--welfare` / `--active` 导出走与 search / 向导相同的搜索管线。
+
+	福利与活跃度都要先看详情才能判断，不能沿用列表页的轻量循环：详情探测、
+	间隔预算、风控停止与未知文案排除必须复用 ``run_search_pipeline``，
+	否则同一组筛选在 export / search / 向导之间结果不一致（Issue #2706）。
+
+	返回 ``(items, stop_reason, pipeline_result)``；平台错误已按 export 信封
+	发出时 items 为 None。
+	"""
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
+		detail_channel = detail_channel_for(ctx.obj)
+		extra: dict[str, Any] = {}
+		if request_budget is not None:
+			extra["before_list_request"] = lambda: request_budget.wait("list")
+		if active or detail_channel == "browser":
+			if request_budget is not None:
+				extra["before_detail_request"] = lambda: request_budget.wait("list")
+			extra["detail_channel"] = detail_channel
+		try:
+			result = run_search_pipeline(
+				platform,
+				cache,
+				logger,
+				criteria=criteria,
+				start_page=1,
+				# 福利 / 活跃度要逐个查详情：页数预算不能超过搜索的详情上限，
+				# 否则导出会比 search 多翻几倍详情页、放大风控风险。
+				max_pages=min(export_page_budget(count), detail_filter_max_pages(welfare_conditions, active)),
+				limit=count,
+				welfare_conditions=welfare_conditions,
+				active=active,
+				account=account,
+				continue_when_has_more_unknown=True,
+				**extra,
+			)
+		except SearchPipelinePlatformError as exc:
+			# 只读命令：未识别响应可按网络问题重试；风控 / 登录过期按登记表。
+			code = read_only_platform_code("export", exc.code)
+			recoverable, recovery_action, error_hints = platform_error_contract(code, ctx=ctx, read_only=True)
+			handle_error_output(
+				ctx,
+				"export",
+				code=code,
+				message=platform_error_message(code, exc.message, "搜索结果获取失败"),
+				recoverable=recoverable,
+				recovery_action=recovery_action,
+				details=exc.details,
+				hints=error_hints,
+			)
+			return None, "", None
+	return result.items, _PIPELINE_STOP_REASONS.get(result.stop_reason, result.stop_reason), result
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -61,6 +160,8 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 @click.option("--scale", default=None, help="公司规模，支持逗号分隔多选")
 @click.option("--stage", default=None, help="融资阶段，支持逗号分隔多选")
 @click.option("--job-type", default=None, help="职位类型，支持逗号分隔多选")
+@click.option("--welfare", default=None, help="福利筛选，如 五险一金,双休；需要逐个查详情，更慢、风险更高")
+@click.option("--active", default=None, help="只导出 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）")
 @click.option("--count", default=50, type=click.IntRange(min=1), help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（csv/json 不指定时输出到 stdout JSON 信封；html 不指定时直出 HTML，--json 时放进 data.content；显式空串无效）")
@@ -83,6 +184,8 @@ def export_cmd(
 	scale: str | None,
 	stage: str | None,
 	job_type: str | None,
+	welfare: str | None,
+	active: str | None,
 	count: int,
 	fmt: str,
 	output: str | None,
@@ -171,6 +274,13 @@ def export_cmd(
 	except ValueError as exc:
 		emit_filter_error(ctx, "export", exc)
 		return
+	try:
+		# 福利 / 活跃度与 search 同口径：标签解析与档位归一化都在任何平台请求前完成。
+		welfare_conditions = _welfare_conditions(welfare)
+		active_level = resolve_active_level(active)
+	except ValueError as exc:
+		emit_filter_error(ctx, "export", exc)
+		return
 	criteria = SearchFilterCriteria(
 		query=query,
 		city=city,
@@ -223,8 +333,30 @@ def export_cmd(
 		# 预算耗尽而仍未取满 count 时结果并不完整。必须把终止原因写进信封，
 		# 否则调用方无法区分「平台只有这些」和「本地扫描到上限」（Issue #907）。
 		stop_reason = "page_budget_exhausted"
+		active_hints: dict[str, Any] | None = None
 
-		while len(collected) < count and page <= max_pages:
+		if welfare_conditions or active_level:
+			pipeline_items, stop_reason, pipeline_result = _collect_with_detail_filters(
+				ctx,
+				platform,
+				data_dir,
+				logger,
+				criteria,
+				count=count,
+				welfare_conditions=welfare_conditions,
+				active=active_level,
+			)
+			if pipeline_items is None:
+				return
+			if active_level:
+				active_hints = active_filter_hint(active_level, pipeline_result)
+			if html_mode:
+				html_items.extend(public_html_export_item_from_job(item) for item in pipeline_items)
+			else:
+				all_items.extend(pipeline_items)
+
+		# 详情筛选路径已经由管线一次取满；保留原列表循环作为无筛选导出的快路径。
+		while not (welfare_conditions or active_level) and len(collected) < count and page <= max_pages:
 			logger.info(f"正在获取第 {page} 页...")
 			search_filters: dict[str, Any] = {"page": page}
 			for key, value in {
@@ -306,12 +438,15 @@ def export_cmd(
 				"export",
 				data,
 				render=lambda d: render_export_summary(d),
-				hints=_truncation_hints(
-					truncated,
-					next_actions=[
-						_hint_command(ctx, "search <query>"),
-						_hint_command(ctx, "recommend"),
-					],
+				hints=_with_active_hints(
+					_truncation_hints(
+						truncated,
+						next_actions=[
+							_hint_command(ctx, "search <query>"),
+							_hint_command(ctx, "recommend"),
+						],
+					),
+					active_hints,
 				),
 			)
 		elif html_mode:
@@ -331,10 +466,13 @@ def export_cmd(
 						"truncated": truncated,
 						"stop_reason": stop_reason,
 					},
-					hints=_truncation_hints(
-						truncated,
-						next_actions=[_hint_command(ctx, "export <query> --format html -o <path>")],
-						operator_actions=["把 data.content 写成 .html 文件后打开"],
+					hints=_with_active_hints(
+						_truncation_hints(
+							truncated,
+							next_actions=[_hint_command(ctx, "export <query> --format html -o <path>")],
+							operator_actions=["把 data.content 写成 .html 文件后打开"],
+						),
+						active_hints,
 					),
 				)
 			else:
@@ -343,6 +481,10 @@ def export_cmd(
 				if truncated:
 					# 直出模式没有信封，截断证据只能走 stderr，不能污染 stdout。
 					console.print(f"[yellow]注意：{_TRUNCATED_OPERATOR_ACTION}[/yellow]")
+				if active_hints and active_hints.get("unknown_excluded"):
+					console.print(
+						f"[yellow]注意：{active_hints['unknown_excluded']} 个职位的活跃度无法识别，已按 --active 筛选排除。[/yellow]"
+					)
 		else:
 			write_items = all_items if include_private else [redact_export_item(item) for item in all_items]
 			data = {
@@ -357,11 +499,21 @@ def export_cmd(
 				"export",
 				data,
 				render=lambda d: render_job_table(d.get("jobs", []), "export"),
-				hints=_truncation_hints(
-					truncated,
-					next_actions=[_hint_command(ctx, "export <query> -o file.csv")],
+				hints=_with_active_hints(
+					_truncation_hints(
+						truncated,
+						next_actions=[_hint_command(ctx, "export <query> -o file.csv")],
+					),
+					active_hints,
 				),
 			)
+
+
+def _with_active_hints(hints: dict[str, Any], active_hints: dict[str, Any] | None) -> dict[str, Any]:
+	"""把活跃度筛选证据并入 export 的 hints（与 search 的 hints.active_filter 同键）。"""
+	if active_hints:
+		hints = {**hints, "active_filter": active_hints}
+	return hints
 
 
 def _truncation_hints(
