@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.206 (2026-11-25): `interviews` text fields go through `field_text`, so explicit nulls, non-finite numbers and containers no longer reach the JSON envelope or TTY tables; `handle_auth_errors` gains a `NotImplementedError` → `NOT_SUPPORTED` branch, so digest / pipeline / follow-up no longer report capability gaps as retryable network errors (Issues #2744, #2745).
+
 v3.4.205 (2026-11-25): `pipeline` / `follow-up` / `digest` text fields go through `field_text`, so non-finite numbers and containers no longer reach the output; `recommend --with-score` preference fallbacks try keys in priority order, so a container drifting in the primary key no longer shadows the valid fallback (Issues #2739, #2740).
 
 v3.4.204 (2026-11-25): `hr chat` / wizard communication no longer write non-finite floats as pseudo-text last messages; raw ValueErrors from `-o` path expansion map to local IO errors; export integer normalization counts digits without the sign, so 4300-digit negatives are no longer silently nulled; `safe_text` no longer blanks convertible 4300-digit integers (Issues #2730, #2732, #2733, #2736).
