@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.196] - 2026-11-25
+
 ### Added
 
 - 向导 `watch` goal 的 `run` 动作支持 `all=true` 批量运行全部已保存 watch，与 CLI `watch run --all`、MCP `boss_watch_run` 的 `all` 同口径：回显 `mode` / `watches` / `total` / `skipped` / `invalid`；单条记录损坏或被并发删除时记入 `watches` 的错误条目并继续；命中平台风控立即停止后续 watch，已完成部分随 `error.details` 带回。`all` 只认 JSON 布尔值，与 `name` 同时给出或用于其他动作时报 `INVALID_PARAM`（Issue #2698）。
