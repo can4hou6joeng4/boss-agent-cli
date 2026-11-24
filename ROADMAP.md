@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.199（2026-11-25）：CLI `boss export` 与 MCP `boss_export` 新增 `--welfare` / `--active`（`welfare` / `active`），与 `search`、`watch add` 及向导 export 同口径：复用 `run_search_pipeline` 的详情探测、间隔预算、页数上限与风控停止语义，活跃度未知文案的职位被排除并计入 `hints.active_filter`；`boss schema` 与中英文命令文档同步（Issue #2706）。
+
 v3.4.198（2026-11-25）：CLI `boss watch add` 与 MCP `boss_watch_add` 新增 `active`（`--active`）活跃度下限，与 `search` / `preset add` 及向导 `watch` 的 `add` 动作同口径：别名归一化为档位、非法值写入前报 `INVALID_PARAM`、不设置时不落下该键；`boss schema` 与中英文命令文档同步（Issue #2704）。
 
 v3.4.197（2026-11-25）：向导的枚举型输入（`watch` 的 `action`、`export` 的 `format`、`crawl_start` 的 `hook_profile`）不再把 `false` / `0` / `[]` 等非字符串值静默当成默认值，改为在任何本地写入或平台请求前报输入错误并点名字段；缺省、`null` 与空串仍用默认值（Issue #2701）。

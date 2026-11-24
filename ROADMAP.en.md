@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.199 (2026-11-25): CLI `boss export` and the MCP `boss_export` tool gain `--welfare` / `--active` (`welfare` / `active`), matching `search`, `watch add`, and the wizard export goal: detail lookups, pacing, page caps, and risk-stop semantics are reused from `run_search_pipeline`, and jobs with unknown activity text are excluded and reported in `hints.active_filter`; `boss schema` and the command docs are updated (Issue #2706).
+
 v3.4.198 (2026-11-25): CLI `boss watch add` and the MCP `boss_watch_add` tool gain an `active` (`--active`) activity floor, matching `search` / `preset add` and the wizard `watch` add action: aliases normalize to a level, invalid values fail with `INVALID_PARAM` before writing, and the key is omitted when unset; `boss schema` and the command docs are updated (Issue #2704).
 
 v3.4.197 (2026-11-25): wizard enum inputs (`action` for `watch`, `format` for `export`, `hook_profile` for `crawl_start`) no longer treat non-string values such as `false` / `0` / `[]` as the default; they now fail with an input error naming the field before any local write or platform request, while omitted, `null`, and empty-string values keep the default (Issue #2701).
