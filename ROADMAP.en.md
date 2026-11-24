@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.202 (2026-11-25): the wizard / MCP `boss_wizard` `export` goal now matches top-level `boss export` under `welfare` / `active` detail filters — default count 50, `max_pages` clamped to the detail cap, and activity stats in `data.active_filter`; wizard search now returns `data.active_filter` stats under `active`, matching the CLI; `boss search --welfare` with only whitespace no longer counts as a detail filter (Issues #2716, #2717, #2720).
+
 v3.4.201 (2026-11-25): the wizard / MCP `boss_wizard` `export` goal now shares the same stop-reason mapping and truncation decision as top-level `boss export`: when the `--active` filter stops early before reaching `count`, it reports `truncated=true` instead of presenting an incomplete prefix as complete (Issue #2712).
 
 v3.4.200 (2026-11-25): `boss export --active` now reports `truncated=true` with a dedicated `operator_actions` note when the activity filter stops early before reaching `--count` (`stop_reason=active_target_reached`), instead of presenting an incomplete result as complete; reaching `--count` still reports `count_reached`, and the command docs list the new reason (Issue #2710).
