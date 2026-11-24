@@ -8,6 +8,7 @@
 
 - `friend_security_id` 在 camelCase `securityId` 为「真值但不可用」（容器 / 数字 / 纯空白）时不再吞掉合法的 `security_id` 回退：此前 `or` 先选中不可用的 camelCase 值，函数返回空串，exchange / mark 等写操作会报不可重试的 `NETWORK_ERROR`；现在按 `securityId` → `security_id` 顺序取第一个非空字符串（Issue #2723）。
 - MCP `boss_export` 在带 `welfare` / `active`（非 online）详情筛选时按 `detail_filter_max_pages` 估计逐条详情请求，不再只按 `count` 数列表页：此前估算 4 次请求、宿主约 290s 就中断只读导出并返回 `WORKFLOW_TIMEOUT`，与 `search` / `watch run` 对同一工作量的 900s 口径不一致；中断恢复文案也把带筛选的 export 纳入福利专用说明（Issue #2725）。
+- `boss_wizard` 的 `timeout` 在 MCP 工具 schema 中声明 `default: 120` 并说明作用范围：run / resume 省略该参数时宿主会给子进程设置 120 秒截止（用于落 checkpoint），CLI 直接调用则不设截止。此前 schema 与工具描述都没有这个差异，调用方会把长 workflow 的 `WORKFLOW_TIMEOUT` 误判成失败并重试（Issue #2726）。
 
 ## [3.4.202] - 2026-11-25
 

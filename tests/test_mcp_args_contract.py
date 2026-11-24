@@ -155,6 +155,15 @@ def test_watch_run_tool_exposes_cli_all_flag():
 	assert "互斥" in tool.description
 
 
+def test_wizard_tool_declares_host_timeout_default():
+	"""run / resume 省略 timeout 时宿主注入 120s：schema 必须声明该默认（Issue #2726）。"""
+	tool = next(tool for tool in TOOLS if tool.name == "boss_wizard")
+	timeout = tool.input_schema["properties"]["timeout"]
+	assert timeout["default"] == 120
+	assert "120" in timeout["description"]
+	assert "CLI 直接调用不设截止" in timeout["description"]
+
+
 @pytest.mark.parametrize("tool", TOOLS, ids=[tool.name for tool in TOOLS])
 def test_tool_arguments_parse_with_cli(tool) -> None:
 	arguments = _sample_arguments(tool)
