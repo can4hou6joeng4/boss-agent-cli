@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.196（2026-11-25）：向导 `watch` goal 的 `run` 动作支持 `all=true`，与 CLI `watch run --all`、MCP `boss_watch_run` 同口径批量运行已保存 watch：损坏或并发删除的记录逐条列出并继续，命中平台风控立即停止后续 watch；`all` 只认 JSON 布尔值且与 `name` 互斥（Issue #2698）。
+
 v3.4.195（2026-11-24）：MCP 工具 `boss_watch_run` 新增 `all` 布尔参数，与 CLI `watch run --all` 同口径批量运行已保存 watch（部分记录损坏、命中风控的既有口径一并可用）；`name` 不再是 MCP 侧必填，由 CLI 判定二者互斥（Issue #2695）。
 
 v3.4.194（2026-11-24）：向导 / MCP 修复两处与 CLI 口径不一致的行为——`search_url` 展开时显式 `raw_params` 优先于链接里的同名 code 参数（与 `search --url` 的「显式选项覆盖链接参数」一致），`job_search` / `export` 的 `page`、`max_pages` 在构造平台实例前校验（与 #2625 口径一致，非法值不再先启动浏览器 / 登录探测）（Issue #2690、#2692）。

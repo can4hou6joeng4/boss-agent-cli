@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.196 (2026-11-25): the wizard `watch` goal's `run` action accepts `all=true`, batch-running saved watches with the same semantics as CLI `watch run --all` and MCP `boss_watch_run`: corrupt or concurrently removed records are listed per entry while the rest continue, and a platform risk response stops the remaining watches; `all` must be a JSON boolean and is mutually exclusive with `name` (Issue #2698).
+
 v3.4.195 (2026-11-24): MCP tool `boss_watch_run` gains an `all` boolean, matching CLI `watch run --all` for batch-running saved watches (including the existing partial-corruption and risk-stop semantics); `name` is no longer required by MCP, and the CLI decides the mutual exclusion (Issue #2695).
 
 v3.4.194 (2026-11-24): wizard / MCP fixes two behaviors that diverged from the CLI — `search_url` expansion now keeps explicit `raw_params` over same-named code params from the link (matching `search --url` where explicit options win), and `job_search` / `export` validate `page` / `max_pages` before constructing the platform instance (matching #2625; invalid values no longer start a browser or login probe first) (Issues #2690, #2692).
