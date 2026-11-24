@@ -812,13 +812,16 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_watch_run",
-			description="执行指定监控并返回新增职位列表",
+			description="执行监控并返回新增职位列表；name 与 all 互斥，必须且只能提供一个",
 			input_schema={
 				"type": "object",
 				"properties": {
-					"name": {"type": "string", "description": "监控名称"},
+					# 与 CLI `watch run` 同口径：`all=true` 跑全部已保存 watch，
+					# 部分记录损坏 / 命中风控时 CLI 有专门口径（Issue #2695）。
+					"name": {"type": "string", "description": "监控名称；与 all 互斥"},
+					"all": {"type": "boolean", "description": "运行所有已保存的监控；与 name 互斥"},
 				},
-				"required": ["name"],
+				"required": [],
 			},
 		),
 		ToolDefinition(

@@ -144,6 +144,17 @@ def _resolve_command(argv: list[str]) -> tuple[click.Command, list[str]]:
 	return command, rest
 
 
+def test_watch_run_tool_exposes_cli_all_flag():
+	tool = next(tool for tool in TOOLS if tool.name == "boss_watch_run")
+	schema = tool.input_schema
+	assert set(schema["properties"]) == {"name", "all"}
+	assert schema["properties"]["all"]["type"] == "boolean"
+	# `name` 不能是 MCP 侧的 required：CLI 才是「name / --all 必须且只能一个」
+	# 的判定真源，工具层强制 name 会让 all=true 在入口被误拒（Issue #2695）。
+	assert schema["required"] == []
+	assert "互斥" in tool.description
+
+
 @pytest.mark.parametrize("tool", TOOLS, ids=[tool.name for tool in TOOLS])
 def test_tool_arguments_parse_with_cli(tool) -> None:
 	arguments = _sample_arguments(tool)
