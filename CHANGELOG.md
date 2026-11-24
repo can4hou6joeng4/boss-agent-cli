@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.195] - 2026-11-24
+
 ### Added
 - MCP 工具 `boss_watch_run` 新增 `all` 布尔参数，与 CLI `watch run --all` 同口径批量运行已保存 watch（部分记录损坏、命中风控的既有口径一并可用）；`name` 不再是 MCP 侧的必填项，由 CLI 判定「name / --all 必须且只能一个」，互斥时原样下发而不是在 MCP 层吞掉任一参数（Issue #2695）。
 
