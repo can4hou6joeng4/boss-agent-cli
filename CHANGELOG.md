@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.204] - 2026-11-25
+
 ### Fixed
 
 - `hr chat` / 向导 communication 的最后一条消息不再把非有限浮点写成伪文本：平台 JSON 里的 `1e400` / `Infinity` / `NaN` 会解析成 `inf` / `nan`，此前 `message_text` 直接 `str()` 并把 `"inf"` / `"nan"` 写进 `friendList[].last_msg`；现在文本归一按「非有限数值 = 缺失」处理，与 `format_chat_time` / `safe_local_time` / `clean_unread_by_tab` 同口径（Issue #2730）。

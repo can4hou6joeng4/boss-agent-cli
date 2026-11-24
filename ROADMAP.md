@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.204（2026-11-25）：`hr chat` / 向导 communication 的最后一条消息不再把非有限浮点写成伪文本；`-o` 路径展开的裸 ValueError 归一为本地 IO 错误；导出整数归一只数数字位，4300 位负整数不再被静默写成 null；`safe_text` 不再把可转换的 4300 位整数抹成空串。（Issue #2730、#2732、#2733、#2736）。
+
 v3.4.203（2026-11-25）：`friend_security_id` 在 securityId 类型漂移时不再吞掉合法的 security_id 回退；MCP `boss_export` 带福利 / 活跃度筛选时按详情页估算超时，不再被 290s 误杀；`boss_wizard` schema 声明 run / resume 的 120 秒宿主默认超时。（Issue #2723、#2725、#2726）。
 
 v3.4.202（2026-11-25）：向导 / MCP `boss_wizard` 的 `export` goal 在 `welfare` / `active` 详情筛选下与顶层 `boss export` 对齐：未给 `count` 按 CLI 默认 50 扫描、`max_pages` 受详情上限钳制、`active` 统计写入 `data.active_filter`；向导 search 在 `active` 筛选下返回与 CLI 同口径的 `data.active_filter` 统计；`boss search --welfare` 的纯空白输入不再按详情筛选处理（Issue #2716、#2717、#2720）。
