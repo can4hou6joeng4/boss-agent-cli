@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.192（2026-11-24）：向导 / MCP（招聘者）`last_messages` 补齐 `limit`（默认 100、上限 300）与 `friend_ids` 直查，请求按 friendSource 分组、每批 50 串行并回显 `skipped` / `requests`；`communication` 支持 `summary_limit`，给沟通列表补未读数 / 最近消息并在 `summary_sources` 回显请求统计。摘要与批量查询实现下沉 `services/recruiter_last_messages.py` 与 `services/recruiter_chat_summary.py` 与命令层共用（Issue #2675、#2679）。
+
 v3.4.191（2026-11-24）：其余列表类向导 goal（`chat_history`、`candidates`、`applications`、`communication`、`last_messages`、`jobs_list`）补齐与 CLI 同词汇的 `pagination` 分页证据；`jobs_list` 同时支持 `page` 输入（此前传入第 2 页仍返回第一页）。不新增平台请求（Issue #2672）。
 
 v3.4.190（2026-11-24）：向导 / MCP 的 `communication` goal 支持 `from` / `days` 筛选（与顶层 `chat` 同口径，只作用于当前页），并在结果中回显生效条件；`recommendations` 与 `communication` 的步骤 `data` 新增与 CLI 同词汇的 `pagination` 分页证据（`has_more` 只认平台布尔 `hasMore`）。非法取值在平台请求前返回参数错误，过滤谓词与命令层共用（Issue #2667、#2670）。
