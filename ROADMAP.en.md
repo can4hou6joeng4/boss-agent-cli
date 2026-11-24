@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.200 (2026-11-25): `boss export --active` now reports `truncated=true` with a dedicated `operator_actions` note when the activity filter stops early before reaching `--count` (`stop_reason=active_target_reached`), instead of presenting an incomplete result as complete; reaching `--count` still reports `count_reached`, and the command docs list the new reason (Issue #2710).
+
 v3.4.199 (2026-11-25): CLI `boss export` and the MCP `boss_export` tool gain `--welfare` / `--active` (`welfare` / `active`), matching `search`, `watch add`, and the wizard export goal: detail lookups, pacing, page caps, and risk-stop semantics are reused from `run_search_pipeline`, and jobs with unknown activity text are excluded and reported in `hints.active_filter`; `boss schema` and the command docs are updated (Issue #2706).
 
 v3.4.198 (2026-11-25): CLI `boss watch add` and the MCP `boss_watch_add` tool gain an `active` (`--active`) activity floor, matching `search` / `preset add` and the wizard `watch` add action: aliases normalize to a level, invalid values fail with `INVALID_PARAM` before writing, and the key is omitted when unset; `boss schema` and the command docs are updated (Issue #2704).
