@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.190] - 2026-11-24
+
 ### Added
 - 向导 / MCP `communication`（`candidate_chat`）支持 `from` / `days` 筛选：`from` 只接受 `boss` / `me`，`days` 与 `boss chat --days` 同为 0–36500 的整数，非法值在平台请求前返回参数错误；筛选只作用于当前页，`lastTS` 缺失或类型漂移与 CLI 一样按未知放行，结果新增 `filters` 回显生效条件。谓词与命令层共用 `services/chat_utils.matches_chat_filters`（Issue #2667）。
 - 向导 / MCP `recommendations`（`candidate_recommend`）与 `communication`（`candidate_chat`）的步骤 `data` 新增 `pagination`：`page`、`has_more`（只认平台布尔 `hasMore`，缺失 / 类型漂移为 `null`）、`has_more_source`、`total`、`total_kind`，与 CLI 信封同词汇；`total` 是当前页返回条数，不新增请求（Issue #2670）。

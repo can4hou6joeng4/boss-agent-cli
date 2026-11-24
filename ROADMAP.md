@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.190（2026-11-24）：向导 / MCP 的 `communication` goal 支持 `from` / `days` 筛选（与顶层 `chat` 同口径，只作用于当前页），并在结果中回显生效条件；`recommendations` 与 `communication` 的步骤 `data` 新增与 CLI 同词汇的 `pagination` 分页证据（`has_more` 只认平台布尔 `hasMore`）。非法取值在平台请求前返回参数错误，过滤谓词与命令层共用（Issue #2667、#2670）。
+
 v3.4.189（2026-11-24）：向导 / MCP 的 `recommendations` 与 `job_search` goal 支持 `with_score`，分别按顶层 `recommend` / `search` 同一口径读取求职期望或复用本次搜索条件重算匹配分并附加匹配原因；缺省保持原输出，非布尔值在平台请求前返回参数错误，评分实现与命令层共用（Issue #2662、#2665）。
 
 v3.4.188（2026-11-24）：向导 / MCP `job_search`（`candidate_search`）支持 `sort`，缺省保持平台顺序，`score` 按本地匹配分降序且类型漂移按 0；非法 / 显式空值在平台请求前返回 `INVALID_PARAM`，排序实现与顶层 `boss search --sort` 共用（Issue #2660）。
