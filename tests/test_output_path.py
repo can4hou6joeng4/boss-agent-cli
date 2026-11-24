@@ -6,10 +6,12 @@ shell 展开。命令里不处理就会在当前目录建出一个字面量 `~` 
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 
 import pytest
 
+from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
 
 
@@ -124,3 +126,14 @@ def test_inspect_output_path_accepts_writable_target(tmp_path):
 
 	assert problem is None
 	assert target == tmp_path / "report.md"
+
+
+# ── #2732：expanduser 的裸 ValueError 必须归成不可重试的本地 IO 错误 ──────
+@pytest.mark.parametrize("raw", ["~nobody\x00/x", "~\ud800/x"], ids=["nul", "surrogate"])
+def test_expand_user_valueerror_becomes_local_io_error(raw):
+	for call in (inspect_output_path, prepare_output_path):
+		with pytest.raises(OSError) as excinfo:
+			call(raw)
+		assert excinfo.value.errno == errno.EINVAL
+		assert excinfo.value.filename == raw
+		assert is_local_io_error(excinfo.value)

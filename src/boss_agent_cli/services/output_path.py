@@ -50,8 +50,20 @@ def _expand_user(path: str | os.PathLike[str]) -> Path:
 	量，随后 ``mkdir`` 会在当前目录下建出一个名叫 ``~某用户`` 的目录、把报告写进
 	用户没想到的位置（Issue #2289）。``Path.expanduser`` 在同一情形抛
 	``RuntimeError``，与 ``--data-dir`` / ``request_budget_dir`` 的口径一致。
+
+	``~user`` 形式还会在 POSIX 的 ``pwd.getpwnam`` / 编码检查处抛裸
+	``ValueError``（内嵌 NUL）或 ``UnicodeEncodeError``（孤立高位代理），
+	与 ``_lstat_mode`` / mkdir 分支（Issue #2375）同口径归一为带 ``filename``
+	的 ``OSError(EINVAL)``，由命令层落成不可重试的 ``LOCAL_IO_ERROR``，
+	而不是被兜成可重试的 ``NETWORK_ERROR``（Issue #2732）。
 	"""
-	return Path(os.fspath(path)).expanduser()
+	target = Path(os.fspath(path))
+	try:
+		return target.expanduser()
+	except ValueError as exc:
+		error = OSError(errno.EINVAL, str(exc))
+		error.filename = str(target)
+		raise error from exc
 
 
 class OutputPathExpansionError(ValueError):
