@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.194] - 2026-11-24
+
 ### Fixed
 - 向导 `search_url` 展开时显式 `raw_params` 优先于链接里的同名 code 参数：此前链接参数覆盖显式输入，与 CLI `search --url`「显式选项覆盖链接参数」的口径相反，Agent / MCP 显式指定的筛选会被链接悄悄改写，搜索与导出结果集合与请求不符（Issue #2690）。
 - 向导 `job_search`（`candidate_search`）与 `export`（`candidate_export`）的 `page`、`max_pages` 改为在构造平台实例前校验：此前非法值会先付出一次平台实例构造（CDP 模式启动浏览器或做登录探测）才得到 `INVALID_PARAM`，与 `_candidate_recommend` / `_candidate_chat` 的 #2625 口径不一致（Issue #2692）。
