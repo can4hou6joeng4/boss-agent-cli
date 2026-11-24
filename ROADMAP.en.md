@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.191 (2026-11-24): the remaining list-style wizard goals (`chat_history`, `candidates`, `applications`, `communication`, `last_messages`, `jobs_list`) now report pagination evidence with the same vocabulary as CLI envelopes; `jobs_list` also honors the `page` input (previously a requested page 2 still returned page 1). No extra platform requests are made (Issue #2672).
+
 v3.4.190 (2026-11-24): the wizard / MCP `communication` goal now supports `from` / `days` filters with the same semantics as top-level `chat` (current page only) and echoes the applied filters; the `recommendations` and `communication` step `data` now include pagination evidence with the same vocabulary as CLI envelopes (`has_more` only trusts a platform boolean `hasMore`). Invalid values return a parameter error before any platform request, and the filter predicate is shared with the CLI (Issues #2667, #2670).
 
 v3.4.189 (2026-11-24): the wizard / MCP `recommendations` and `job_search` goals now support `with_score`; recommendations read the job expectation like top-level `recommend` and search reuses the current query filters like top-level `search`, attaching match scores and reasons. The default keeps the previous output, non-boolean values return a parameter error before any platform request, and the scoring implementation is shared with the CLI (Issues #2662, #2665).
