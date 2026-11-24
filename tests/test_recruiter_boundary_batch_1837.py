@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 
 from boss_agent_cli.commands.recruiter._hints import blank_option_names
-from boss_agent_cli.commands.recruiter.chat import (
-	_clean_unread_by_tab,
-	_format_chat_time,
-	_message_text,
-	_page_summaries,
+from boss_agent_cli.commands.recruiter.chat import _page_summaries
+from boss_agent_cli.services.recruiter_chat_summary import (
+	clean_unread_by_tab,
+	format_chat_time,
+	message_text,
 )
 from boss_agent_cli.commands.recruiter.location import _TargetError, _location_status, _target_from_detail
 
@@ -19,7 +19,7 @@ from boss_agent_cli.commands.recruiter.location import _TargetError, _location_s
 
 
 def test_clean_unread_by_tab_skips_non_finite_counts() -> None:
-	cleaned = _clean_unread_by_tab(
+	cleaned = clean_unread_by_tab(
 		{"1": math.nan, "2": math.inf, "3": -math.inf, "4": 2.0, "5": 3, "6": -1, "7": True, "8": "x"}
 	)
 
@@ -102,13 +102,13 @@ def test_blank_option_names_accepts_non_string_values() -> None:
 
 
 def test_format_chat_time_rejects_container_values() -> None:
-	assert _format_chat_time({"a": 1}) is None
-	assert _format_chat_time(["x"]) is None
-	assert _format_chat_time("12:30") == "12:30"
-	assert _format_chat_time(0) is None
+	assert format_chat_time({"a": 1}) is None
+	assert format_chat_time(["x"]) is None
+	assert format_chat_time("12:30") == "12:30"
+	assert format_chat_time(0) is None
 
 
 def test_message_text_rejects_container_values() -> None:
-	assert _message_text({"body": {"text": {"a": 1}}}) is None
-	assert _message_text({"body": {"text": "hi"}}) == "hi"
-	assert _message_text({"lastMsg": ["x"]}) is None
+	assert message_text({"body": {"text": {"a": 1}}}) is None
+	assert message_text({"body": {"text": "hi"}}) == "hi"
+	assert message_text({"lastMsg": ["x"]}) is None

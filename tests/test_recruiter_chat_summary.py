@@ -12,7 +12,7 @@ from boss_agent_cli.api import recruiter_client as rc
 from boss_agent_cli.api.client import EnvironmentRiskError
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
-from boss_agent_cli.commands.recruiter.chat import _merge_last_messages, _normalize_last_message
+from boss_agent_cli.services.recruiter_chat_summary import merge_last_messages, normalize_last_message
 from boss_agent_cli.services.recruiter_last_messages import message_items
 from boss_agent_cli.main import cli
 
@@ -136,7 +136,7 @@ def test_last_messages_message_object_shape_maps_by_from_to_uid():
 	rows = [dict(LIVE_ITEM)]
 	message = {"mid": 1, "from": {"uid": 999}, "to": {"uid": 66001}, "body": {"type": 1, "text": "方便聊聊吗"},
 		"time": UPDATE_TIME, "status": 2}
-	counts = _merge_last_messages(rows, [message])
+	counts = merge_last_messages(rows, [message])
 	assert counts == {"last_messages": 1}
 	assert rows[0]["last_msg"] == "方便聊聊吗"
 	assert rows[0]["msg_status"] == "已读"
@@ -150,14 +150,14 @@ def test_last_messages_map_shape():
 
 def test_empty_summary_from_api_does_not_override_friend_fallback():
 	rows = [dict(LIVE_ITEM)]
-	_merge_last_messages(rows, [{"friendId": 66001}])
+	merge_last_messages(rows, [{"friendId": 66001}])
 	assert rows[0]["summary_source"] == "friend_list"
 	assert rows[0]["last_time_source"] == "updateTime"
 
 
 def test_normalize_unknown_status_is_null():
-	assert _normalize_last_message({"friendId": 1, "status": 42})["msg_status"] is None
-	assert _normalize_last_message({"friendId": 1, "lastTime": "0"})["last_time"] is None
+	assert normalize_last_message({"friendId": 1, "status": 42})["msg_status"] is None
+	assert normalize_last_message({"friendId": 1, "lastTime": "0"})["last_time"] is None
 
 
 # ── client.chat_list_snapshot ─────────────────────────────────
