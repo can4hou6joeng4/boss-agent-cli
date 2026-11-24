@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.207 (2026-11-25): contact display names go through one `contact_lookup.friend_display_name` helper, so the wizard `exchange` step no longer sends the Python repr of a drifted `name` in the write request and `mark` / `chat-summary` / `chatmsg` no longer pass containers into the envelope; `chatmsg` resolves the sender uid with `stable_uid`, and an unusable top-level `text` no longer shadows `body.text`; `hr resume` education entries pick the first non-empty string per field in priority order (Issues #2748, #2749, #2750).
+
 v3.4.206 (2026-11-25): `interviews` text fields go through `field_text`, so explicit nulls, non-finite numbers and containers no longer reach the JSON envelope or TTY tables; `handle_auth_errors` gains a `NotImplementedError` → `NOT_SUPPORTED` branch, so digest / pipeline / follow-up no longer report capability gaps as retryable network errors (Issues #2744, #2745).
 
 v3.4.205 (2026-11-25): `pipeline` / `follow-up` / `digest` text fields go through `field_text`, so non-finite numbers and containers no longer reach the output; `recommend --with-score` preference fallbacks try keys in priority order, so a container drifting in the primary key no longer shadows the valid fallback (Issues #2739, #2740).

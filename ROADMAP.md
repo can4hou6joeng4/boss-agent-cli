@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.207（2026-11-25）：联系人显示名收口到 `contact_lookup.friend_display_name`，向导 `exchange` 不再把类型漂移的 `name` 以 Python repr 发进写请求，`mark` / `chat-summary` / `chatmsg` 不再把容器原样写进信封；`chatmsg` 的发送方 uid 与 `stable_uid` 同口径，顶层 `text` 不可用时不再吞掉 `body.text`；`hr resume` 教育经历按优先级逐键取第一个非空字符串（Issue #2748、#2749、#2750）。
+
 v3.4.206（2026-11-25）：`interviews` 的文本字段统一走 `field_text`，显式 null / 非有限数与容器不再进 JSON 信封与 TTY；`handle_auth_errors` 增加 `NotImplementedError` → `NOT_SUPPORTED` 分支，`digest` / `pipeline` / `follow-up` 不再把能力缺口报成可重试网络错误（Issue #2744、#2745）。
 
 v3.4.205（2026-11-25）：`pipeline` / `follow-up` / `digest` 的文本字段统一走 `field_text`，非有限数与容器不再写进产物；`recommend --with-score` 的求职期望回退链按优先级逐个键取第一个可用字符串，容器漂移不再吞掉合法回退键（Issue #2739、#2740）。

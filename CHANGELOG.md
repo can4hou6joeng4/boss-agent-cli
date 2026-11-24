@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.207] - 2026-11-25
+
 ### Fixed
 
 - 向导 `exchange` 不再把类型漂移的联系人 `name` 以 Python repr 发进写请求：此前 `str(friend.get("name") or "-")` 会把对象 / 数组 / 布尔 / `NaN` 变成 `"{'n': 1}"` / `"True"` / `"nan"` 交给 `exchange_contact`，纯空白名字也原样发出，而 CLI `exchange` 早已回落 `-`（#1812）；`mark` / `chat-summary` / `chatmsg` 的 `name or "-"` 同样只挡假值，容器会原样写进信封。现在五处共用 `contact_lookup.friend_display_name`：只认非空白字符串（去首尾空白），否则为 `-`（Issue #2748）。
