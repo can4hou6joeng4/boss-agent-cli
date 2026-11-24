@@ -17,6 +17,18 @@ MAX_TRUSTED_PAGE = 1_000_000
 #: JSON（整数转字符串的 4300 位限制），不代表平台接受这么大的值。
 MAX_TRUSTED_COUNT = MAX_TRUSTED_PAGE
 
+#: `export` 的页数预算估算：平台每页约 15 条，再加固定余量给本地预筛 /
+#: 福利 / 活跃度筛选剔除的整页结果。顶层 `boss export` 与 wizard / MCP 的
+#: `export` goal 共用同一口径，避免同一个 count 在两处导出不同数量。
+EXPORT_PAGE_SIZE_ESTIMATE = 15
+EXPORT_FILTER_PAGE_ALLOWANCE = 5
+
+
+def export_page_budget(count: int) -> int:
+	"""按请求条数估算需要扫描的页数上限（含筛选余量）。"""
+	estimated_pages = max(1, (count + EXPORT_PAGE_SIZE_ESTIMATE - 1) // EXPORT_PAGE_SIZE_ESTIMATE)
+	return estimated_pages + EXPORT_FILTER_PAGE_ALLOWANCE
+
 
 def clamp_trusted(value: Any, limit: int = MAX_TRUSTED_PAGE) -> int:
 	"""把外部数值钳制到 ``[1, limit]``；非整数（含布尔）按 1。

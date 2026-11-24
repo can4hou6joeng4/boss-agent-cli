@@ -27,6 +27,7 @@ from boss_agent_cli.services.job_export import (
 	write_html_export,
 )
 from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.pagination import export_page_budget
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchUrlParseError,
@@ -39,7 +40,6 @@ from boss_agent_cli.search_filters import (
 from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 
-_EXPORT_FILTER_PAGE_ALLOWANCE = 5
 _TRUNCATED_OPERATOR_ACTION = (
 	"本次导出扫描到内部页数上限，结果可能不完整；请缩小筛选条件后重试，或用 --url 精确筛选"
 )
@@ -219,8 +219,7 @@ def export_cmd(
 		page = 1
 		# 本地严格筛选可能剔除整页结果，额外扫描固定页数；上限仍由用户
 		# 显式请求的 count 决定，避免 hasMore 异常时形成无界请求。
-		estimated_pages = max(1, (count + 14) // 15)
-		max_pages = estimated_pages + _EXPORT_FILTER_PAGE_ALLOWANCE
+		max_pages = export_page_budget(count)
 		# 预算耗尽而仍未取满 count 时结果并不完整。必须把终止原因写进信封，
 		# 否则调用方无法区分「平台只有这些」和「本地扫描到上限」（Issue #907）。
 		stop_reason = "page_budget_exhausted"
