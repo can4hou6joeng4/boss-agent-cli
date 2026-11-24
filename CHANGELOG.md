@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `boss export --active` 在活跃度筛选提前停止且未取满 `--count` 时现在报 `truncated=true` 与专用 `operator_actions`（`stop_reason=active_target_reached`），不再把不完整结果报告为完整；恰好取满 `--count` 时仍按 `count_reached` 处理。中英文命令文档同步列出该终止原因（Issue #2710）。
+
 ## [3.4.199] - 2026-11-25
 
 ### Added

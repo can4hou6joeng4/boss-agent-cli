@@ -400,7 +400,7 @@ boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100' --count 50 -o jobs.csv
 ```
 
-The `boss export` JSON envelope carries `truncated` and `stop_reason`, distinguishing "reached the requested count" from "hit the local page budget": `count_reached`, `platform_has_more_false`, and `empty_page` all mean the result is complete; with `page_budget_exhausted`, `truncated=true` means the internal page budget ran out and the result may be incomplete, and `hints.operator_actions` suggests narrowing the filters. `--format html` writes directly without an envelope, so the truncation notice goes to stderr.
+The `boss export` JSON envelope carries `truncated` and `stop_reason`, distinguishing "reached the requested count" from "hit the local page budget": `count_reached`, `platform_has_more_false`, and `empty_page` all mean the result is complete; with `page_budget_exhausted` (internal page budget ran out) or `active_target_reached` (the activity filter stopped early within the reliably classifiable range and `--count` was not reached), `truncated=true` means the result may be incomplete, and `hints.operator_actions` suggests narrowing the filters. `--format html` writes directly without an envelope, so the truncation notice goes to stderr.
 
 Follow-up and argument-error recovery hints from `export` keep the current `--data-dir` and platform: the `search` / `recommend` hints after writing a file, the `--format html --json` and CSV/stdout re-export examples, and the recovery commands for an empty query, empty `--url`, or unparsable URL all carry the shell-quoted absolute directory, so following them uses the same login state and caches.
 

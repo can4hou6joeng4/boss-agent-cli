@@ -216,3 +216,58 @@ def test_schema_and_mcp_expose_export_filters() -> None:
 	properties = tool.input_schema["properties"]
 	assert properties["welfare"]["type"] == "string"
 	assert properties["active"]["type"] == "string"
+
+
+@patch("boss_agent_cli.commands.export.run_search_pipeline")
+@patch("boss_agent_cli.commands.export.account_scope", return_value="")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_active_early_stop_marks_incomplete(
+	mock_auth: Any, mock_platform: Any, _account: Any, mock_pipeline: Any, tmp_path: Path
+) -> None:
+	"""活跃度筛选提前停止（未取满 count）必须报 truncated，不能伪装成完整结果。
+
+	`--active` 在列表字段即可判定时按设计不再翻页（online 只翻 1 页）；平台
+	hasMore 仍为 true 时导出结果可能不完整（Issue #2710）。
+	"""
+	platform = mock_platform.return_value
+	platform.__enter__ = lambda self: self
+	platform.__exit__ = lambda self, *a: None
+	platform.name = "zhipin"
+	result = _result([_job()], stop_reason="active_target_reached")
+	result.has_more = True
+	result.has_more_reported = True
+	mock_pipeline.return_value = result
+
+	outcome = _invoke(tmp_path, ["--active", "online", "--count", "50"])
+
+	assert outcome.exit_code == 0, outcome.output
+	envelope = json.loads(outcome.output)
+	assert envelope["data"]["stop_reason"] == "active_target_reached"
+	assert envelope["data"]["truncated"] is True
+	notes = envelope["hints"]["operator_actions"]
+	assert any("活跃度筛选可判定的范围内提前停止" in note for note in notes)
+	assert not any("页数上限" in note for note in notes)
+	assert envelope["hints"]["active_filter"]["level"] == "online"
+
+
+@patch("boss_agent_cli.commands.export.run_search_pipeline")
+@patch("boss_agent_cli.commands.export.account_scope", return_value="")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_active_target_reached_with_full_count_is_complete(
+	mock_auth: Any, mock_platform: Any, _account: Any, mock_pipeline: Any, tmp_path: Path
+) -> None:
+	"""取满 --count 后 active_target_reached 被 count_reached 覆盖，不算截断。"""
+	platform = mock_platform.return_value
+	platform.__enter__ = lambda self: self
+	platform.__exit__ = lambda self, *a: None
+	platform.name = "zhipin"
+	mock_pipeline.return_value = _result([_job()], stop_reason="active_target_reached")
+
+	outcome = _invoke(tmp_path, ["--active", "3d", "--count", "1"])
+
+	envelope = json.loads(outcome.output)
+	assert envelope["data"]["stop_reason"] == "count_reached"
+	assert envelope["data"]["truncated"] is False
+	assert "operator_actions" not in envelope["hints"]

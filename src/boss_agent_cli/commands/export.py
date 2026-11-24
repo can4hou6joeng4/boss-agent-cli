@@ -58,6 +58,19 @@ from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 _TRUNCATED_OPERATOR_ACTION = (
 	"本次导出扫描到内部页数上限，结果可能不完整；请缩小筛选条件后重试，或用 --url 精确筛选"
 )
+# 活跃度筛选在列表字段即可判定时会提前停止（不再为多翻页逐个查详情）；
+# 没取满 --count 时结果同样不完整，需要单独的说明，不能套用页数上限文案
+# （Issue #2710）。
+_ACTIVE_TRUNCATED_OPERATOR_ACTION = (
+	"本次导出在活跃度筛选可判定的范围内提前停止，结果可能不完整；"
+	"可减小 --count、放宽 --active 档位或去掉 --active 后重试"
+)
+
+
+def _truncation_note(stop_reason: str) -> str:
+	if stop_reason == "active_target_reached":
+		return _ACTIVE_TRUNCATED_OPERATOR_ACTION
+	return _TRUNCATED_OPERATOR_ACTION
 
 
 #: 管线终止原因 → export 既有 stop_reason 词汇（Issue #2706）。
@@ -413,7 +426,9 @@ def export_cmd(
 
 		if len(collected) >= count:
 			stop_reason = "count_reached"
-		truncated = stop_reason == "page_budget_exhausted"
+		# 页数预算耗尽，或活跃度筛选按设计提前停止且没取满 --count：两者都不完整。
+		# `active_target_reached` 若恰好取满 count 已被上面的 count_reached 覆盖。
+		truncated = stop_reason in {"page_budget_exhausted", "active_target_reached"}
 
 		if output is not None:
 			output = str(prepare_output_path(output))
@@ -441,6 +456,7 @@ def export_cmd(
 				hints=_with_active_hints(
 					_truncation_hints(
 						truncated,
+						stop_reason=stop_reason,
 						next_actions=[
 							_hint_command(ctx, "search <query>"),
 							_hint_command(ctx, "recommend"),
@@ -469,6 +485,7 @@ def export_cmd(
 					hints=_with_active_hints(
 						_truncation_hints(
 							truncated,
+							stop_reason=stop_reason,
 							next_actions=[_hint_command(ctx, "export <query> --format html -o <path>")],
 							operator_actions=["把 data.content 写成 .html 文件后打开"],
 						),
@@ -480,7 +497,7 @@ def export_cmd(
 				write_document_stdout(html_text)
 				if truncated:
 					# 直出模式没有信封，截断证据只能走 stderr，不能污染 stdout。
-					console.print(f"[yellow]注意：{_TRUNCATED_OPERATOR_ACTION}[/yellow]")
+					console.print(f"[yellow]注意：{_truncation_note(stop_reason)}[/yellow]")
 				if active_hints and active_hints.get("unknown_excluded"):
 					console.print(
 						f"[yellow]注意：{active_hints['unknown_excluded']} 个职位的活跃度无法识别，已按 --active 筛选排除。[/yellow]"
@@ -502,6 +519,7 @@ def export_cmd(
 				hints=_with_active_hints(
 					_truncation_hints(
 						truncated,
+						stop_reason=stop_reason,
 						next_actions=[_hint_command(ctx, "export <query> -o file.csv")],
 					),
 					active_hints,
@@ -519,13 +537,14 @@ def _with_active_hints(hints: dict[str, Any], active_hints: dict[str, Any] | Non
 def _truncation_hints(
 	truncated: bool,
 	*,
+	stop_reason: str = "",
 	next_actions: list[str] | None = None,
 	operator_actions: list[str] | None = None,
 ) -> dict[str, list[str]]:
-	"""导出终止原因的后继提示：只有本地页数预算耗尽时才算不完整。"""
+	"""导出终止原因的后继提示：页数预算耗尽与活跃度提前停止都算不完整。"""
 	actions = list(operator_actions or [])
 	if truncated:
-		actions.append(_TRUNCATED_OPERATOR_ACTION)
+		actions.append(_truncation_note(stop_reason))
 	hints: dict[str, list[str]] = {}
 	if next_actions:
 		hints["next_actions"] = next_actions
