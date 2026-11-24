@@ -9,6 +9,7 @@
 - `hr chat` / 向导 communication 的最后一条消息不再把非有限浮点写成伪文本：平台 JSON 里的 `1e400` / `Infinity` / `NaN` 会解析成 `inf` / `nan`，此前 `message_text` 直接 `str()` 并把 `"inf"` / `"nan"` 写进 `friendList[].last_msg`；现在文本归一按「非有限数值 = 缺失」处理，与 `format_chat_time` / `safe_local_time` / `clean_unread_by_tab` 同口径（Issue #2730）。
 - `-o` 路径以 `~user` 开头且含 NUL / 孤立高位代理项时，`_expand_user` 不再让 `Path.expanduser()` 的裸 `ValueError` / `UnicodeEncodeError` 穿到命令层：归一为带 `filename` 的 `OSError(EINVAL)`，落成不可重试的 `LOCAL_IO_ERROR`，与同模块 `_lstat_mode` / mkdir 分支同口径；此前 `chat --export` 等入口会把它兜成可重试的 `NETWORK_ERROR`（Issue #2732）。
 - 导出 / 快照的整数归一不再按带符号字符串长度判位数：恰好 4300 位的负整数（`-(2**14284)`）`str()` 转出 4301 个字符但仍可正常序列化，此前被静默写成 `null`，与 #2568「只有 `str()` 真的失败才归 null」的规则不符；现在负号不计入位数，只有真正超过 4300 位的整数才归 `null`（Issue #2733）。
+- `safe_text` 不再按 bit_length 预检把可转换的 4300 位整数判成缺失：恰好 4300 位的整数（`10**4300 - 1` / `2**14284`）bit_length 已是 14285，但 `str()` 正常成功，此前 CSV / HTML / Markdown 导出会把这些单元格静默抹成空串，而同一份数据的 JSON 导出保留数值；现在只有 `str()` 真的抛 `ValueError` 才算缺失（Issue #2736）。
 
 ## [3.4.203] - 2026-11-25
 
