@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
 from boss_agent_cli.api._base_client import parameter_status_code
-from boss_agent_cli.api.client import PlatformRateLimitError
+from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
 from boss_agent_cli.api.models import (
 	dict_items,
 	field_dict,
@@ -111,6 +111,7 @@ from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
+	SearchPipelinePlatformError,
 	SearchUrlParseError,
 	client_is_browser_only,
 	detail_filter_max_pages,
@@ -1948,6 +1949,83 @@ def _saved_search_invalid_error(context: ActionContext, name: str, detail: str) 
 	)
 
 
+def _run_saved_watch(context: ActionContext, cache: CacheStore, name: str) -> dict[str, Any]:
+	"""运行一条已保存的 watch；点名运行与批量运行共用。"""
+	try:
+		record = cache.get_saved_search(name)
+	except (SavedSearchParamsError, CacheRecordInvalid) as exc:
+		# 参数写坏与 name / 时间戳等元数据漂移同口径：本地记录损坏是确定性
+		# 失败，必须报 SAVED_SEARCH_INVALID 并给出删除重建指引，不能落成
+		# CACHE_RECORD_INVALID（Issue #2011、#2529）。
+		raise _saved_search_invalid_error(context, name, str(exc)) from exc
+	if record is None:
+		raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")
+	# 读取侧与 CLI `watch run` 共用同一份校验：旧版本 / 手工编辑写下的
+	# 空白关键词与类型漂移不能以空泛搜索返回成功（Issue #1338、#1798、#2511）。
+	try:
+		validate_stored_search_params(record["params"])
+	except ValueError as exc:
+		raise _saved_search_invalid_error(context, name, f"watch {name!r} 的参数已失效：{exc}") from exc
+	account = account_scope(context.auth())
+	with context.candidate_platform() as platform:
+		result = execute_candidate_search(platform, cache, context.logger, {**record["params"], "account": account})
+	watch_result = cache.record_watch_results(name, result.items, account=account)
+	return {"name": name, **watch_result}
+
+
+def _run_all_saved_watches(context: ActionContext, cache: CacheStore) -> dict[str, Any]:
+	"""批量运行全部 watch，与 CLI `watch run --all` 同口径（Issue #2698）。
+
+	单条记录损坏或被并发删除时记入 ``watches`` 的 error 条目并继续；命中
+	平台风控时立即停止后续 watch，已完成的部分随 ``details`` 带回，不重试。
+	"""
+	records, corrupt = cache.list_saved_searches_with_corrupt()
+	watches: list[dict[str, Any]] = []
+	for record in records:
+		name = record["name"]
+		risk_code: str | None = None
+		try:
+			summary = _run_saved_watch(context, cache, name)
+		except WorkflowActionError as exc:
+			if exc.code == "SAVED_SEARCH_INVALID":
+				summary = {"name": name, "error": exc.code, "message": str(exc)}
+			elif exc.code == "SAVED_SEARCH_NOT_FOUND":
+				# 列出之后按名称读不到：并发删除。静默丢弃会让批量结果少一条
+				# 却看不出异常，与 CLI 一样显式列出。
+				summary = {
+					"name": name,
+					"error": "SAVED_SEARCH_INVALID",
+					"message": "watch 记录在运行前已不存在（可能被并发删除）；请用 watch list 确认后重新创建",
+				}
+			else:
+				raise
+		except PlatformRiskError as exc:
+			risk_code = exc.code
+		except SearchPipelinePlatformError as exc:
+			if exc.code in RISK_ERROR_CONTRACTS:
+				risk_code = exc.code
+			else:
+				summary = {"name": name, "error": exc.code, "message": exc.message}
+		if risk_code is not None:
+			# 风控是整条 workflow 的硬边界：不再向平台发起请求，也不透传平台响应原文。
+			recovery_action, _ = risk_error_contract(risk_code, **_risk_commands(context))
+			raise WorkflowActionError(
+				risk_code,
+				risk_error_message(risk_code),
+				recoverable=False,
+				recovery_action=recovery_action,
+				details={"watches": watches, "stopped_watch": name},
+			)
+		watches.append(summary)
+	return {
+		"mode": "all",
+		"watches": watches,
+		"total": len(watches),
+		"skipped": corrupt,
+		"invalid": [item["name"] for item in watches if item.get("error") == "SAVED_SEARCH_INVALID"],
+	}
+
+
 def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	action = str(inputs.get("action") or "list")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
@@ -1957,6 +2035,24 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			if corrupt:
 				data["corrupt"] = corrupt
 			return StepResult(data)
+		# `all` 只属于 run：点名与批量是两种运行范围，同时给出时不能静默丢弃
+		# 其中一个（CLI 同口径，Issue #1561）；其他动作带 all 则是误用。
+		if _bool_input(inputs, "all"):
+			if action != "run":
+				raise WorkflowActionError(
+					"INVALID_PARAM",
+					f"wizard 输入 all 只适用于 action=run（收到 action={action}）",
+					recoverable=True,
+					recovery_action="去掉 all，或把 action 改为 run 后重试",
+				)
+			if inputs.get("name") is not None:
+				raise WorkflowActionError(
+					"INVALID_PARAM",
+					"wizard 输入 all 不能与 name 同时使用",
+					recoverable=True,
+					recovery_action="只提供 name 运行一个 watch，或去掉 name 用 all 运行全部",
+				)
+			return StepResult(_run_all_saved_watches(context, cache))
 		# 名称与 CLI `watch add/remove/run` 同口径：空白名不可能被命令点名，
 		# 存下来后 CLI 既不能 run 也不能 remove（Issue #2511）。这里只校验、
 		# 不 strip：CLI 允许名称首尾带空格，向导必须能按原值寻址。
@@ -2049,26 +2145,7 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			return StepResult({"action": "remove", "name": name, "removed": cache.delete_saved_search(name)})
 		if action != "run":
 			raise WorkflowActionError("INVALID_PARAM", f"未知的 watch 动作: {action}（可选: add、remove、run）")
-		try:
-			record = cache.get_saved_search(name)
-		except (SavedSearchParamsError, CacheRecordInvalid) as exc:
-			# 参数写坏与 name / 时间戳等元数据漂移同口径：本地记录损坏是确定性
-			# 失败，必须报 SAVED_SEARCH_INVALID 并给出删除重建指引，不能落成
-			# CACHE_RECORD_INVALID（Issue #2011、#2529）。
-			raise _saved_search_invalid_error(context, name, str(exc)) from exc
-		if record is None:
-			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")
-		# 读取侧与 CLI `watch run` 共用同一份校验：旧版本 / 手工编辑写下的
-		# 空白关键词与类型漂移不能以空泛搜索返回成功（Issue #1338、#1798、#2511）。
-		try:
-			validate_stored_search_params(record["params"])
-		except ValueError as exc:
-			raise _saved_search_invalid_error(context, name, f"watch {name!r} 的参数已失效：{exc}") from exc
-		account = account_scope(context.auth())
-		with context.candidate_platform() as platform:
-			result = execute_candidate_search(platform, cache, context.logger, {**record["params"], "account": account})
-		watch_result = cache.record_watch_results(name, result.items, account=account)
-		return StepResult({"name": name, **watch_result})
+		return StepResult(_run_saved_watch(context, cache, name))
 
 
 def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
