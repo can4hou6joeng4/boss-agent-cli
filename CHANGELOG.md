@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.198] - 2026-11-25
+
 ### Added
 
 - CLI `boss watch add` 与 MCP `boss_watch_add` 新增 `active`（`--active`）活跃度下限，与 `search` / `preset add` 及向导 `watch` 的 `add` 动作同口径：别名 `3day` / `3日` 等按归一化档位保存，非法值在写入前报 `INVALID_PARAM`，不设置时不落下该键。此前向导能创建带活跃度过滤的监控，CLI / MCP 用户却无法创建或按同样条件重建；`boss schema` 与中英文命令文档同步（Issue #2704）。

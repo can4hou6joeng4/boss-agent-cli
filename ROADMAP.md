@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.198（2026-11-25）：CLI `boss watch add` 与 MCP `boss_watch_add` 新增 `active`（`--active`）活跃度下限，与 `search` / `preset add` 及向导 `watch` 的 `add` 动作同口径：别名归一化为档位、非法值写入前报 `INVALID_PARAM`、不设置时不落下该键；`boss schema` 与中英文命令文档同步（Issue #2704）。
+
 v3.4.197（2026-11-25）：向导的枚举型输入（`watch` 的 `action`、`export` 的 `format`、`crawl_start` 的 `hook_profile`）不再把 `false` / `0` / `[]` 等非字符串值静默当成默认值，改为在任何本地写入或平台请求前报输入错误并点名字段；缺省、`null` 与空串仍用默认值（Issue #2701）。
 
 v3.4.196（2026-11-25）：向导 `watch` goal 的 `run` 动作支持 `all=true`，与 CLI `watch run --all`、MCP `boss_watch_run` 同口径批量运行已保存 watch：损坏或并发删除的记录逐条列出并继续，命中平台风控立即停止后续 watch；`all` 只认 JSON 布尔值且与 `name` 互斥（Issue #2698）。
