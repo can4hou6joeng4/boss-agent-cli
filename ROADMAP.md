@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.205（2026-11-25）：`pipeline` / `follow-up` / `digest` 的文本字段统一走 `field_text`，非有限数与容器不再写进产物；`recommend --with-score` 的求职期望回退链按优先级逐个键取第一个可用字符串，容器漂移不再吞掉合法回退键（Issue #2739、#2740）。
+
 v3.4.204（2026-11-25）：`hr chat` / 向导 communication 的最后一条消息不再把非有限浮点写成伪文本；`-o` 路径展开的裸 ValueError 归一为本地 IO 错误；导出整数归一只数数字位，4300 位负整数不再被静默写成 null；`safe_text` 不再把可转换的 4300 位整数抹成空串。（Issue #2730、#2732、#2733、#2736）。
 
 v3.4.203（2026-11-25）：`friend_security_id` 在 securityId 类型漂移时不再吞掉合法的 security_id 回退；MCP `boss_export` 带福利 / 活跃度筛选时按详情页估算超时，不再被 290s 误杀；`boss_wizard` schema 声明 run / resume 的 120 秒宿主默认超时。（Issue #2723、#2725、#2726）。
