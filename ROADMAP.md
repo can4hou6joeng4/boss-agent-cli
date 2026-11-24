@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.194（2026-11-24）：向导 / MCP 修复两处与 CLI 口径不一致的行为——`search_url` 展开时显式 `raw_params` 优先于链接里的同名 code 参数（与 `search --url` 的「显式选项覆盖链接参数」一致），`job_search` / `export` 的 `page`、`max_pages` 在构造平台实例前校验（与 #2625 口径一致，非法值不再先启动浏览器 / 登录探测）（Issue #2690、#2692）。
+
 v3.4.193（2026-11-24）：向导 / MCP 新增招聘者 `recommendations` goal（按 `job_id` 读取推荐牛人并回显 `pagination`）；`job_search` / `export` 支持 `search_url`，`job_search` 同时支持 `preset`，与顶层 `search --url` / `--preset`、`export --url` 同口径展开链接与本地预设，`wizard_catalog` 新增 `either_inputs` 声明「query / search_url / preset 至少一个」；`wizard --resume` 恢复历史 run 时校验 inputs 可存储性，坏记录统一报 `CACHE_RECORD_INVALID` 并给出重建指引（Issue #2682、#2685、#2687）。
 
 v3.4.192（2026-11-24）：向导 / MCP（招聘者）`last_messages` 补齐 `limit`（默认 100、上限 300）与 `friend_ids` 直查，请求按 friendSource 分组、每批 50 串行并回显 `skipped` / `requests`；`communication` 支持 `summary_limit`，给沟通列表补未读数 / 最近消息并在 `summary_sources` 回显请求统计。摘要与批量查询实现下沉 `services/recruiter_last_messages.py` 与 `services/recruiter_chat_summary.py` 与命令层共用（Issue #2675、#2679）。
