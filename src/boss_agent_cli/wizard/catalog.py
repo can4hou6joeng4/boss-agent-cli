@@ -16,12 +16,19 @@ class GoalDefinition:
 	description: str
 	steps: tuple[str, ...]
 	required_inputs: tuple[str, ...] = ()
+	#: 每组「至少提供一个」的输入键：与 CLI 的「query、--preset、--url 三选一」
+	#: 同口径（Issue #2685）。组内任一键的取值非 null 且不是纯空白字符串即满足。
+	either_inputs: tuple[tuple[str, ...], ...] = ()
 
 
 GOALS = {
 	"candidate": {
 		"job_search": GoalDefinition(
-			"job_search", "candidate", "搜索和筛选职位", ("auth_status", "candidate_search"), ("query",)
+			"job_search",
+			"candidate",
+			"搜索和筛选职位",
+			("auth_status", "candidate_search"),
+			either_inputs=(("query", "search_url", "preset"),),
 		),
 		"recommendations": GoalDefinition(
 			"recommendations", "candidate", "获取个性化推荐", ("auth_status", "candidate_recommend")
@@ -59,7 +66,11 @@ GOALS = {
 			"ai_assist", "candidate", "使用本地简历进行 AI 辅助", ("ai_assist",), ("resume", "prompt")
 		),
 		"export": GoalDefinition(
-			"export", "candidate", "导出职位结果", ("auth_status", "candidate_export"), ("query",)
+			"export",
+			"candidate",
+			"导出职位结果",
+			("auth_status", "candidate_export"),
+			either_inputs=(("query", "search_url"),),
 		),
 		"watch": GoalDefinition("watch", "candidate", "保存、查看或运行职位监控", ("candidate_watch",)),
 		"crawl_start": GoalDefinition(
@@ -138,6 +149,7 @@ def catalog_data() -> dict[str, Any]:
 						"description": goal.description,
 						"steps": list(goal.steps),
 						"required_inputs": list(goal.required_inputs),
+						"either_inputs": [list(group) for group in goal.either_inputs],
 					}
 					for name, goal in goals.items()
 				},
@@ -175,6 +187,22 @@ def build_plan(wizard_input: WizardInput) -> WorkflowPlan:
 	]
 	if missing:
 		raise WorkflowInputError(f"goal {goal.name!r} 缺少 inputs: {', '.join(missing)}")
+	# 「要么输入」组：组内至少提供一个非空白取值（Issue #2685）。CLI
+	# `search` / `export` 允许用 --url / --preset 代替关键词，向导不能因为
+	# query 缺失就把这两条入口挡在 plan 层。非字符串取值（如数组）与
+	# required_inputs 同口径视为「已提供」，类型错误留给动作层点名报告。
+	unsatisfied = [
+		group
+		for group in goal.either_inputs
+		if not any(
+			(value := wizard_input.inputs.get(name)) is not None
+			and not (isinstance(value, str) and not value.strip())
+			for name in group
+		)
+	]
+	if unsatisfied:
+		options = "、".join(" / ".join(group) for group in unsatisfied)
+		raise WorkflowInputError(f"goal {goal.name!r} 缺少 inputs: {options} 至少提供一个")
 	steps = wizard_input.requested_steps or goal.steps
 	unknown_steps = [step for step in steps if step not in goal.steps]
 	if unknown_steps:

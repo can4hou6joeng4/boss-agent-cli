@@ -90,7 +90,7 @@ from boss_agent_cli.services.recruiter_last_messages import (
 	friend_id_for,
 	friend_sources,
 )
-from boss_agent_cli.services.saved_searches import validate_stored_search_params
+from boss_agent_cli.services.saved_searches import SEARCH_PARAM_KEYS, validate_stored_search_params
 from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items
 from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.digest import build_digest
@@ -111,10 +111,12 @@ from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
+	SearchUrlParseError,
 	client_is_browser_only,
 	detail_filter_max_pages,
 	ensure_supported_city,
 	ensure_text_encodable,
+	parse_boss_search_url,
 	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
@@ -577,6 +579,90 @@ def _validate_search_filters(params: Mapping[str, Any]) -> None:
 		stage=_optional_str(params.get("stage")),
 		job_type=_optional_str(params.get("job_type")),
 	)
+
+
+def _preset_invalid_error(context: ActionContext, name: str, detail: str) -> WorkflowActionError:
+	"""预设记录损坏 / 失效：与 `watch run` 的 SAVED_SEARCH_INVALID 同口径，
+	删除重建命令指向 preset（而不是 watch）。"""
+	return WorkflowActionError(
+		"SAVED_SEARCH_INVALID",
+		detail,
+		recoverable=True,
+		recovery_action=(
+			f"{_hint_command(context, f'preset remove {positional_hint(name)}')}；"
+			f"再用 {_hint_command(context, f'preset add {positional_hint(name)} <关键词>')} 重建"
+		),
+	)
+
+
+def _expand_search_sources(
+	context: ActionContext,
+	cache: CacheStore,
+	inputs: Mapping[str, Any],
+) -> dict[str, Any]:
+	"""展开 `search_url` / `preset`，与顶层 `search` / `export` 同口径（Issue #2685）。
+
+	CLI 允许 `search --url` / `search --preset` / `export --url` 不给关键词；
+	向导 / MCP 此前只认 `query`，把这两条入口挡在 action 之外。这里把来源
+	展开成 `execute_candidate_search` 认识的输入：
+
+	- preset 只补未提供的键（显式空串也算提供，保持「不筛选」语义）；
+	- search_url 的关键词只在没有关键词时补上，白名单 code 参数并入
+	  `raw_params`（显式筛选的 code 参数随后覆盖），page 只在未显式给 page
+	  时采用；
+	- 空白 query 与 CLI 一样视为未提供，由最后的关键词校验决定是否拒绝。
+	"""
+	merged = dict(inputs)
+	preset = _optional_nonblank_str(merged, "preset")
+	if preset is not None:
+		if problem := saved_search_name_error(preset):
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				f"预设{problem}",
+				recoverable=True,
+				recovery_action="换一个只含普通 Unicode 文本的预设名后重试；用 preset list 查看已有预设",
+			)
+		try:
+			record = cache.get_saved_search(preset)
+		except (SavedSearchParamsError, CacheRecordInvalid) as exc:
+			raise _preset_invalid_error(context, preset, str(exc)) from exc
+		if record is None:
+			raise WorkflowActionError(
+				"SAVED_SEARCH_NOT_FOUND",
+				f"未找到 preset: {preset}",
+				recoverable=True,
+				recovery_action="用 preset list 查看已保存的预设后重试，或省略 preset 直接传入筛选条件",
+			)
+		params = record["params"]
+		# 与 `watch run` 共用读取侧校验：旧版本 / 手工编辑写入的空白关键词、
+		# 类型漂移与未知标签不能以空泛搜索报成功（Issue #1338、#1798、#2529）。
+		try:
+			validate_stored_search_params(params)
+		except ValueError as exc:
+			raise _preset_invalid_error(context, preset, f"预设 {preset!r} 的参数已失效：{exc}") from exc
+		for key in SEARCH_PARAM_KEYS:
+			if merged.get(key) is None:
+				merged[key] = params.get(key)
+	search_url = _optional_nonblank_str(merged, "search_url")
+	if search_url is not None:
+		try:
+			parsed = parse_boss_search_url(search_url)
+		except SearchUrlParseError as exc:
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				str(exc),
+				recoverable=True,
+				recovery_action="换成完整的 BOSS 直聘搜索页链接，或改为提供搜索关键词 / preset 后重试",
+			) from exc
+		raw_query = _optional_str_strict(merged, "query")
+		if parsed.query and (raw_query is None or not raw_query.strip()):
+			merged["query"] = parsed.query
+		if parsed.page is not None and merged.get("page") is None:
+			merged["page"] = parsed.page
+		raw_params: dict[str, Any] = dict(_mapping_input(merged, "raw_params"))
+		raw_params.update(parsed.params)
+		merged["raw_params"] = raw_params
+	return merged
 
 
 def _bool_input(inputs: Mapping[str, Any], name: str, default: bool = False) -> bool:
@@ -1090,31 +1176,41 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 
 def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	# 纯空白关键词与 CLI `search " "` / 向导 watch 同口径拒绝（Issue #1798、
-	# #2511、#2514）：`execute_candidate_search` 里 `_optional_str_strict(...) or ""`
-	# 会原样接受它，平台按「无关键词」返回推荐并向动作报成功。
-	_required_nonblank_str(inputs, "query")
-	# sort 与顶层 `search --sort` 同一枚举：缺省 / null 保持平台顺序；显式空串
-	# 或其他取值在平台请求前拒绝，不能静默按 relevance 返回（Issue #2660）。
-	raw_sort = _optional_str_strict(inputs, "sort")
-	sort_mode = "relevance" if raw_sort is None else raw_sort
-	if sort_mode not in SEARCH_SORT_MODES:
-		raise WorkflowActionError(
-			"INVALID_PARAM",
-			f"wizard 输入 sort 仅支持 {' / '.join(SEARCH_SORT_MODES)}，收到 {sort_mode!r}",
-			recoverable=True,
-			recovery_action="将 sort 改为 relevance 或 score 后重试；省略表示保持平台顺序",
-		)
-	# with_score 与顶层 `search --with-score` 同口径：向导此前完全不读该键，
-	# 传 true 仍只返回管线内嵌的 match_score、没有匹配原因（Issue #2665）。
-	# 类型错误同样在平台请求前拒绝。
-	with_score = _bool_input(inputs, "with_score")
-	account = account_scope(context.auth())
-	search_kwargs: dict[str, Any] = {}
-	if with_score:
-		# 只在需要时传入，保持既有测试替身 / Python API 的调用签名（同 #2657）。
-		search_kwargs["with_score"] = True
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
+		# search_url / preset 与顶层 `search` 同口径展开（Issue #2685）：有
+		# --url 时关键词可省略，平台按链接里的筛选条件返回。
+		inputs = _expand_search_sources(context, cache, inputs)
+		if inputs.get("search_url") is not None:
+			query = _optional_str_strict(inputs, "query")
+			if query is None or not query.strip():
+				# CLI `search --url` 同口径：空白 / 缺失关键词按未提供处理，
+				# 由链接里的 query（若有）或纯筛选搜索决定实际请求。
+				inputs["query"] = ""
+		else:
+			# 纯空白关键词与 CLI `search " "` / 向导 watch 同口径拒绝（Issue #1798、
+			# #2511、#2514）：`execute_candidate_search` 里 `_optional_str_strict(...) or ""`
+			# 会原样接受它，平台按「无关键词」返回推荐并向动作报成功。
+			_required_nonblank_str(inputs, "query")
+		# sort 与顶层 `search --sort` 同一枚举：缺省 / null 保持平台顺序；显式空串
+		# 或其他取值在平台请求前拒绝，不能静默按 relevance 返回（Issue #2660）。
+		raw_sort = _optional_str_strict(inputs, "sort")
+		sort_mode = "relevance" if raw_sort is None else raw_sort
+		if sort_mode not in SEARCH_SORT_MODES:
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				f"wizard 输入 sort 仅支持 {' / '.join(SEARCH_SORT_MODES)}，收到 {sort_mode!r}",
+				recoverable=True,
+				recovery_action="将 sort 改为 relevance 或 score 后重试；省略表示保持平台顺序",
+			)
+		# with_score 与顶层 `search --with-score` 同口径：向导此前完全不读该键，
+		# 传 true 仍只返回管线内嵌的 match_score、没有匹配原因（Issue #2665）。
+		# 类型错误同样在平台请求前拒绝。
+		with_score = _bool_input(inputs, "with_score")
+		account = account_scope(context.auth())
+		search_kwargs: dict[str, Any] = {}
+		if with_score:
+			# 只在需要时传入，保持既有测试替身 / Python API 的调用签名（同 #2657）。
+			search_kwargs["with_score"] = True
 		with context.candidate_platform() as platform:
 			result = execute_candidate_search(
 				platform, cache, context.logger, {**inputs, "account": account}, **search_kwargs
@@ -1764,29 +1860,36 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 	# 参数与路径必须在平台请求之前校验：非法 format 不能先翻完页才发现，
 	# `output` 指向目录也不能消耗一次受限请求（与命令层 `-o` 预检同口径）。
-	# 纯空白 query 与 CLI `export " "` / `candidate_search` 同口径拒绝：否则
-	# `execute_candidate_search` 的 ``or ""`` 会让平台按无关键词返回空泛结果，
-	# 导出文件照常生成并报成功（Issue #2519）。
-	_required_nonblank_str(inputs, "query")
-	include_private = _bool_input(inputs, "include_private")
-	# count 与 CLI `--count` 同口径：缺省 / null / 空串表示由默认页数预算
-	# 决定导出范围（保持旧行为）；显式值必须是 ≥ 1 的整数，显式 0 不能
-	# 被当成「没给」悄悄换成缺省（与 #2621 的游标口径一致）。
-	raw_count = inputs.get("count")
-	count: int | None = None
-	if raw_count is not None and raw_count != "":
-		count = _int_input(inputs, "count", 1, minimum=1, maximum=MAX_TRUSTED_COUNT)
-	fmt = str(inputs.get("format") or "json")
-	if fmt not in {"json", "csv"}:
-		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
-	output_path = _export_output_path(context, inputs, fmt)
-	search_inputs = {**inputs, "account": account_scope(context.auth())}
-	if count is not None and search_inputs.get("max_pages") in (None, ""):
-		# 与顶层 `boss export` 同一页数口径：只给默认页数预算时按 count 估页，
-		# 否则默认 1 页会把 count=50 的请求截在首屏。用户显式给了 max_pages
-		# 时尊重其预算（结果仍按 count 截断）。
-		search_inputs["max_pages"] = export_page_budget(count)
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
+		# `export --url` 同口径（Issue #2685）：链接把关键词与筛选条件一起带进来，
+		# query 可以省略；展开后再沿用空白关键词拒绝（Issue #2519）：
+		# `execute_candidate_search` 的 ``or ""`` 会让平台按无关键词返回空泛结果，
+		# 导出文件照常生成并报成功。
+		inputs = _expand_search_sources(context, cache, inputs)
+		if inputs.get("search_url") is not None:
+			query = _optional_str_strict(inputs, "query")
+			if query is None or not query.strip():
+				inputs["query"] = ""
+		else:
+			_required_nonblank_str(inputs, "query")
+		include_private = _bool_input(inputs, "include_private")
+		# count 与 CLI `--count` 同口径：缺省 / null / 空串表示由默认页数预算
+		# 决定导出范围（保持旧行为）；显式值必须是 ≥ 1 的整数，显式 0 不能
+		# 被当成「没给」悄悄换成缺省（与 #2621 的游标口径一致）。
+		raw_count = inputs.get("count")
+		count: int | None = None
+		if raw_count is not None and raw_count != "":
+			count = _int_input(inputs, "count", 1, minimum=1, maximum=MAX_TRUSTED_COUNT)
+		fmt = str(inputs.get("format") or "json")
+		if fmt not in {"json", "csv"}:
+			raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
+		output_path = _export_output_path(context, inputs, fmt)
+		search_inputs = {**inputs, "account": account_scope(context.auth())}
+		if count is not None and search_inputs.get("max_pages") in (None, ""):
+			# 与顶层 `boss export` 同一页数口径：只给默认页数预算时按 count 估页，
+			# 否则默认 1 页会把 count=50 的请求截在首屏。用户显式给了 max_pages
+			# 时尊重其预算（结果仍按 count 截断）。
+			search_inputs["max_pages"] = export_page_budget(count)
 		with context.candidate_platform() as platform:
 			# 与 candidate_search / candidate_watch 一致：导出时的 greeted 标记
 			# 必须按当前账号计算，否则登录态下会把所有职位都标成未打招呼。
