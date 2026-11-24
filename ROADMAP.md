@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.197（2026-11-25）：向导的枚举型输入（`watch` 的 `action`、`export` 的 `format`、`crawl_start` 的 `hook_profile`）不再把 `false` / `0` / `[]` 等非字符串值静默当成默认值，改为在任何本地写入或平台请求前报输入错误并点名字段；缺省、`null` 与空串仍用默认值（Issue #2701）。
+
 v3.4.196（2026-11-25）：向导 `watch` goal 的 `run` 动作支持 `all=true`，与 CLI `watch run --all`、MCP `boss_watch_run` 同口径批量运行已保存 watch：损坏或并发删除的记录逐条列出并继续，命中平台风控立即停止后续 watch；`all` 只认 JSON 布尔值且与 `name` 互斥（Issue #2698）。
 
 v3.4.195（2026-11-24）：MCP 工具 `boss_watch_run` 新增 `all` 布尔参数，与 CLI `watch run --all` 同口径批量运行已保存 watch（部分记录损坏、命中风控的既有口径一并可用）；`name` 不再是 MCP 侧必填，由 CLI 判定二者互斥（Issue #2695）。
