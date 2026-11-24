@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.205] - 2026-11-25
+
 ### Fixed
 
 - `pipeline` / `follow-up` / `digest` 的公司、标题、最后一条消息、面试时间与身份字段统一走 `field_text`：`raw.get(k) or 默认值` 会让 `nan` / `inf` 穿过（真值）并把容器 `str()` 成 Python repr 写进 `data.items` 与 Markdown 正文；现在非有限数与容器按缺失处理（Issue #2739）。
