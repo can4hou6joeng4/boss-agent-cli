@@ -247,6 +247,24 @@ def test_export_nulls_integer_beyond_4300_digits() -> None:
 	assert parsed == {"n": None}
 
 
+def test_export_keeps_4300_digit_negative_integer_with_sign_in_str() -> None:
+	value = -(2**14284)
+	assert len(str(value)) == 4301  # 负号占一个字符，但数字位仍是 4300
+	assert json.dumps({"n": value})
+
+	parsed = json.loads(strict_json_text({"n": value}, null_oversized_ints=True))
+
+	assert parsed == {"n": value}
+
+
+def test_export_nulls_negative_integer_beyond_4300_digits() -> None:
+	value = -(10**4300)
+
+	parsed = json.loads(strict_json_text({"n": value}, null_oversized_ints=True))
+
+	assert parsed == {"n": None}
+
+
 def test_export_nulls_oversized_integer_inside_nested_structures() -> None:
 	payload = {"rows": [{"n": 10**4300, "keep": 2**14284}]}
 	parsed = json.loads(strict_json_text(payload, null_oversized_ints=True))
