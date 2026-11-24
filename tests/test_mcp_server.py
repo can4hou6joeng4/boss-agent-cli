@@ -1302,6 +1302,12 @@ def test_run_boss_timeout(mock_run):
 		(("watch", "run", "w1"), 600, 900),
 		# export 默认 50 条 = ceil(50/15)=4 页，每页一次列表请求。
 		(("export", "golang"), 200, 400),
+		# export 带福利 / 活跃度时与 search 走同一条详情管线：按
+		# detail_filter_max_pages 估计逐条详情请求，不能只按 count 数列表页
+		# （Issue #2725）。active=online 只看列表，仍按 count 估。
+		(("export", "golang", "--welfare", "双休"), 600, 900),
+		(("export", "golang", "--active", "3day"), 600, 900),
+		(("export", "golang", "--active", "online"), 200, 400),
 		(("export", "golang", "--count", "300"), 600, 900),
 		# hr chat = 1 次好友列表 + ceil(summary_limit/50) 批。
 		(("hr", "chat"), 200, 300),
@@ -1323,6 +1329,27 @@ def test_cli_timeout_estimates_from_arguments(argv, minimum, maximum):
 
 	assert minimum <= timeout <= maximum
 	assert timeout <= 900
+
+
+@pytest.mark.parametrize(
+	"argv, filter_recovery",
+	[
+		(("export", "golang", "--welfare", "双休"), True),
+		(("export", "golang", "--active", "3day"), True),
+		(("export", "golang", "--active", "online"), False),
+		(("export", "golang"), False),
+	],
+)
+def test_read_interrupt_recovery_export_detail_filters(argv, filter_recovery):
+	"""带筛选的 export 与 search 共用福利 / 活跃度中断文案（Issue #2725）。"""
+	from boss_agent_cli import mcp_server
+
+	recovery = mcp_server._read_interrupt_recovery(argv)
+
+	expected = (
+		mcp_server._FILTER_READ_INTERRUPT_RECOVERY if filter_recovery else mcp_server._READ_INTERRUPT_RECOVERY
+	)
+	assert recovery == expected
 
 
 @pytest.mark.parametrize(

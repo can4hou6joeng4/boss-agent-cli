@@ -298,6 +298,13 @@ def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
 		return _DRY_RUN_INTERRUPT_RECOVERY
 	if args and args[0] in {"search", "watch"}:
 		return _FILTER_READ_INTERRUPT_RECOVERY
+	if args and args[0] == "export":
+		welfare = _option_value(args, "--welfare") or ""
+		active = _option_value(args, "--active") or ""
+		# 带筛选的 export 与 search 一样逐条查详情：恢复文案要提示换
+		# active=online 或缩小范围，而不是让调用方直接重试同一段长扫描（Issue #2725）。
+		if welfare or active not in ("", "online"):
+			return _FILTER_READ_INTERRUPT_RECOVERY
 	return _READ_INTERRUPT_RECOVERY
 #: 子进程没能启动：从未运行过，不可能有平台副作用。真正要处理的是安装 / 路径，
 #: 让 Agent 去核对 checkpoint 与平台结果只会把人引向不存在的现场（Issue #962）。
@@ -409,6 +416,15 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 		count = _int_option(args, "--count", _EXPORT_DEFAULT_COUNT)
 		if count is None or count < 1:
 			return None
+		welfare = _option_value(args, "--welfare") or ""
+		active = _option_value(args, "--active") or ""
+		if welfare or active not in ("", "online"):
+			# 带福利 / 活跃度时 export 与 search 走同一条详情管线：逐条查
+			# job_card，页数上限同为 detail_filter_max_pages。只按 --count
+			# 数列表页会把 80 次请求估成 4 次，宿主在约 290s 就以
+			# WORKFLOW_TIMEOUT 中断只读导出（Issue #2725）。
+			pages = detail_filter_max_pages(welfare, active or None)
+			return min(pages * (_SEARCH_PAGE_SIZE + 1), _MAX_ESTIMATED_REQUESTS)
 		# 整数除法避免超大 JSON 整数在浮点除法时抛 OverflowError（Issue #1609）。
 		# 超时最终按 900 秒封顶，这里没必要保留比封顶更大的精确页数。
 		pages = -(-count // _SEARCH_PAGE_SIZE)
