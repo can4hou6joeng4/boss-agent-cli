@@ -417,3 +417,16 @@ def test_search_command_reports_detail_lookup_count(tmp_path):
 	hint = json.loads(outcome.output)["hints"]["active_filter"]
 	assert hint["detail_lookups"] == 4
 	assert "--active online" in hint["detail_note"]
+
+
+def test_search_whitespace_welfare_is_not_detail_filter_2717(tmp_path):
+	"""空白福利归一后没有条件，不能按详情筛选跳过翻页提示（Issue #2717）。"""
+	outcome, mock_pipeline = _invoke_search(
+		["--data-dir", str(tmp_path), "--json", "search", "Python", "--welfare", "  "],
+		SearchPipelineResult(has_more=True, has_more_reported=True),
+	)
+	assert outcome.exit_code == 0, outcome.output
+	assert mock_pipeline.call_args.kwargs["welfare_conditions"] == []
+	payload = json.loads(outcome.output)
+	next_actions = payload["hints"].get("next_actions") or []
+	assert any("--page 2" in action for action in next_actions)
