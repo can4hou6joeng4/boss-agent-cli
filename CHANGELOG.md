@@ -7,6 +7,7 @@
 ### Fixed
 
 - `hr chat` / 向导 communication 的最后一条消息不再把非有限浮点写成伪文本：平台 JSON 里的 `1e400` / `Infinity` / `NaN` 会解析成 `inf` / `nan`，此前 `message_text` 直接 `str()` 并把 `"inf"` / `"nan"` 写进 `friendList[].last_msg`；现在文本归一按「非有限数值 = 缺失」处理，与 `format_chat_time` / `safe_local_time` / `clean_unread_by_tab` 同口径（Issue #2730）。
+- `-o` 路径以 `~user` 开头且含 NUL / 孤立高位代理项时，`_expand_user` 不再让 `Path.expanduser()` 的裸 `ValueError` / `UnicodeEncodeError` 穿到命令层：归一为带 `filename` 的 `OSError(EINVAL)`，落成不可重试的 `LOCAL_IO_ERROR`，与同模块 `_lstat_mode` / mkdir 分支同口径；此前 `chat --export` 等入口会把它兜成可重试的 `NETWORK_ERROR`（Issue #2732）。
 
 ## [3.4.203] - 2026-11-25
 
