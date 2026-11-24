@@ -533,6 +533,16 @@ def _optional_str_strict(inputs: Mapping[str, Any], name: str) -> str | None:
 	return raw
 
 
+def _choice_input(inputs: Mapping[str, Any], name: str, default: str) -> str:
+	"""读取枚举型字符串输入：缺省 / null / 空串用默认值，其余非字符串点名报错。
+
+	``str(inputs.get(name) or default)`` 会让 ``false`` / ``0`` / ``[]`` 静默落到
+	默认值（``{"action": 0}`` 变成 list），其他类型则经 ``str()`` 变成 repr 再报
+	「未知取值」，看不出是类型问题（Issue #2701）。取值域仍由调用方校验。
+	"""
+	return _optional_str_strict(inputs, name) or default
+
+
 def _optional_nonblank_str(
 	inputs: Mapping[str, Any],
 	name: str,
@@ -1889,7 +1899,7 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		count: int | None = None
 		if raw_count is not None and raw_count != "":
 			count = _int_input(inputs, "count", 1, minimum=1, maximum=MAX_TRUSTED_COUNT)
-		fmt = str(inputs.get("format") or "json")
+		fmt = _choice_input(inputs, "format", "json")
 		if fmt not in {"json", "csv"}:
 			raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
 		output_path = _export_output_path(context, inputs, fmt)
@@ -2027,7 +2037,7 @@ def _run_all_saved_watches(context: ActionContext, cache: CacheStore) -> dict[st
 
 
 def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	action = str(inputs.get("action") or "list")
+	action = _choice_input(inputs, "action", "list")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if action == "list":
 			items, corrupt = cache.list_saved_searches_with_corrupt()
@@ -2658,7 +2668,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		)
 	if not isinstance(raw_query, str):
 		raise WorkflowActionError("INVALID_PARAM", "搜索关键词必须是字符串")
-	hook_profile = str(inputs.get("hook_profile") or "none")
+	hook_profile = _choice_input(inputs, "hook_profile", "none")
 	if hook_profile != "none":
 		# 向导没有 hook-dir 输入，screenshot-full 在这里必然失败；提前按参数错误返回，
 		# 而不是让 create_and_run 里的 ValueError 落成可重试的 NETWORK_ERROR。
