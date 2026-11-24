@@ -26,7 +26,7 @@ from boss_agent_cli.wizard.models import (
 	WorkflowInputError,
 	WorkflowPlan,
 	WorkflowStatus,
-	_ensure_storable_inputs,
+	ensure_storable_inputs,
 )
 from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
@@ -160,7 +160,7 @@ def test_input_depth_cap_rejects_deep_structure_directly() -> None:
 		value = [value]
 
 	with pytest.raises(WorkflowInputError, match="嵌套超过"):
-		_ensure_storable_inputs(value)
+		ensure_storable_inputs(value)
 
 
 # ── Issue #2187：失败 run 的空 error 回退到步骤错误 ────────────────
