@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 `search_url` 展开时显式 `raw_params` 优先于链接里的同名 code 参数：此前链接参数覆盖显式输入，与 CLI `search --url`「显式选项覆盖链接参数」的口径相反，Agent / MCP 显式指定的筛选会被链接悄悄改写，搜索与导出结果集合与请求不符（Issue #2690）。
+
 ## [3.4.193] - 2026-11-24
 
 ### Added
