@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.203] - 2026-11-25
+
 ### Fixed
 
 - `friend_security_id` 在 camelCase `securityId` 为「真值但不可用」（容器 / 数字 / 纯空白）时不再吞掉合法的 `security_id` 回退：此前 `or` 先选中不可用的 camelCase 值，函数返回空串，exchange / mark 等写操作会报不可重试的 `NETWORK_ERROR`；现在按 `securityId` → `security_id` 顺序取第一个非空字符串（Issue #2723）。
