@@ -8,6 +8,9 @@
 - 向导 / MCP 新增招聘者 `recommendations` goal（`recruiter_recommendations`）：按 `job_id` 读取推荐牛人卡片，`page` 分页并返回与 CLI 同词汇的 `pagination`；缺失 / 空白 `job_id` 与非法 `page` 在平台请求前拒绝（Issue #2682）。
 - 向导 / MCP `job_search`（`candidate_search`）与 `export`（`candidate_export`）支持 `search_url`，`job_search` 同时支持 `preset`，与顶层 `boss search --url` / `--preset`、`boss export --url` 同口径：链接展开白名单筛选参数，链接里的关键词只在未显式提供 `query` 时补上（有链接时关键词可省略），`page` 仅在未显式给出时采用；preset 只补未提供的键（显式输入优先），损坏记录返回 `SAVED_SEARCH_INVALID` 并给 `preset remove` / `preset add` 删除重建指引，不存在返回 `SAVED_SEARCH_NOT_FOUND`；空白 `search_url` / `preset` 与非法链接在平台请求前返回 `INVALID_PARAM`。`wizard_catalog` 的 goal 新增 `either_inputs` 声明「query / search_url / preset 至少一个」（Issue #2685）。
 
+### Fixed
+- 向导 `--resume` 读取历史 run 的 inputs 时补上可存储性校验：新建 plan 已拒绝 NaN / Infinity 与孤立代理字符（#1883、#2058），但旧版本写入的 run 可能带着这类值，恢复时会在 sqlite 绑参 / httpx 编码阶段落成带磁盘指引的 `LOCAL_IO_ERROR`；现在与 params 结构漂移同口径返回 `CACHE_RECORD_INVALID` 并给出重建指引（Issue #2687）。
+
 ## [3.4.192] - 2026-11-24
 
 ### Added

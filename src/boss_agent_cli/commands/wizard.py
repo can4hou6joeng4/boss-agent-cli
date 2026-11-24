@@ -22,7 +22,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
-from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput
+from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput, ensure_storable_inputs
 from boss_agent_cli.wizard.prompts import (
 	WizardCancelled,
 	WizardControl,
@@ -281,11 +281,23 @@ def _plan_from_run(run: Mapping[str, Any]) -> WorkflowPlan:
 	# 否则会绕过 --platform 校验去读遗留登录态，并被兜底成可重试的 NETWORK_ERROR。
 	require_supported_platform(str(run["role"]), str(run["platform"]))
 	params = run.get("params") or {}
+	inputs = dict(params.get("inputs") or {})
+	# 新建 plan 在 `WizardInput.from_mapping` 已拒绝 NaN / 孤立代理字符（Issue
+	# #1883、#2058），但 #2058 之前写入的历史 run 可能带着这类值；恢复时动作层
+	# 多数参数没有可编码性校验，会在 sqlite 绑参 / httpx 编码阶段落成误导性的
+	# LOCAL_IO_ERROR。本地记录写坏与 params 结构漂移同口径报 CACHE_RECORD_INVALID
+	# （Issue #2687）。
+	try:
+		ensure_storable_inputs(inputs)
+	except WorkflowInputError as exc:
+		raise CacheRecordInvalid(
+			"workflow_run", str(run.get("run_id") or "-"), "params.inputs", str(exc)
+		) from exc
 	return WorkflowPlan(
 		role=str(run["role"]),
 		platform=str(run["platform"]),
 		goal=str(run["goal"]),
-		inputs=dict(params.get("inputs") or {}),
+		inputs=inputs,
 		requested_steps=tuple(params.get("requested_steps") or ()),
 		mode=str(run["mode"]),
 	)

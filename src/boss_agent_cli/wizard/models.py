@@ -41,7 +41,7 @@ def _reject_lone_surrogates(text: str, path: str) -> None:
 _MAX_INPUT_DEPTH = 200
 
 
-def _ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) -> None:
+def ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) -> None:
 	"""递归拒绝 NaN / Infinity（Issue #1883）与孤立代理字符（Issue #2058）。
 
 	``json.loads`` 默认接受 ``NaN`` / ``Infinity``，而 ``nan != nan`` 恒真：
@@ -75,11 +75,11 @@ def _ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) ->
 					"对象键只支持字符串"
 				)
 			# 字符串键的代理字符由递归校验统一处理。
-			_ensure_storable_inputs(key, item_path, depth + 1)
-			_ensure_storable_inputs(item, item_path, depth + 1)
+			ensure_storable_inputs(key, item_path, depth + 1)
+			ensure_storable_inputs(item, item_path, depth + 1)
 	elif isinstance(value, (list, tuple)):
 		for index, item in enumerate(value):
-			_ensure_storable_inputs(item, f"{path}[{index}]", depth + 1)
+			ensure_storable_inputs(item, f"{path}[{index}]", depth + 1)
 	elif value is not None and not isinstance(value, (bool, int, float)):
 		# JSON 原生类型之外的值（bytes / set / Decimal / 自定义对象）无法落到
 		# 断点的 JSON 列：WorkflowStore.create 的 json.dumps 会抛 TypeError，
@@ -131,7 +131,7 @@ class WizardInput:
 		inputs = value.get("inputs", {})
 		if not isinstance(inputs, Mapping):
 			raise WorkflowInputError("inputs 必须是 JSON object")
-		_ensure_storable_inputs(inputs)
+		ensure_storable_inputs(inputs)
 		requested: Any = ()
 		if "requested_steps" in value:
 			requested = value["requested_steps"]
