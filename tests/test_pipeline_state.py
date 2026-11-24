@@ -100,3 +100,36 @@ def test_select_follow_up_candidates_filters_only_actionable_states():
 	]
 	selected = select_follow_up_candidates(items)
 	assert [item["stage"] for item in selected] == ["reply_needed", "follow_up", "interview"]
+
+
+def test_build_pipeline_items_normalizes_nonfinite_and_container_fields():
+	"""nan / inf 与容器漂移按缺失处理，不能写进产物或 Markdown（Issue #2739）。"""
+	items = build_pipeline_items(
+		chat_items=[{
+			"securityId": {"id": "s"},
+			"encryptJobId": ["j"],
+			"brandName": float("nan"),
+			"title": ["HR"],
+			"lastMsg": float("inf"),
+			"relationType": 1,
+			"lastTS": 1700000000000,
+		}],
+		interview_items=[{
+			"brandName": {"name": "Acme"},
+			"jobName": ["Go"],
+			"statusDesc": float("nan"),
+			"interviewTime": {"t": 1},
+		}],
+		now_ts_ms=1700000000000,
+	)
+	by_source = {item["source"]: item for item in items}
+	chat, interview = by_source["chat"], by_source["interview"]
+	assert chat["security_id"] == ""
+	assert chat["job_id"] == ""
+	assert chat["company"] == "-"
+	assert chat["title"] == "-"
+	assert chat["last_msg"] == "-"
+	assert interview["company"] == "-"
+	assert interview["title"] == "-"
+	assert interview["last_msg"] == "-"
+	assert interview["last_time"] == "-"

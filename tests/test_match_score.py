@@ -109,3 +109,17 @@ def test_meets_education_threshold_tolerates_non_string_required():
 
 	assert meets_education_threshold("本科", ["本科"]) is True
 	assert meets_experience_threshold("3-5年", ["3-5年"]) is True
+
+
+def test_expect_preferences_fall_back_when_primary_keys_drift_to_containers():
+	"""主键是真值容器时不能吞掉合法的 camelCase 回退键（Issue #2740）。"""
+	job = _job(welfareList=[])
+	expect = {
+		"city": ["广州"], "cityName": "广州",
+		"salary": ["20-30K"], "salaryDesc": "20-30K",
+		"degree": ["本科"], "education": "本科",
+	}
+	result = score_job_item(job, criteria=None, expect_data=expect)
+
+	assert result["match_score"] == 65
+	assert result["match_reasons"] == ["城市匹配", "薪资满足预期", "学历满足要求"]

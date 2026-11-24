@@ -22,13 +22,28 @@ def _pref_text(value: Any) -> str | None:
 	return None
 
 
+def _first_pref_text(expect_data: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+	"""按优先级取第一个可用的期望文本。
+
+	不能先 ``expect_data.get(k1) or expect_data.get(k2)`` 再校验类型：主键是
+	真值容器（如 ``{"city": ["上海"], "cityName": "上海"}``）时 ``or`` 已选中
+	容器，校验返回 ``None``，合法的回退键永远不会被读取，匹配分静默少算
+	（与 #2723 同类的回退链缺陷，Issue #2740）。
+	"""
+	for key in keys:
+		text = _pref_text(expect_data.get(key))
+		if text is not None:
+			return text
+	return None
+
+
 def _extract_expect_preferences(expect_data: dict[str, Any] | None) -> dict[str, Any]:
 	if not expect_data:
 		return {}
 	return {
-		"city": _pref_text(expect_data.get("city") or expect_data.get("cityName") or expect_data.get("locationName")),
-		"salary": _pref_text(expect_data.get("salary") or expect_data.get("salaryDesc")),
-		"education": _pref_text(expect_data.get("degree") or expect_data.get("education")),
+		"city": _first_pref_text(expect_data, ("city", "cityName", "locationName")),
+		"salary": _first_pref_text(expect_data, ("salary", "salaryDesc")),
+		"education": _first_pref_text(expect_data, ("degree", "education")),
 	}
 
 

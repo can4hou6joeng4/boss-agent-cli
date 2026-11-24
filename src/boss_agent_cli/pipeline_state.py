@@ -1,7 +1,7 @@
 import time
 from typing import Any
 
-from boss_agent_cli.api.models import dict_items
+from boss_agent_cli.api.models import dict_items, field_text
 from boss_agent_cli.services.chat_utils import RELATION_LABELS, int_code, safe_local_time
 
 
@@ -47,13 +47,16 @@ def build_pipeline_items(*, chat_items: list[dict[str, Any]], interview_items: l
 			{
 				"source": "chat",
 				"stage": stage,
-				"security_id": raw.get("securityId") or "",
-				"job_id": raw.get("encryptJobId") or "",
-				"company": raw.get("brandName") or "-",
-				"title": raw.get("title") or "-",
+				# 文本字段统一走 field_text：`raw.get(k) or 默认值` 会让 nan / inf
+				# 穿过（真值）并把容器 str() 成 Python repr 写进产物 / Markdown
+				# （Issue #2739）。
+				"security_id": field_text(raw, "securityId"),
+				"job_id": field_text(raw, "encryptJobId"),
+				"company": field_text(raw, "brandName", "-"),
+				"title": field_text(raw, "title", "-"),
 				"relation": RELATION_LABELS.get(int_code(raw.get("relationType")), "未知"),
 				"unread": unread,
-				"last_msg": raw.get("lastMsg") or "-",
+				"last_msg": field_text(raw, "lastMsg", "-"),
 				"last_time": _ts_to_label(int_code(raw.get("lastTS")) or 0),
 				"reason": "存在未读消息" if unread > 0 else "需要继续推进" if stage == "follow_up" else "会话进行中",
 			}
@@ -64,14 +67,14 @@ def build_pipeline_items(*, chat_items: list[dict[str, Any]], interview_items: l
 			{
 				"source": "interview",
 				"stage": "interview",
-				"security_id": raw.get("securityId") or "",
-				"job_id": raw.get("encryptJobId") or "",
-				"company": raw.get("brandName") or "-",
-				"title": raw.get("jobName") or "-",
+				"security_id": field_text(raw, "securityId"),
+				"job_id": field_text(raw, "encryptJobId"),
+				"company": field_text(raw, "brandName", "-"),
+				"title": field_text(raw, "jobName", "-"),
 				"relation": "面试",
 				"unread": 0,
-				"last_msg": raw.get("statusDesc") or "-",
-				"last_time": raw.get("interviewTime") or "-",
+				"last_msg": field_text(raw, "statusDesc", "-"),
+				"last_time": field_text(raw, "interviewTime", "-"),
 				"reason": "存在待处理面试安排",
 			}
 		)
