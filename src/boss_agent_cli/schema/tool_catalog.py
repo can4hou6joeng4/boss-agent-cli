@@ -134,7 +134,15 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"description": "可选的 goal 内步骤子集；省略表示执行全部步骤，空数组非法",
 					},
 					"run_id": {"type": "string", "description": "resume/status/stop 的显式 workflow run_id"},
-					"timeout": {"type": "number", "minimum": 0.001, "description": "workflow 超时秒数"},
+					"timeout": {
+						"type": "number",
+						"minimum": 0.001,
+						"default": 120,
+						"description": (
+							"workflow 超时秒数；run / resume 省略时 MCP 宿主按 120 秒设置子进程截止，"
+							"CLI 直接调用不设截止"
+						),
+					},
 					"max_retries": {"type": "integer", "minimum": 0, "maximum": 10, "default": 0, "description": "可恢复步骤的最大重试次数"},
 				},
 				"required": [],
