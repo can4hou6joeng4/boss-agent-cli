@@ -74,6 +74,7 @@ from boss_agent_cli.crawler.hooks import HookRegistrationError, verify_hook_prof
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
+from boss_agent_cli.services.recommend_items import build_recommend_items
 from boss_agent_cli.services.saved_searches import validate_stored_search_params
 from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items
 from boss_agent_cli.services.text_files import is_utf8_encodable
@@ -1055,7 +1056,26 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 页码在打开平台前校验：越界值不应先构造平台实例（Issue #2625）。
 	page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
+	# with_score 与顶层 `recommend --with-score` 同口径：向导此前完全不读该键，
+	# 传 true 仍返回平台原始列表且报成功（Issue #2662）。类型错误同样在平台
+	# 请求前拒绝，避免先发一次注定无法用于评分的请求。
+	with_score = _bool_input(inputs, "with_score")
 	with context.candidate_platform() as platform:
+		expect_data: dict[str, Any] | None = None
+		if with_score:
+			try:
+				expect_resp = platform.resume_expect()
+			except NotImplementedError as exc:
+				recoverable, recovery = error_contract_for_code("NOT_SUPPORTED")
+				raise WorkflowActionError(
+					"NOT_SUPPORTED",
+					str(exc) or "当前平台不支持求职期望能力",
+					recoverable=recoverable,
+					recovery_action=recovery,
+				) from exc
+			unwrapped = _unwrap(platform, expect_resp, "求职期望获取失败", context=context)
+			# 与 CLI 同口径：求职期望不是对象时按空期望评分，不让结构漂移中断推荐。
+			expect_data = unwrapped if isinstance(unwrapped, dict) else {}
 		data = _unwrap(
 			platform,
 			platform.recommend_jobs(page=page),
@@ -1063,6 +1083,16 @@ def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prio
 			context=context,
 		)
 	items = _extract_list_items(data, ("recommendList", "jobList", "list", "items", "result"))
+	if with_score:
+		# 归一、问候态与匹配分与 CLI `recommend` 共用一份实现（Issue #2662）。
+		with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
+			items = build_recommend_items(
+				items,
+				cache=cache,
+				account=account_scope(context.auth()),
+				with_score=True,
+				expect_data=expect_data,
+			)
 	return StepResult(_with_items({"result": data}, items))
 
 

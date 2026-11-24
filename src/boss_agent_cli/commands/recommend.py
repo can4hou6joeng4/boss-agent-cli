@@ -2,16 +2,15 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.models import dict_items, JobItem, field_list
+from boss_agent_cli.api.models import dict_items, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table, show_command_for_ctx
 from boss_agent_cli.index_cache import try_save_index
-from boss_agent_cli.match_score import score_job_dict
-from boss_agent_cli.services.job_identity import deduplicate_job_result
 from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, clamp_trusted, page_can_advance
+from boss_agent_cli.services.recommend_items import build_recommend_items
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -63,14 +62,15 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 				platform_data = {}
 			job_list = dict_items(field_list(platform_data, "jobList"))
 
-			items = []
-			for raw_item in deduplicate_job_result(job_list):
-				item = JobItem.from_api(raw_item)
-				item.greeted = cache.is_greeted(item.security_id, job_id=item.job_id, account=account)
-				item_dict = item.to_dict()
-				if with_score:
-					item_dict = score_job_dict(item_dict, criteria=None, expect_data=expect_data)
-				items.append(item_dict)
+			# 归一、问候态与匹配分与向导 recommendations 共用同一份实现，
+			# 两处入口的字段集合与账号口径不会各自漂移（Issue #2662）。
+			items = build_recommend_items(
+				job_list,
+				cache=cache,
+				account=account,
+				with_score=with_score,
+				expect_data=expect_data,
+			)
 
 		snapshot = try_save_index(data_dir, items, source="recommend", page=page, logger=logger)
 		saved = bool(snapshot)

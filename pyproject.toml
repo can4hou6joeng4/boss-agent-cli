@@ -303,6 +303,7 @@ module = [
 	"boss_agent_cli.services.candidate_actions",
 	"boss_agent_cli.services.job_card",
 	"boss_agent_cli.services.job_identity",
+	"boss_agent_cli.services.recommend_items",
 	"boss_agent_cli.services.job_export",
 	"boss_agent_cli.services.recruiter_identity",
 	"boss_agent_cli.platforms.factory",
