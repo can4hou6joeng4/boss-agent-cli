@@ -965,6 +965,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"stage": {"type": "string", "enum": list(STAGE_CODES), "description": "融资阶段（可选）"},
 					"job_type": {"type": "string", "enum": list(JOB_TYPE_CODES), "description": "职位类型（可选）"},
 					"welfare": {"type": "string", "description": "福利筛选（可选）"},
+					# 与 CLI `watch add --active` / 向导 add 动作同口径（Issue #2704）。
+					"active": {"type": "string", "minLength": 1, "description": "HR 活跃度下限：online / today / 3d / week / 2w / month / half-year（可选，也认 3day、3日 等写法）"},
 				},
 				"required": ["name", "query"],
 			},

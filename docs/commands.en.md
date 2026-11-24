@@ -210,7 +210,7 @@ Follow-up hints from chat commands keep the current `--data-dir`. The `hints.nex
 | Command | Description |
 |---------|-------------|
 | `boss pipeline` / `boss follow-up` / `boss digest` | Build progress, follow-up, and daily views from conversations/interviews |
-| `boss watch add/list/remove/run` | Save, list, remove, or run incremental job watches (`run` takes either a name or `--all`, not both) |
+| `boss watch add/list/remove/run` | Save, list, remove, or run incremental job watches (`add` takes the same filters as `search`, including `--active`; `run` takes either a name or `--all`, not both) |
 | `boss shortlist add/list/annotate/compare/remove` | Local shortlist with tags, notes, and offline compare |
 | `boss favorites list/sync` | Read BOSS job favorites with validity status; sync imports only explicitly active jobs (deduplicates jobs, refreshes dynamic access IDs, preserves first-saved time) |
 | `boss preset add/list/remove` | Search presets |

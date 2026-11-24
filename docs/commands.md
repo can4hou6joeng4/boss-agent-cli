@@ -208,7 +208,7 @@ boss crawl stop <run_id>
 | `boss pipeline` | 聚合会话和面试数据生成候选进度 |
 | `boss follow-up` | 筛选需要跟进的会话和面试项 |
 | `boss digest` | 汇总新增职位、待跟进会话和面试项 |
-| `boss watch add/list/remove/run` | 保存、列出、删除或执行增量职位监控（`run` 的点名与 `--all` 只能选一个） |
+| `boss watch add/list/remove/run` | 保存、列出、删除或执行增量职位监控（`add` 支持与 `search` 相同的筛选，含 `--active` 活跃度下限；`run` 的点名与 `--all` 只能选一个） |
 | `boss shortlist add/list/annotate/compare/remove` | 本地候选池：支持标签、备注和离线对比 |
 | `boss favorites list/sync` | 读取 BOSS 职位收藏并呈现有效状态；sync 只导入明确有效职位（按职位去重、刷新动态访问 ID，保留首次收藏时间） |
 | `boss preset add/list/remove` | 搜索预设 |
