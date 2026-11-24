@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.184（2026-11-24）：向导 / MCP `boss_wizard` 的 `export` goal 支持 `count`，显式传入时按顶层 `boss export` 同一页数预算取满即停，`data` 增加 `requested` 与 `truncated`；不传 `count` 时保持原有导出范围（Issue #2648）。
+
 v3.4.183（2026-11-24）：向导 / MCP `boss_wizard` 保存监控时，非字符串或纯空白的 `active` 不再按「不筛选」静默保存，改为在写库前返回参数错误（Issue #2645）。
 
 v3.4.182（2026-11-24）：`crawl` 详情缓存不再把断点里显式 null 的 job_id 当成共享键；后台恢复的预检失败不再因还原写库失败丢掉原始错误；执行器已持锁的 queued 任务不再报排队超时（Issue #2642）。

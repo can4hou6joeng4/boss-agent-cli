@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.184] - 2026-11-24
+
 ### Added
 - 向导 / MCP `boss_wizard` 的 `export` goal 支持 `count`：显式传入时按顶层 `boss export` 同一页数预算（每页约 15 条估页 + 5 页筛选余量）扫描并最多导出该条数，`data` 增加 `requested` 与 `truncated`，少于请求条数时能区分平台已无更多与页数预算耗尽；不传 `count` 时保持原有导出范围，非法值在平台请求前返回 `INVALID_PARAM`（Issue #2648）。
 
