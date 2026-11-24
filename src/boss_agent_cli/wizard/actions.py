@@ -47,7 +47,7 @@ from boss_agent_cli.services.contact_lookup import (
 )
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
-from boss_agent_cli.services.pagination import MAX_TRUSTED_COUNT, MAX_TRUSTED_PAGE
+from boss_agent_cli.services.pagination import MAX_TRUSTED_COUNT, MAX_TRUSTED_PAGE, export_page_budget
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
@@ -228,6 +228,7 @@ def execute_candidate_search(
 	inputs: Mapping[str, Any],
 	*,
 	pipeline: Callable[..., Any] = run_search_pipeline,
+	limit: int | None = None,
 ) -> Any:
 	"""Shared platform search call used by the command and workflow action."""
 	# query 类型错误不能经 str() 静默变成空关键词或容器的 repr 文本：
@@ -301,6 +302,7 @@ def execute_candidate_search(
 		max_pages=_int_input(inputs, "max_pages", detail_filter_max_pages(welfare_conditions, active), minimum=1),
 		welfare_conditions=welfare_conditions,
 		before_list_request=inputs.get("before_list_request"),
+		limit=limit,
 		**extra,
 	)
 
@@ -1534,21 +1536,40 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	# 导出文件照常生成并报成功（Issue #2519）。
 	_required_nonblank_str(inputs, "query")
 	include_private = _bool_input(inputs, "include_private")
+	# count 与 CLI `--count` 同口径：缺省 / null / 空串表示由默认页数预算
+	# 决定导出范围（保持旧行为）；显式值必须是 ≥ 1 的整数，显式 0 不能
+	# 被当成「没给」悄悄换成缺省（与 #2621 的游标口径一致）。
+	raw_count = inputs.get("count")
+	count: int | None = None
+	if raw_count is not None and raw_count != "":
+		count = _int_input(inputs, "count", 1, minimum=1, maximum=MAX_TRUSTED_COUNT)
 	fmt = str(inputs.get("format") or "json")
 	if fmt not in {"json", "csv"}:
 		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
 	output_path = _export_output_path(context, inputs, fmt)
+	search_inputs = {**inputs, "account": account_scope(context.auth())}
+	if count is not None and search_inputs.get("max_pages") in (None, ""):
+		# 与顶层 `boss export` 同一页数口径：只给默认页数预算时按 count 估页，
+		# 否则默认 1 页会把 count=50 的请求截在首屏。用户显式给了 max_pages
+		# 时尊重其预算（结果仍按 count 截断）。
+		search_inputs["max_pages"] = export_page_budget(count)
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
 			# 与 candidate_search / candidate_watch 一致：导出时的 greeted 标记
 			# 必须按当前账号计算，否则登录态下会把所有职位都标成未打招呼。
 			result = execute_candidate_search(
-				platform, cache, context.logger, {**inputs, "account": account_scope(context.auth())}
+				platform, cache, context.logger, search_inputs, limit=count
 			)
 	output = prepare_output_path(output_path)
 	items = prepare_export_items(result.items, include_private=include_private)
 	write_export_file(items, fmt, str(output))
-	return StepResult({"path": str(output), "format": fmt, "count": len(items)}, artifacts=(str(output),))
+	data: dict[str, Any] = {"path": str(output), "format": fmt, "count": len(items)}
+	if count is not None:
+		# 少于请求条数时区分「平台已没有更多」与「页数预算耗尽」：后者
+		# truncated=true，调用方不能把前缀当完整结果。
+		data["requested"] = count
+		data["truncated"] = len(items) < count and result.has_more
+	return StepResult(data, artifacts=(str(output),))
 
 
 def _saved_search_invalid_error(context: ActionContext, name: str, detail: str) -> WorkflowActionError:

@@ -603,8 +603,9 @@ def test_candidate_export_scopes_search_to_current_account(tmp_path):
 	class _Result:
 		items: list = []
 
-	def fake_search(platform_arg, cache, logger, inputs):
+	def fake_search(platform_arg, cache, logger, inputs, *, limit=None):
 		captured.update(inputs)
+		captured["limit"] = limit
 		return _Result()
 
 	with (
