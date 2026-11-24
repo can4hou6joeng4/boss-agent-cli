@@ -6,6 +6,7 @@ from boss_agent_cli.services.contact_lookup import (
 	FriendLookupLimitExceeded,
 	find_friend,
 	find_friend_by_security_id,
+	friend_security_id,
 )
 
 
@@ -237,3 +238,32 @@ def test_find_friend_keeps_paging_when_pages_lack_identifiers():
 	assert friend_item == {"uid": 10001, "securityId": "sid_target"}
 	assert error_response is None
 	assert calls == [1, 2, 3]
+
+
+# ── #2723：securityId 漂移时不能吞掉合法的 security_id 回退 ──────────────
+@pytest.mark.parametrize(
+	"camel",
+	[{"x": 1}, ["sid"], 123, "   ", "sid_ok"],
+	ids=["dict", "list", "int", "blank", "valid"],
+)
+def test_friend_security_id_prefers_first_valid_string(camel):
+	"""camelCase 不可用时回退 snake_case；两者都可用时 camelCase 优先。"""
+	item = {"securityId": camel, "security_id": "sid_snake"}
+	expected = camel.strip() if isinstance(camel, str) and camel.strip() else "sid_snake"
+	assert friend_security_id(item) == expected
+
+
+@pytest.mark.parametrize(
+	"item",
+	[
+		{},
+		{"securityId": None},
+		{"securityId": {"x": 1}},
+		{"securityId": {"x": 1}, "security_id": True},
+		{"securityId": "  ", "security_id": 0},
+	],
+	ids=["missing", "none", "dict", "snake-bool", "snake-zero"],
+)
+def test_friend_security_id_returns_empty_without_valid_candidate(item):
+	"""两个键都没有非空字符串时按缺失处理，绝不把漂移值转成身份文本。"""
+	assert friend_security_id(item) == ""
