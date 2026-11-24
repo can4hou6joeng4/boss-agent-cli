@@ -186,6 +186,36 @@ def _invalid_welfare_conditions(raw: Any) -> WorkflowActionError:
 	)
 
 
+def _parse_welfare_input(raw: Any) -> list[tuple[str, list[str]]]:
+	"""把 wizard 的 ``welfare`` 输入归一成 pipeline 的 ``(label, keywords)`` 形状。
+
+	数组元素必须是字符串：``str(item)`` 会把 123 / 嵌套数组变成 ``"123"`` /
+	``"['双休']"`` 这类永不命中的标签，搜索照常报成功（#2421 给 watch add 修过
+	同一模式；搜索 / 导出入口此前仍在静默转换，Issue #2654）。非字符串、非
+	数组的取值（false / 0 / 对象）也不能被入口的真值判断吞成「不筛选」。
+	"""
+	if isinstance(raw, str):
+		labels = [item.strip() for item in raw.split(",")]
+	elif isinstance(raw, (list, tuple)):
+		for index, item in enumerate(raw):
+			if not isinstance(item, str):
+				raise WorkflowActionError(
+					"INVALID_PARAM",
+					f"welfare 的第 {index} 个元素必须是字符串（收到 {type(item).__name__}）",
+					recoverable=True,
+					recovery_action='把 welfare 写成字符串数组（如 ["双休", "五险一金"]）后重试',
+				)
+		labels = [item.strip() for item in raw]
+	else:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"welfare 必须是字符串或字符串数组（收到 {type(raw).__name__}）",
+			recoverable=True,
+			recovery_action="把 welfare 写成逗号分隔字符串或字符串数组后重试；不按福利筛选时省略该字段",
+		)
+	return [(label, resolve_welfare_keywords(label)) for label in labels if label]
+
+
 def _normalize_welfare_conditions(raw: Any) -> list[tuple[str, list[str]]] | None:
 	"""把 wizard 的 ``welfare_conditions`` 归一到 pipeline 的 ``(label, keywords)`` 形状。
 
@@ -248,14 +278,9 @@ def execute_candidate_search(
 			recovery_action="换成只含普通 Unicode 文本的搜索关键词后重试",
 		) from exc
 	welfare_conditions = inputs.get("welfare_conditions")
-	if welfare_conditions is None and inputs.get("welfare"):
-		raw_welfare = inputs["welfare"]
-		labels = (
-			[str(item).strip() for item in raw_welfare]
-			if isinstance(raw_welfare, (list, tuple))
-			else [item.strip() for item in str(raw_welfare).split(",")]
-		)
-		welfare_conditions = [(label, resolve_welfare_keywords(label)) for label in labels if label]
+	raw_welfare = inputs.get("welfare")
+	if welfare_conditions is None and raw_welfare is not None and raw_welfare != "":
+		welfare_conditions = _parse_welfare_input(raw_welfare)
 	else:
 		welfare_conditions = _normalize_welfare_conditions(welfare_conditions)
 	try:
