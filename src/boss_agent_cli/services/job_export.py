@@ -63,6 +63,37 @@ def public_html_export_item_from_job(item: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+# ── 导出终止原因（CLI `export` 与 wizard export 共用，Issue #2712） ──
+#: 搜索管线终止原因 → export 信封既有词汇（Issue #907 / #2657）。
+EXPORT_STOP_REASON_ALIASES: dict[str, str] = {
+	"limit_reached": "count_reached",
+	"has_more_false": "platform_has_more_false",
+}
+
+#: 这些终止原因表示导出只是前缀：页数预算耗尽，或活跃度筛选按设计提前
+#: 停止且没取满请求条数（Issue #2710）。
+EXPORT_TRUNCATED_STOP_REASONS: frozenset[str] = frozenset(
+	{"page_budget_exhausted", "active_target_reached"}
+)
+
+
+def export_stop_reason(raw: str) -> str:
+	"""把管线终止原因映射成 export 信封词汇；未知原因原样返回。"""
+	return EXPORT_STOP_REASON_ALIASES.get(raw, raw)
+
+
+def export_is_truncated(stop_reason: str, *, item_count: int, requested: int) -> bool:
+	"""导出少于请求条数时，只有计入截断的终止原因才表示结果不完整。
+
+	取满请求条数时永远是完整结果：管线此时通常已报 ``limit_reached``，
+	但调用方自己判定 `stop_reason` 时也不能让 ``active_target_reached``
+	把恰好取满的结果标成截断。
+	"""
+	if item_count >= requested:
+		return False
+	return stop_reason in EXPORT_TRUNCATED_STOP_REASONS
+
+
 def _sanitize_surrogates(text: str) -> str:
 	"""兼容旧调用点：实现已收敛到 services.text_files（Issue #2017、#2109）。"""
 	return sanitize_surrogates(text)

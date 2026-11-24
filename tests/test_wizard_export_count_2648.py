@@ -118,6 +118,37 @@ def test_export_count_shortfall_without_more_is_not_truncated(tmp_path, monkeypa
 	assert data["truncated"] is False
 
 
+def test_export_active_early_stop_marks_truncated(tmp_path, monkeypatch):
+	"""活跃度筛选提前停止且没取满 count 时，wizard 与顶层 export 同口径报截断（Issue #2712）。"""
+	data, _, _ = _export(
+		_context(tmp_path),
+		{"query": "Golang", "count": 50, "active": "online", "output": str(tmp_path / "out.json")},
+		monkeypatch,
+		_Result([{"job_id": "job-1"}], has_more=True, stop_reason="active_target_reached"),
+	)
+
+	assert data["count"] == 1
+	assert data["requested"] == 50
+	assert data["stop_reason"] == "active_target_reached"
+	assert data["truncated"] is True
+
+
+def test_export_active_stop_with_full_count_is_not_truncated(tmp_path, monkeypatch):
+	"""恰好取满 count 时即使终止原因是 active_target_reached 也是完整结果。"""
+	items = [{"job_id": f"job-{index}"} for index in range(10)]
+	data, _, _ = _export(
+		_context(tmp_path),
+		{"query": "Golang", "count": 10, "active": "online", "output": str(tmp_path / "out.json")},
+		monkeypatch,
+		_Result(items, has_more=True, stop_reason="active_target_reached"),
+	)
+
+	assert data["count"] == 10
+	assert data["requested"] == 10
+	assert data["stop_reason"] == "active_target_reached"
+	assert data["truncated"] is False
+
+
 def test_export_without_count_keeps_legacy_behavior(tmp_path, monkeypatch):
 	"""不传 count 时不改默认页数预算，也不新增信封字段（保持旧契约）。"""
 	data, search_inputs, extra = _export(
