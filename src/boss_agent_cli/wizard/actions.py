@@ -82,6 +82,13 @@ from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_craw
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
 from boss_agent_cli.services.recommend_items import build_recommend_items
+from boss_agent_cli.services.recruiter_last_messages import (
+	DEFAULT_SUMMARY_LIMIT,
+	MAX_SUMMARY_LIMIT,
+	fetch_last_messages,
+	friend_id_for,
+	friend_sources,
+)
 from boss_agent_cli.services.saved_searches import validate_stored_search_params
 from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items
 from boss_agent_cli.services.text_files import is_utf8_encodable
@@ -700,6 +707,25 @@ def _optional_int_input(
 	if maximum is not None:
 		value = _check_maximum(value, raw, name, maximum)
 	return value
+
+
+def _optional_int_list(inputs: Mapping[str, Any], name: str, *, minimum: int = 1) -> list[int]:
+	"""读取可选整数列表：缺省 / null / 空串视为未提供，单个整数按一项处理。
+
+	与 CLI 可重复的 `--friend-id`（`IntRange(min=1)`）同口径：元素必须是正整数，
+	去重保序；非列表形状 / bool / 小数 / 越界元素都在平台请求前拒绝（向导 / MCP
+	绕过 Click，Issue #2675）。
+	"""
+	raw = inputs.get(name)
+	if raw is None or raw == "":
+		return []
+	values = raw if isinstance(raw, list) else [raw]
+	result: list[int] = []
+	for item in values:
+		value = _check_minimum(_coerce_int(item, name), item, name, minimum)
+		if value not in result:
+			result.append(value)
+	return result
 
 
 def _require_run_id(inputs: Mapping[str, Any]) -> str:
@@ -2772,67 +2798,73 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 	# `hr last-messages --job-id ""` 在平台调用前拒绝（Issue #2600），向导同口径。
 	job_id = _optional_nonblank_str(inputs, "job_id")
 	page = _int_input(inputs, "page", 1, minimum=1)
+	label_id = _int_input(inputs, "label_id", 0)
+	# 与 CLI `--limit` 同口径（默认 100、上限 300）：先截断再请求，不能把整页
+	# friendId 一次塞给平台（Issue #2675）。
+	limit = _int_input(inputs, "limit", DEFAULT_SUMMARY_LIMIT, minimum=1, maximum=MAX_SUMMARY_LIMIT)
+	# `--friend-id` 直查：跳过沟通列表，没有列表页分页证据（Issue #2675）。
+	direct_ids = _optional_int_list(inputs, "friend_ids")
 	with context.recruiter_platform() as platform:
-		friend_data = platform_data_dict(
-			_unwrap(
-				platform,
-				platform.friend_list(
-					page=page,
-					label_id=_int_input(inputs, "label_id", 0),
-					job_id=job_id,
-				),
-				"沟通列表获取失败",
-				context=context,
+		sources: dict[int, int] = {}
+		pagination: dict[str, Any] | None = None
+		if direct_ids:
+			friend_ids = direct_ids
+		else:
+			friend_data = platform_data_dict(
+				_unwrap(
+					platform,
+					platform.friend_list(page=page, label_id=label_id, job_id=job_id),
+					"沟通列表获取失败",
+					context=context,
+				)
 			)
-		)
-		friend_items = next(
-			(value for key in ("friendList", "result", "list") if isinstance((value := friend_data.get(key)), list)),
-			[],
-		)
-		# 与 CLI `hr last-messages` 同口径：分页证据来自沟通列表页，而不是
-		# 逐个会话的最近消息响应（Issue #2672）。
-		pagination = _pagination_evidence(friend_data, page, friend_items)
-		friend_ids: list[int] = []
-		for item in friend_items:
-			if not isinstance(item, dict):
-				continue
-			for key in ("friendId", "friend_id", "uid", "gid"):
-				value = item.get(key)
-				if value in (None, ""):
+			friend_items = next(
+				(value for key in ("friendList", "result", "list") if isinstance((value := friend_data.get(key)), list)),
+				[],
+			)
+			# 与 CLI `hr last-messages` 同口径：分页证据来自沟通列表页，而不是
+			# 逐个会话的最近消息响应（Issue #2672）。
+			pagination = _pagination_evidence(friend_data, page, friend_items)
+			sources = friend_sources([item for item in friend_items if isinstance(item, dict)])
+			friend_ids = []
+			for item in friend_items:
+				if not isinstance(item, dict):
 					continue
-				try:
-					friend_id = int(str(value))
-				except (TypeError, ValueError):
-					continue
-				if friend_id not in friend_ids:
-					friend_ids.append(friend_id)
-				break
+				fid = friend_id_for(item)
+				if fid is not None and fid not in friend_ids:
+					friend_ids.append(fid)
 		if not friend_ids:
-			return StepResult(
-				{"friend_ids": [], "messages": [], "items": [], "total": 0, "pagination": pagination}
+			empty: dict[str, Any] = {"friend_ids": [], "messages": [], "items": [], "total": 0}
+			if pagination is not None:
+				empty["pagination"] = pagination
+			return StepResult(empty)
+		skipped = max(0, len(friend_ids) - limit)
+		friend_ids = friend_ids[:limit]
+		# 请求按 friendSource 分组、每批 50 串行（与 CLI 共用 services 实现）；
+		# 任一批失败立即停止，不在风控 / 参数错误后继续发请求。
+		items, stats = fetch_last_messages(platform, friend_ids, sources=sources)
+		if "error" in stats and not items:
+			failed = stats["failed_response"]
+			if isinstance(failed, dict):
+				# 完全失败按平台错误上抛（含风控终止语义与 recovery 约定）。
+				_unwrap(platform, failed, "最近消息获取失败", context=context)
+			risk_commands = _risk_commands(context)
+			code, recoverable, recovery = _classify_action_error(
+				"UNKNOWN",
+				stats["error"],
+				clean_command=risk_commands.get("clean_command"),
+				doctor_command=risk_commands.get("doctor_command"),
 			)
-		data = _unwrap(platform, platform.last_messages(friend_ids), "最近消息获取失败", context=context)
-	items = _extract_list_items(data, ("messages", "messageList", "list", "items", "result"))
-	if not items and isinstance(data, Mapping):
-		# Some APIs return {friendId: lastMsg} maps — flatten for TUI.
-		for key, value in data.items():
-			if isinstance(value, Mapping):
-				row = dict(value)
-				row.setdefault("friend_id", key)
-				items.append(row)
-			elif value not in (None, ""):
-				items.append({"friend_id": key, "lastMsg": value})
-	return StepResult(
-		_with_items(
-			{
-				"friend_ids": friend_ids,
-				"result": data,
-				"messages": items,
-				"pagination": pagination,
-			},
-			items,
-		)
-	)
+			raise WorkflowActionError(code, stats["error"], recoverable=recoverable, recovery_action=recovery)
+	payload: dict[str, Any] = {"friend_ids": friend_ids, "messages": items, "requests": stats["requests"]}
+	if skipped:
+		payload["skipped"] = skipped
+	if "error" in stats:
+		# 部分批次失败：已拿到的条目照常返回，错误回显与 CLI `partial_error` 同口径。
+		payload["partial_error"] = stats["error"]
+	if pagination is not None:
+		payload["pagination"] = pagination
+	return StepResult(_with_items(payload, items))
 
 
 def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
