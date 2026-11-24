@@ -1513,6 +1513,8 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 				"gid": gid,
 				"uid": gid,
 				"security_id": security_id,
+				# 与 CLI `chatmsg` 同词汇的分页证据（Issue #2672）。
+				"pagination": _pagination_evidence(data, page, items),
 			},
 			items,
 		)
@@ -2683,6 +2685,7 @@ def _recruiter_call(
 	write: bool = False,
 	check_command: str | None = None,
 	provably_unsent: Callable[[BaseException], bool] | None = None,
+	page: int | None = None,
 ) -> StepResult:
 	with context.recruiter_platform() as platform:
 		if write:
@@ -2697,9 +2700,14 @@ def _recruiter_call(
 		else:
 			data = _unwrap(platform, call(platform), fallback, context=context, check_command=check_command)
 	payload: dict[str, Any] = {"result": data}
+	items: list[dict[str, Any]] = []
 	if list_keys:
 		items = _extract_list_items(data, list_keys)
 		payload = _with_items(payload, items)
+	if page is not None:
+		# 列表类动作与 CLI 信封同词汇的分页证据：平台只给真正的布尔 hasMore
+		# 才认定有 / 没有下一页（Issue #2672）。
+		payload["pagination"] = _pagination_evidence(data, page, items)
 	return StepResult(payload)
 
 
@@ -2708,11 +2716,15 @@ def _recruiter_candidates(context: ActionContext, inputs: Mapping[str, Any], pri
 	# 构造平台客户端之前按参数错误拒绝，不能静默按「不筛选」搜索（Issue #2618）。
 	_optional_nonblank_str(inputs, "city")
 	_optional_nonblank_str(inputs, "job_id")
+	# 与 CLI `hr candidates --page` 同口径：页码在平台请求前校验，并回显到
+	# 步骤 pagination（Issue #2672）。
+	page = _int_input(inputs, "page", 1, minimum=1)
 	return _recruiter_call(
 		context,
 		lambda platform: execute_recruiter_candidate_search(platform, inputs),
 		"候选人搜索失败",
 		list_keys=("geekList", "items", "list", "result"),
+		page=page,
 	)
 
 
@@ -2720,15 +2732,17 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 	# `hr applications` / `hr chat` 对显式空 --job-id 返回 INVALID_PARAM
 	# （Issue #2600），向导路径保持同一语义（Issue #2618）。
 	job_id = _optional_nonblank_str(inputs, "job_id")
+	page = _int_input(inputs, "page", 1, minimum=1)
 	return _recruiter_call(
 		context,
 		lambda platform: platform.friend_list(
-			page=_int_input(inputs, "page", 1, minimum=1),
+			page=page,
 			label_id=_int_input(inputs, "label_id", 0),
 			job_id=job_id,
 		),
 		"投递申请获取失败",
 		list_keys=("friendList", "result", "list", "items"),
+		page=page,
 	)
 
 
@@ -2757,12 +2771,13 @@ def _recruiter_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# `hr last-messages --job-id ""` 在平台调用前拒绝（Issue #2600），向导同口径。
 	job_id = _optional_nonblank_str(inputs, "job_id")
+	page = _int_input(inputs, "page", 1, minimum=1)
 	with context.recruiter_platform() as platform:
 		friend_data = platform_data_dict(
 			_unwrap(
 				platform,
 				platform.friend_list(
-					page=_int_input(inputs, "page", 1, minimum=1),
+					page=page,
 					label_id=_int_input(inputs, "label_id", 0),
 					job_id=job_id,
 				),
@@ -2774,6 +2789,9 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 			(value for key in ("friendList", "result", "list") if isinstance((value := friend_data.get(key)), list)),
 			[],
 		)
+		# 与 CLI `hr last-messages` 同口径：分页证据来自沟通列表页，而不是
+		# 逐个会话的最近消息响应（Issue #2672）。
+		pagination = _pagination_evidence(friend_data, page, friend_items)
 		friend_ids: list[int] = []
 		for item in friend_items:
 			if not isinstance(item, dict):
@@ -2790,7 +2808,9 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 					friend_ids.append(friend_id)
 				break
 		if not friend_ids:
-			return StepResult({"friend_ids": [], "messages": [], "items": [], "total": 0})
+			return StepResult(
+				{"friend_ids": [], "messages": [], "items": [], "total": 0, "pagination": pagination}
+			)
 		data = _unwrap(platform, platform.last_messages(friend_ids), "最近消息获取失败", context=context)
 	items = _extract_list_items(data, ("messages", "messageList", "list", "items", "result"))
 	if not items and isinstance(data, Mapping):
@@ -2802,7 +2822,17 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 				items.append(row)
 			elif value not in (None, ""):
 				items.append({"friend_id": key, "lastMsg": value})
-	return StepResult(_with_items({"friend_ids": friend_ids, "result": data, "messages": items}, items))
+	return StepResult(
+		_with_items(
+			{
+				"friend_ids": friend_ids,
+				"result": data,
+				"messages": items,
+				"pagination": pagination,
+			},
+			items,
+		)
+	)
 
 
 def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
@@ -2863,11 +2893,15 @@ def _recruiter_exchange_contact(
 
 
 def _recruiter_jobs_list(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# 与 CLI `hr jobs list --page` 同口径：向导此前完全不读 page，传第 2 页
+	# 仍返回第一页且报成功（Issue #2672）。
+	page = _int_input(inputs, "page", 1, minimum=1)
 	return _recruiter_call(
 		context,
-		lambda platform: platform.list_jobs(),
+		lambda platform: platform.list_jobs(page=page),
 		"职位列表获取失败",
 		list_keys=("data", "jobs", "jobList", "items", "list", "result"),
+		page=page,
 	)
 
 

@@ -1064,7 +1064,7 @@ class _FakeRecruiterPlatform:
 	def __exit__(self, *args):
 		return None
 
-	def list_jobs(self):
+	def list_jobs(self, page: int = 1):
 		self.calls.append(("list_jobs",))
 		return self._response({"jobs": [{"id": "job-1"}]})
 
@@ -1341,7 +1341,7 @@ def test_platform_error_and_not_supported_are_not_reported_as_success(tmp_path):
 	assert risk.value.recoverable is False
 
 	class Unsupported(_FakeRecruiterPlatform):
-		def list_jobs(self):
+		def list_jobs(self, page: int = 1):
 			raise NotImplementedError("fixture platform does not implement jobs")
 
 	plan = WorkflowPlan(
