@@ -167,6 +167,7 @@ module = [
 	"boss_agent_cli.services.chat_utils",
 	"boss_agent_cli.services.pagination",
 	"boss_agent_cli.services.search_order",
+	"boss_agent_cli.services.recruiter_last_messages",
 	"boss_agent_cli.services.install_extras",
 	"boss_agent_cli.commands.history",
 	"boss_agent_cli.commands.login",
