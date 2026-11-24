@@ -35,8 +35,12 @@ def test_ai_config_rejects_non_finite_temperature(tmp_path: Path, value: str) ->
 	assert not (tmp_path / "ai" / "config.json").exists()
 
 
-def test_login_curl_parse_value_error_is_not_retryable() -> None:
-	result = CliRunner().invoke(cli, ["--json", "login", "--curl-file", "-"], input="not-a-curl")
+def test_login_curl_parse_value_error_is_not_retryable(tmp_path: Path) -> None:
+	# 登录入口在解析 curl 前会读取数据目录下的风险锁；不隔离会用真实
+	# ~/.boss-agent，本机存在 cdp_risk_lock.json 时误报 ACCOUNT_RISK（Issue #2677）。
+	result = CliRunner().invoke(
+		cli, ["--json", "--data-dir", str(tmp_path), "login", "--curl-file", "-"], input="not-a-curl"
+	)
 	payload = _payload(result)
 
 	assert result.exit_code == 1

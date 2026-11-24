@@ -9,6 +9,9 @@
 ### Added
 - 其余列表类向导 goal 补齐分页证据：`chat_history`（求职者）与 `candidates` / `applications` / `communication` / `last_messages` / `jobs_list`（招聘者）的步骤 `data` 新增与 CLI 同词汇的 `pagination`，`has_more` 只认平台布尔 `hasMore`（缺失 / 类型漂移为 `null`）；`jobs_list` 同时补齐 `page` 输入（此前传入第 2 页仍返回第一页），`last_messages` 的分页证据取自沟通列表页。不新增平台请求（Issue #2672）。
 
+### Fixed
+- login curl 解析回归测试改用临时数据目录：此前读取真实 `~/.boss-agent`，本机存在风险锁时会拿到 `ACCOUNT_RISK` 而不是预期的 `INVALID_PARAM`，导致本地门禁出现与本机状态相关的假红（Issue #2677）。
+
 ## [3.4.190] - 2026-11-24
 
 ### Added
