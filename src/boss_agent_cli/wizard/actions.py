@@ -49,6 +49,7 @@ from boss_agent_cli.services.contact_lookup import (
 	FriendListShapeError,
 	FriendLookupLimitExceeded,
 	find_friend,
+	friend_display_name,
 	friend_security_id,
 	friend_uid,
 )
@@ -1544,7 +1545,10 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 		friend = _candidate_friend(platform, identifier, context=context)
 		uid = _candidate_current_uid(friend)
 		security_id = _candidate_current_security_id(friend)
-		name = str(friend.get("name") or "-")
+		# name 会进写请求：与 CLI `exchange` 共用判定，非字符串 / 纯空白回落 `-`。
+		# 旧实现 `str(name or "-")` 把 `{'n': 1}` / `True` / `nan` 这类 Python
+		# repr 当联系人名发给平台（Issue #2748；CLI 侧为 #1812）。
+		name = friend_display_name(friend)
 		data = _write_call(
 			context,
 			platform,

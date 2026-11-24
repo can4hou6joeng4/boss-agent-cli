@@ -1,6 +1,7 @@
 """Chat 共享常量和安全工具函数。"""
 
 import datetime
+import math
 from typing import Any
 
 from boss_agent_cli.api.models import dict_items, safe_text
@@ -113,6 +114,29 @@ def stable_uid(value: Any) -> str:
 	if isinstance(value, int) and not isinstance(value, bool):
 		return str(value) if value.bit_length() <= _MAX_UID_INT_BITS else ""
 	return ""
+
+
+def message_text_value(value: Any) -> str | None:
+	"""把平台消息文本归一成字符串；布尔 / 容器 / 非有限数值按缺失处理。
+
+	``1e400`` / ``Infinity`` / ``NaN`` 在 JSON 里变成 ``inf`` / ``nan``，裸
+	``str()`` 会把 ``"inf"`` / ``"nan"`` 当最后一条消息写进 friendList
+	（Issue #2730）。超过 4300 位的整数连 ``str()`` 都会抛 ``ValueError``；
+	正常 JSON 解析到不了这里，但服务被直接调用时也不能让整批摘要失败。
+
+	返回 ``None`` 表示「这个键没有可用文本」，调用方据此继续读回退键：
+	``a or b`` 会让真值但不是文本的 ``a``（对象 / 数组 / ``true``）吞掉合法的
+	``b``（Issue #2749）。招聘者沟通摘要与候选人 ``chatmsg`` 共用这一份。
+	"""
+	if isinstance(value, bool):
+		return None
+	if isinstance(value, str):
+		return value or None
+	if isinstance(value, int):
+		return str(value) if value.bit_length() <= _MAX_UID_INT_BITS else None
+	if isinstance(value, float):
+		return str(value) if math.isfinite(value) else None
+	return None
 
 
 def contact_identity(item: dict[str, Any]) -> str:

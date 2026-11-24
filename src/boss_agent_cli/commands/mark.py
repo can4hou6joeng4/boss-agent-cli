@@ -5,6 +5,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
+from boss_agent_cli.services.contact_lookup import friend_display_name
 from boss_agent_cli.services.labels import (
 	LABEL_MAP as _LABEL_MAP,
 	LABEL_NAMES as _LABEL_NAMES,
@@ -84,7 +85,8 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			friend_source = int(friend_source or 0)
 		except (TypeError, ValueError, OverflowError):
 			friend_source = 0
-		friend_name = friend_item.get("name") or "-"
+		# `name or "-"` 只挡假值：对象 / 数组 / 布尔会原样进信封（Issue #2748）。
+		friend_name = friend_display_name(friend_item)
 
 		try:
 			resp = platform.friend_label(friend_id, label_id, friend_source, remove=remove)

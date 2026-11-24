@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 向导 `exchange` 不再把类型漂移的联系人 `name` 以 Python repr 发进写请求：此前 `str(friend.get("name") or "-")` 会把对象 / 数组 / 布尔 / `NaN` 变成 `"{'n': 1}"` / `"True"` / `"nan"` 交给 `exchange_contact`，纯空白名字也原样发出，而 CLI `exchange` 早已回落 `-`（#1812）；`mark` / `chat-summary` / `chatmsg` 的 `name or "-"` 同样只挡假值，容器会原样写进信封。现在五处共用 `contact_lookup.friend_display_name`：只认非空白字符串（去首尾空白），否则为 `-`（Issue #2748）。
+- `chatmsg` 的发送方与正文按「可用值」判定：`from.uid` 为布尔 / 容器 / 浮点时此前被 `str()` 成 `"True"` / `"{'n': 1}"` / `"1.5"`，与联系人 uid 不相等就标成「我」，现在与 `stable_uid` 同口径按「未知」处理；顶层 `text` 为真值非字符串（对象 / 数组 / `true` / `NaN` / 数字）时不再吞掉合法的 `body.text`，`text` 恒为字符串，`--raw` 的 `raw` / `body` 仍保留平台原值（Issue #2749）。
+- `hr resume` 教育经历的 `degree` / `start` / `end` 按优先级逐键取第一个非空字符串：此前 `degreeDesc or degreeName` 在主键为真值非字符串（数组 / 对象 / 数字）时先选中它再归空串，合法的回退键永远不会被读取（Issue #2750）。
+
 ## [3.4.206] - 2026-11-25
 
 ### Fixed
