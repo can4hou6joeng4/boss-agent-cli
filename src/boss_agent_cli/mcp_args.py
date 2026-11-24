@@ -698,7 +698,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "watch_add":
 		args = ["watch", "add", arguments["name"], arguments["query"]]
-		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare"):
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare", "active"):
 			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments)
 		return _literal_positionals(args, start=2, count=2)
 

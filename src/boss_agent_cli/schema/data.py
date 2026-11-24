@@ -571,6 +571,12 @@ SCHEMA_DATA = {
 						"choices": ["全职", "兼职", "实习"],
 					},
 					"--welfare": {"type": "string", "default": None, "description": "福利筛选"},
+					"--active": {
+						"type": "string",
+						"default": None,
+						"description": "HR 活跃度下限：online / today / 3d / week / 2w / month / half-year",
+						"choices": ["online", "today", "3d", "week", "2w", "month", "half-year"],
+					},
 				},
 				"list": {},
 				"remove": {

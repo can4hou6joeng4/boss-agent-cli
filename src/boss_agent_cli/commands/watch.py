@@ -33,6 +33,7 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.search_filters import (
+	ACTIVE_LEVELS,
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
 	build_search_params,
@@ -40,6 +41,7 @@ from boss_agent_cli.search_filters import (
 	detail_filter_max_pages,
 	ensure_supported_city,
 	ensure_text_encodable,
+	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
@@ -96,6 +98,10 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 @click.option("--stage", default=None, type=click.Choice(list(STAGE_CODES.keys()), case_sensitive=False), help="融资阶段")
 @click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型")
 @click.option("--welfare", default=None, help="福利筛选")
+# 与 `search --active` / `preset add --active` 同口径：run 读取 `params["active"]`
+# 决定是否逐条查详情，向导 `watch add` 也接受该键；CLI 缺这个选项会让带活跃度
+# 过滤的监控只能从向导创建、删除后无法从命令行重建（Issue #2704）。
+@click.option("--active", default=None, help="HR 活跃度下限：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）")
 @click.pass_context
 def watch_add_cmd(
 	ctx: click.Context,
@@ -110,6 +116,7 @@ def watch_add_cmd(
 	stage: str | None,
 	job_type: str | None,
 	welfare: str | None,
+	active: str | None,
 ) -> None:
 	"""保存一条可复用的搜索条件（名称 + 关键词 + 筛选），之后用 run 增量拉取。"""
 	# 空字符串是合法 argv，但存下来的记录既没法点名（`boss watch run ` 缺参数），
@@ -148,11 +155,16 @@ def watch_add_cmd(
 			salary=salary, experience=experience, education=education,
 			industry=industry, scale=scale, stage=stage, job_type=job_type,
 		)
+		active_level = resolve_active_level(active)
 	except ValueError as exc:
 		emit_filter_error(ctx, "watch", exc)
 		return
 
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
+	if active_level:
+		# 只在设置时写入，与向导 `watch add` / `preset add` 的存储结构一致；
+		# 不设置时不落下该键，旧记录与 `watch run` 的读取逻辑不变。
+		params["active"] = active_level
 	# 与读取侧（watch run）共用同一份存量校验：入口此前只校验关键词的可编码性，
 	# `--welfare "\udcff"` 之类能保存成功，随后每次 run 都以 SAVED_SEARCH_INVALID
 	# 拒绝该记录，删除后按同样参数重建仍然失败（Issue #2543）。
