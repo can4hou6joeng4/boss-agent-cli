@@ -6,7 +6,7 @@ import io
 import math
 from typing import Any
 
-from boss_agent_cli.api.models import field_list, safe_text
+from boss_agent_cli.api.models import field_list, field_text, safe_text
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 from boss_agent_cli.services.text_files import sanitize_surrogates, write_text_atomic
 from boss_agent_cli.services.json_files import (
@@ -43,6 +43,23 @@ def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
 		"education": raw.get("jobDegree", ""),
 		"skills": field_list(raw, "skills"),
 		"welfare": field_list(raw, "welfareList"),
+	}
+
+
+def public_html_export_item_from_job(item: dict[str, Any]) -> dict[str, Any]:
+	"""从搜索管线条目（`JobItem.to_dict` 形状）构造 HTML 导出条目。
+
+	`--welfare` / `--active` 导出走 `run_search_pipeline`，拿到的 已经是
+	映射后的字典；HTML 的公开字段与 API 版本一致，按同名字段取（Issue #2706）。
+	"""
+	return {
+		"title": field_text(item, "title"),
+		"company": field_text(item, "company"),
+		"city": field_text(item, "city"),
+		"experience": field_text(item, "experience"),
+		"education": field_text(item, "education"),
+		"skills": field_list(item, "skills"),
+		"welfare": field_list(item, "welfare"),
 	}
 
 

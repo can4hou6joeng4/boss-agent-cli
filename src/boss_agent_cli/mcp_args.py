@@ -465,7 +465,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append(str(arguments["query"]))
 		if "url" in arguments and arguments["url"] is not None:
 			args.extend(_option_pair("--url", str(arguments["url"])))
-		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type"):
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare", "active"):
 			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments)
 		if "count" in arguments:
 			args.extend(_option_pair("--count", str(arguments["count"])))

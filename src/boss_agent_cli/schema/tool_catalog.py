@@ -445,6 +445,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"scale": {"type": "string", "description": "公司规模，支持逗号分隔多选"},
 					"stage": {"type": "string", "description": "融资阶段，支持逗号分隔多选"},
 					"job_type": {"type": "string", "description": "职位类型，支持逗号分隔多选"},
+					"welfare": {"type": "string", "description": "福利筛选，逗号分隔 AND 逻辑（如 双休,五险一金）；需要逐个查详情，更慢、风控风险更高"},
+					"active": {"type": "string", "description": "只导出 HR 活跃度不低于该档的职位；标准值 online / today / 3d / week / 2w / month / half-year，也支持 3day、3日 等别名；活跃度未知的职位被排除并计入 hints.active_filter"},
 					"count": {"type": "integer", "minimum": 1, "description": "导出数量", "default": 50},
 					"format": {"type": "string", "enum": ["csv", "json", "html"], "description": "输出格式", "default": "csv"},
 					"output_file": {"type": "string", "description": "输出文件路径；不传时 csv/json 在信封内返回 jobs 列表，html 在 data.content 返回 HTML 正文"},
