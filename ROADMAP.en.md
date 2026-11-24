@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.187 (2026-11-24): the wizard / MCP `export` goal now keeps scanning when the platform omits `hasMore`, matching top-level export semantics, so a `count` request no longer stops at the first page; `data` gains the same `stop_reason` vocabulary as the CLI and `truncated` is only true when the page budget runs out (Issue #2657).
+
 v3.4.186 (2026-11-24): the wizard / MCP `welfare` input now requires a string or an array of strings; numbers and nested arrays no longer become never-matching labels, and explicit `false` / `0` / objects are rejected as parameter errors instead of being treated as no filter (Issue #2654).
 
 v3.4.185 (2026-11-24): wizard / MCP watch add now rejects unencodable search text (keywords, welfare and other filters) before writing, and search / export validate the keyword with the same entry-level rule as the CLI, so no permanently unrunnable watch record can be created (Issue #2651).
