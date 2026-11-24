@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.184 (2026-11-24): the wizard / MCP `boss_wizard` export goal now honors `count`, scanning with the same page budget as top-level `boss export` and stopping once the requested number is reached; `data` gains `requested` and `truncated`, while omitting `count` keeps the previous export scope (Issue #2648).
+
 v3.4.183 (2026-11-24): the wizard / MCP `boss_wizard` watch save action rejects a non-string or blank `active` as a parameter error before writing, instead of silently saving no filter (Issue #2645).
 
 v3.4.182 (2026-11-24): the `crawl` detail cache no longer treats an explicit null job_id in the checkpoint as a shared key, a failed background resume preflight keeps its original error even if the state restore fails, and a queued run with a live executor lock no longer reports queue overdue (Issue #2642).
