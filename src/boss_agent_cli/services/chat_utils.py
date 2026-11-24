@@ -39,6 +39,44 @@ def int_code(value: Any) -> int | None:
 	return value if type(value) is int else None
 
 
+def relation_text(value: Any) -> str:
+	"""relationType 数值编码的展示文本；漂移值按「未知」（与 CLI 同口径）。"""
+	return RELATION_LABELS.get(int_code(value), "未知")
+
+
+def chat_cutoff_ts(days: int | None, *, now: datetime.datetime | None = None) -> float | None:
+	"""`--days N` 的毫秒时间阈值；``None`` 表示不按时间筛选。
+
+	CLI `chat` 与向导 `communication` 必须用同一个「现在」口径，否则同一份
+	输入在两处会筛出不同的记录边界（Issue #2667）。
+	"""
+	if days is None:
+		return None
+	reference = now if now is not None else datetime.datetime.now()
+	return (reference - datetime.timedelta(days=days)).timestamp() * 1000
+
+
+def matches_chat_filters(
+	*,
+	initiated_by: str,
+	last_ts: Any,
+	relation_label: str | None,
+	cutoff_ts: float | None,
+) -> bool:
+	"""单条沟通记录是否命中 `--from` / `--days`；CLI 与向导共用同一判定。
+
+	``last_ts`` 只认真正的整数：旧快照 / 手工改过的记录里字符串、布尔与缺失
+	值按「未知 0」处理，且未知时间与 CLI 一样放行——不能把没有时间字段的
+	记录全部筛掉（Issue #1317）。
+	"""
+	if type(last_ts) is not int:
+		last_ts = 0
+	return (
+		(not cutoff_ts or not last_ts or last_ts >= cutoff_ts)
+		and (relation_label is None or initiated_by == relation_label)
+	)
+
+
 def message_list(platform_data: Any) -> list[Any]:
 	"""取聊天历史响应里的消息数组；``messages`` 优先，兼容 ``historyMsgList``。
 
