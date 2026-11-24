@@ -1,6 +1,6 @@
 import click
 
-from boss_agent_cli.api.models import dict_items, field_list
+from boss_agent_cli.api.models import dict_items, field_list, field_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import auth_required_hints, boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, login_action_for_ctx, render_simple_list
@@ -42,11 +42,13 @@ def interviews_cmd(ctx: click.Context) -> None:
 
 	items = [
 		{
-			"jobName": it.get("jobName", "-"),
-			"brandName": it.get("brandName", "-"),
-			"interviewTime": it.get("interviewTime", "-"),
-			"address": it.get("address", "-"),
-			"statusDesc": it.get("statusDesc", "-"),
+			# `.get(key, "-")` 只挡键缺失：显式 null、非有限浮点与容器会原样进
+			# 信封 / TTY 表格（Issue #2744），与 pipeline / digest 统一走 field_text。
+			"jobName": field_text(it, "jobName", "-"),
+			"brandName": field_text(it, "brandName", "-"),
+			"interviewTime": field_text(it, "interviewTime", "-"),
+			"address": field_text(it, "address", "-"),
+			"statusDesc": field_text(it, "statusDesc", "-"),
 		}
 		for it in interview_list
 	]

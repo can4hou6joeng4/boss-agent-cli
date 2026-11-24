@@ -404,3 +404,19 @@ def test_digest_renders_sections_as_tables(monkeypatch, legacy_args):
 	assert "请尽快回复" in text
 	# 表格里不再出现被折行的 dict repr。
 	assert "'company':" not in text
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_reports_not_supported_when_interview_data_missing(mock_auth_cls, mock_client_cls, legacy_args):
+	"""平台未实现 interview_data 是确定性能力缺口（Issue #2745）：不能兜成可重试 NETWORK_ERROR。"""
+	mock_client = _setup_digest_mocks(mock_client_cls)
+	mock_client.interview_data.side_effect = NotImplementedError("zhipin platform does not implement interview_data")
+
+	result = CliRunner().invoke(cli, ["--json", *legacy_args, "digest"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"]
