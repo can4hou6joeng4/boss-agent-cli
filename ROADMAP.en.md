@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.197 (2026-11-25): wizard enum inputs (`action` for `watch`, `format` for `export`, `hook_profile` for `crawl_start`) no longer treat non-string values such as `false` / `0` / `[]` as the default; they now fail with an input error naming the field before any local write or platform request, while omitted, `null`, and empty-string values keep the default (Issue #2701).
+
 v3.4.196 (2026-11-25): the wizard `watch` goal's `run` action accepts `all=true`, batch-running saved watches with the same semantics as CLI `watch run --all` and MCP `boss_watch_run`: corrupt or concurrently removed records are listed per entry while the rest continue, and a platform risk response stops the remaining watches; `all` must be a JSON boolean and is mutually exclusive with `name` (Issue #2698).
 
 v3.4.195 (2026-11-24): MCP tool `boss_watch_run` gains an `all` boolean, matching CLI `watch run --all` for batch-running saved watches (including the existing partial-corruption and risk-stop semantics); `name` is no longer required by MCP, and the CLI decides the mutual exclusion (Issue #2695).

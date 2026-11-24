@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.197] - 2026-11-25
+
 ### Fixed
 
 - 向导的枚举型输入不再用真值判断吞掉非字符串显式值：`watch` 的 `action`、`export` 的 `format`、`crawl_start` 的 `hook_profile` 收到 `false` / `0` / `[]` 等值时曾静默落到默认值（`{"action": 0}` 会执行 `list`），其他错误类型则以 repr 文本报「未知取值」。现在缺省 / `null` / 空串仍用默认值，其余非字符串在任何本地写入或平台请求前报输入错误并点名字段（Issue #2701）。
