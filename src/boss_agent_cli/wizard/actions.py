@@ -2755,6 +2755,20 @@ def _recruiter_candidates(context: ActionContext, inputs: Mapping[str, Any], pri
 	)
 
 
+def _recruiter_recommendations(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# 与 CLI `hr recommendations --job-id` 同口径：空职位 ID 命中不了任何职位，
+	# 却会带着空参数真实发一次请求（Issue #1782），向导在平台前拒绝。
+	job_id = _required_nonblank_value(inputs, "job_id")
+	page = _int_input(inputs, "page", 1, minimum=1)
+	return _recruiter_call(
+		context,
+		lambda platform: platform.recommend_geeks(job_id, page=page),
+		"推荐牛人获取失败",
+		list_keys=("geekList", "items", "list", "result"),
+		page=page,
+	)
+
+
 def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# `hr applications` / `hr chat` 对显式空 --job-id 返回 INVALID_PARAM
 	# （Issue #2600），向导路径保持同一语义（Issue #2618）。
@@ -3001,6 +3015,7 @@ DEFAULT_ACTIONS: dict[str, Action] = {
 	"crawl_resume": _crawl_resume,
 	"crawl_stop": _crawl_stop,
 	"recruiter_candidates": _recruiter_candidates,
+	"recruiter_recommendations": _recruiter_recommendations,
 	"recruiter_applications": _recruiter_applications,
 	"recruiter_resume": _recruiter_resume,
 	"recruiter_chat": _recruiter_chat,

@@ -45,6 +45,7 @@ STEP_LABELS = {
 	"recruiter_resume": "读取候选人简历",
 	"recruiter_chat": "读取候选人沟通列表",
 	"recruiter_last_messages": "读取最近消息",
+	"recruiter_recommendations": "读取推荐牛人",
 	"recruiter_reply": "回复候选人",
 	"recruiter_exchange_contact": "请求交换联系方式",
 	"recruiter_request_resume": "请求附件简历",

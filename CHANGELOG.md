@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 向导 / MCP 新增招聘者 `recommendations` goal（`recruiter_recommendations`）：按 `job_id` 读取推荐牛人卡片，`page` 分页并返回与 CLI 同词汇的 `pagination`；缺失 / 空白 `job_id` 与非法 `page` 在平台请求前拒绝（Issue #2682）。
+
 ## [3.4.192] - 2026-11-24
 
 ### Added
