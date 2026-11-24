@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.206（2026-11-25）：`interviews` 的文本字段统一走 `field_text`，显式 null / 非有限数与容器不再进 JSON 信封与 TTY；`handle_auth_errors` 增加 `NotImplementedError` → `NOT_SUPPORTED` 分支，`digest` / `pipeline` / `follow-up` 不再把能力缺口报成可重试网络错误（Issue #2744、#2745）。
+
 v3.4.205（2026-11-25）：`pipeline` / `follow-up` / `digest` 的文本字段统一走 `field_text`，非有限数与容器不再写进产物；`recommend --with-score` 的求职期望回退链按优先级逐个键取第一个可用字符串，容器漂移不再吞掉合法回退键（Issue #2739、#2740）。
 
 v3.4.204（2026-11-25）：`hr chat` / 向导 communication 的最后一条消息不再把非有限浮点写成伪文本；`-o` 路径展开的裸 ValueError 归一为本地 IO 错误；导出整数归一只数数字位，4300 位负整数不再被静默写成 null；`safe_text` 不再把可转换的 4300 位整数抹成空串。（Issue #2730、#2732、#2733、#2736）。
