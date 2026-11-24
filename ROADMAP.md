@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.189（2026-11-24）：向导 / MCP 的 `recommendations` 与 `job_search` goal 支持 `with_score`，分别按顶层 `recommend` / `search` 同一口径读取求职期望或复用本次搜索条件重算匹配分并附加匹配原因；缺省保持原输出，非布尔值在平台请求前返回参数错误，评分实现与命令层共用（Issue #2662、#2665）。
+
 v3.4.188（2026-11-24）：向导 / MCP `job_search`（`candidate_search`）支持 `sort`，缺省保持平台顺序，`score` 按本地匹配分降序且类型漂移按 0；非法 / 显式空值在平台请求前返回 `INVALID_PARAM`，排序实现与顶层 `boss search --sort` 共用（Issue #2660）。
 
 v3.4.187（2026-11-24）：向导 / MCP 的 `export` 在平台响应缺失 `hasMore` 时按顶层导出语义继续扫描，`count` 请求不再只导出首屏；`data` 增加与顶层同词汇的 `stop_reason`，`truncated` 只在页数预算耗尽时为 true（Issue #2657）。

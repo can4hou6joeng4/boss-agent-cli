@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.189 (2026-11-24): the wizard / MCP `recommendations` and `job_search` goals now support `with_score`; recommendations read the job expectation like top-level `recommend` and search reuses the current query filters like top-level `search`, attaching match scores and reasons. The default keeps the previous output, non-boolean values return a parameter error before any platform request, and the scoring implementation is shared with the CLI (Issues #2662, #2665).
+
 v3.4.188 (2026-11-24): the wizard / MCP `job_search` (`candidate_search`) goal now supports `sort`; the default keeps platform order, `score` sorts by local match score with type-drift values counted as 0, and invalid / explicit empty values return `INVALID_PARAM` before any platform request. The sorting implementation is shared with top-level `boss search --sort` (Issue #2660).
 
 v3.4.187 (2026-11-24): the wizard / MCP `export` goal now keeps scanning when the platform omits `hasMore`, matching top-level export semantics, so a `count` request no longer stops at the first page; `data` gains the same `stop_reason` vocabulary as the CLI and `truncated` is only true when the page budget runs out (Issue #2657).
