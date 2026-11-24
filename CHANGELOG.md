@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 / MCP `candidate_watch` 的 add 动作在写库前复用 CLI 的存量校验，拒绝含孤立代理项的关键词 / 福利等参数，不再存下每次 run 都报 `SAVED_SEARCH_INVALID`、删除重建仍复现的记录；`candidate_search` / `candidate_export` 的搜索关键词也在平台请求前按 CLI 同一口径拒绝不可编码文本，避免把参数错误落成误导性的本地 IO 错误（Issue #2651）。
+
 ## [3.4.184] - 2026-11-24
 
 ### Added

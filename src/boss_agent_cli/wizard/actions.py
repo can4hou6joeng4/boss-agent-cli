@@ -96,6 +96,7 @@ from boss_agent_cli.search_filters import (
 	client_is_browser_only,
 	detail_filter_max_pages,
 	ensure_supported_city,
+	ensure_text_encodable,
 	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
@@ -234,6 +235,18 @@ def execute_candidate_search(
 	# query 类型错误不能经 str() 静默变成空关键词或容器的 repr 文本：
 	# false / 0 会变成无关键词搜索，对象会按字面去搜（Issue #2009）。
 	query = _optional_str_strict(inputs, "query") or ""
+	# 与 CLI `search` / `export` / `watch add` 同一入口判定（Issue #2528）：
+	# 孤立代理项进入 httpx 的 URL 参数时抛 UnicodeEncodeError，会被兜成带
+	# 磁盘指引的 LOCAL_IO_ERROR；同一条输入重试多少次都是同一个结果。
+	try:
+		ensure_text_encodable("搜索关键词", query)
+	except ValueError as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			str(exc),
+			recoverable=True,
+			recovery_action="换成只含普通 Unicode 文本的搜索关键词后重试",
+		) from exc
 	welfare_conditions = inputs.get("welfare_conditions")
 	if welfare_conditions is None and inputs.get("welfare"):
 		raw_welfare = inputs["welfare"]
@@ -1671,10 +1684,15 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			# 返回成功，必须在写入前拒绝（Issue #1798、#2511）。
 			_required_nonblank_str(inputs, "query")
 			try:
-				_validate_search_filters(params)
+				# CLI 在写入前跑同一份存量校验，覆盖关键词 / 福利等全部参数的
+				# 类型与 UTF-8 可编码性（Issue #2528、#2543）。只用
+				# `_validate_search_filters` 会让向导存下永远跑不通的记录：
+				# 每次 run 报 SAVED_SEARCH_INVALID，删除后用同样输入重建仍成功
+				# （Issue #2651）。
+				validate_stored_search_params(params)
 			except ValueError as exc:
 				raise WorkflowActionError(
-					"INVALID_PARAM", str(exc), recovery_action="修正 watch 筛选参数后重试"
+					"INVALID_PARAM", str(exc), recoverable=True, recovery_action="修正 watch 筛选参数后重试"
 				) from exc
 			cache.save_saved_search(name, params)
 			return StepResult({"action": "add", "name": name, "params": params})
