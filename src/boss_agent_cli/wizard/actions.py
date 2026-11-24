@@ -660,8 +660,11 @@ def _expand_search_sources(
 		if parsed.page is not None and merged.get("page") is None:
 			merged["page"] = parsed.page
 		raw_params: dict[str, Any] = dict(_mapping_input(merged, "raw_params"))
-		raw_params.update(parsed.params)
-		merged["raw_params"] = raw_params
+		# 链接参数先并入、显式 raw_params 后覆盖：CLI `search --url` 先
+		# `raw_params.update(parsed_url.params)`，再用显式选项转换结果 update，
+		# 显式筛选优先（Issue #2690）。反过来会让 Agent 显式指定的筛选被链接
+		# 悄悄改写，结果集合与请求不符。
+		merged["raw_params"] = {**parsed.params, **raw_params}
 	return merged
 
 

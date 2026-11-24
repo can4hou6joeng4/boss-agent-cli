@@ -97,6 +97,34 @@ def test_explicit_query_and_page_override_url(tmp_path, monkeypatch):
 	assert captured["inputs"]["page"] == 5
 
 
+def test_explicit_raw_params_override_url_params(tmp_path, monkeypatch):
+	# CLI 的显式选项在链接参数之后覆盖（`search.py` 先并入链接参数，再用显式
+	# code 参数 update）：向导显式 raw_params 同口径优先于链接（Issue #2690）。
+	captured = _capture_search(monkeypatch)
+
+	DEFAULT_ACTIONS["candidate_search"](
+		_context(tmp_path),
+		{"search_url": _URL, "raw_params": {"city": "101020100"}},
+		{},
+	)
+
+	assert captured["inputs"]["raw_params"] == {"city": "101020100"}
+
+
+def test_url_params_kept_when_not_explicitly_overridden(tmp_path, monkeypatch):
+	# 显式覆盖只作用于同名键：链接独有的参数仍要保留，否则显式给一个无关
+	# raw_params 会把链接的筛选条件整体清掉（Issue #2690）。
+	captured = _capture_search(monkeypatch)
+
+	DEFAULT_ACTIONS["candidate_search"](
+		_context(tmp_path),
+		{"search_url": _URL, "raw_params": {"jobType": "1902"}},
+		{},
+	)
+
+	assert captured["inputs"]["raw_params"] == {"jobType": "1902", "city": "101010100"}
+
+
 def test_url_without_query_is_accepted(tmp_path, monkeypatch):
 	# `export --url` / `search --url` 的链接可以只带筛选参数：CLI 此时按空
 	# 关键词 + 筛选搜索，向导不能因为 query 缺失报 WIZARD_INPUT_REQUIRED。
