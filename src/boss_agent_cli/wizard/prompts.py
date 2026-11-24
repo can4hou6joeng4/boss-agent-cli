@@ -751,6 +751,11 @@ def _collect_inputs(
 
 	for name in GOALS[role][goal].required_inputs:
 		inputs[name] = menu.text(INPUT_LABELS.get(name, "必要信息"))
+	# job_search / export 的关键词从 required_inputs 移到了 either_inputs
+	# （query / search_url / preset 三选一，Issue #2685）：TTY 向导面向真人，
+	# 仍按关键词追问，链接与预设留给 --input-json / Agent 场景。
+	if role == "candidate" and goal in {"job_search", "export"}:
+		inputs["query"] = menu.text(INPUT_LABELS["query"])
 	if goal in {"job_search", "candidates"}:
 		city = menu.text("城市（可留空）", required=False)
 		if city:
