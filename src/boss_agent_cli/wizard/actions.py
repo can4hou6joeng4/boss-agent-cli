@@ -444,6 +444,23 @@ def _with_items(data: Mapping[str, Any], items: list[dict[str, Any]]) -> dict[st
 	return merged
 
 
+def _pagination_evidence(data: Any, page: int, items: list[dict[str, Any]]) -> dict[str, Any]:
+	"""步骤 data 的分页证据：与 CLI 信封同词汇（Issue #2670）。
+
+	平台只给真正的布尔 ``hasMore`` 才认定有 / 没有下一页；缺失或类型漂移
+	（字符串 ``"true"``、数字 ``1``）都是 ``null``，不能据此停止翻页。
+	"""
+	raw_has_more = data.get("hasMore") if isinstance(data, dict) else None
+	has_more = raw_has_more if isinstance(raw_has_more, bool) else None
+	return {
+		"page": page,
+		"has_more": has_more,
+		"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
+		"total": len(items),
+		"total_kind": "returned_page_count",
+	}
+
+
 def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
 
@@ -1132,7 +1149,14 @@ def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prio
 				with_score=True,
 				expect_data=expect_data,
 			)
-	return StepResult(_with_items({"result": data}, items))
+	# 分页证据与顶层 `recommend` 同词汇：平台只给真正的布尔 hasMore 才认定
+	# 有 / 没有下一页，缺失或类型漂移为 null（Issue #2670）。
+	return StepResult(
+		_with_items(
+			{"result": data, "pagination": _pagination_evidence(data, page, items)},
+			items,
+		)
+	)
 
 
 def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
@@ -1456,6 +1480,10 @@ def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	if from_who is not None or days is not None:
 		# 回显生效的筛选，Agent 才能区分「未筛选」与「筛选项被忽略」（Issue #2667）。
 		merged["filters"] = {"from": from_who, "days": days}
+	# 与 CLI `chat` 同一套分页证据：`has_more` 只认平台布尔 hasMore，`total`
+	# 是当前页条数（`--from` / `--days` 过滤后），Agent 不再盲翻下一页
+	# （Issue #2670）。
+	merged["pagination"] = _pagination_evidence(data, page, items)
 	return StepResult(merged)
 
 
