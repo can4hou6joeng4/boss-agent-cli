@@ -260,6 +260,7 @@ def execute_candidate_search(
 	*,
 	pipeline: Callable[..., Any] = run_search_pipeline,
 	limit: int | None = None,
+	continue_when_has_more_unknown: bool = False,
 ) -> Any:
 	"""Shared platform search call used by the command and workflow action."""
 	# query 类型错误不能经 str() 静默变成空关键词或容器的 repr 文本：
@@ -312,6 +313,11 @@ def execute_candidate_search(
 		raw_params=_mapping_input(inputs, "raw_params"),
 	)
 	extra: dict[str, Any] = {"active": active} if active else {}
+	if continue_when_has_more_unknown:
+		# 导出场景：平台缺失 hasMore 时按 count / max_pages 预算继续扫描，
+		# 与顶层 `boss export` 同口径（Issue #2657）。搜索类调用保持默认的
+		# 保守停止，不向测试替身传入陌生关键字。
+		extra["continue_when_has_more_unknown"] = True
 	account = str(inputs.get("account") or "")
 	if account:
 		extra["account"] = account
@@ -1564,6 +1570,25 @@ def _export_output_path(context: ActionContext, inputs: Mapping[str, Any], fmt: 
 	raise WorkflowActionError(code, message, recovery_action=recovery_action)
 
 
+_EXPORT_STOP_REASON_MAP = {
+	# 管线内部原因 → 顶层 `boss export` 信封的同一套词汇（Issue #907 / #2657）。
+	"limit_reached": "count_reached",
+	"has_more_false": "platform_has_more_false",
+}
+
+
+def _export_stop_reason(result: Any) -> str:
+	"""把管线终止原因映射成 CLI 导出的 ``stop_reason`` 词汇。
+
+	自定义管线（测试替身 / Python API）没有 ``stop_reason`` 时退回旧的
+	``has_more`` 判定：仍有下一页就按预算耗尽处理，不能静默当完整结果。
+	"""
+	raw = getattr(result, "stop_reason", "")
+	if not isinstance(raw, str) or not raw:
+		return "page_budget_exhausted" if getattr(result, "has_more", False) else ""
+	return _EXPORT_STOP_REASON_MAP.get(raw, raw)
+
+
 def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	from boss_agent_cli.services.job_export import prepare_export_items, write_export_file
 
@@ -1595,18 +1620,30 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		with context.candidate_platform() as platform:
 			# 与 candidate_search / candidate_watch 一致：导出时的 greeted 标记
 			# 必须按当前账号计算，否则登录态下会把所有职位都标成未打招呼。
+			# 平台缺失 hasMore 时按导出语义继续扫描（受 count / max_pages /
+			# 空页约束），与顶层 `boss export` 的 #903 口径一致（Issue #2657）。
+			# 只在需要时传新关键字，保持现有测试替身 / Python API 的调用签名。
+			search_kwargs: dict[str, Any] = {"limit": count}
+			if count is not None:
+				search_kwargs["continue_when_has_more_unknown"] = True
 			result = execute_candidate_search(
-				platform, cache, context.logger, search_inputs, limit=count
+				platform,
+				cache,
+				context.logger,
+				search_inputs,
+				**search_kwargs,
 			)
 	output = prepare_output_path(output_path)
 	items = prepare_export_items(result.items, include_private=include_private)
 	write_export_file(items, fmt, str(output))
 	data: dict[str, Any] = {"path": str(output), "format": fmt, "count": len(items)}
 	if count is not None:
-		# 少于请求条数时区分「平台已没有更多」与「页数预算耗尽」：后者
-		# truncated=true，调用方不能把前缀当完整结果。
+		# 少于请求条数时区分「平台已没有更多」「空页」「取满」与「页数预算
+		# 耗尽」：只有后者才是截断，调用方不能把前缀当完整结果（Issue #2657）。
+		stop_reason = _export_stop_reason(result)
 		data["requested"] = count
-		data["truncated"] = len(items) < count and result.has_more
+		data["stop_reason"] = stop_reason
+		data["truncated"] = len(items) < count and stop_reason == "page_budget_exhausted"
 	return StepResult(data, artifacts=(str(output),))
 
 

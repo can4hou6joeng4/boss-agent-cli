@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 / MCP `export` 在平台响应缺失 `hasMore`（或值不是布尔）时不再只导出首屏：`count` 请求按顶层 `boss export` 的 #903 口径继续扫描，仍受 count / `max_pages` / 空页约束；`data` 增加与顶层同词汇的 `stop_reason`（`count_reached` / `empty_page` / `platform_has_more_false` / `page_budget_exhausted`），`truncated` 只在页数预算耗尽时为 true（Issue #2657）。
+
 ## [3.4.186] - 2026-11-24
 
 ### Fixed

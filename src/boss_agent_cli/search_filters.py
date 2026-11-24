@@ -538,6 +538,11 @@ class SearchPipelineResult:
 	# 控制流用 has_more（缺失按停止处理），信封必须用 has_more_reported，
 	# 否则「平台没说」会被读成「确实没有下一页」（Issue #887）。
 	has_more_reported: bool | None = None
+	# 扫描终止原因：limit_reached / empty_page / has_more_false /
+	# has_more_unknown / active_target_reached / page_budget_exhausted。
+	# 导出场景据此区分「取满目标」「平台没有更多」与「页数预算耗尽」
+	# （Issue #2657）。
+	stop_reason: str = ""
 	total: int | None = None
 	last_page: int = 0
 	stats: SearchPipelineStats = field(default_factory=SearchPipelineStats)
@@ -1064,6 +1069,7 @@ def run_search_pipeline(
 	before_detail_request: Callable[[], None] | None = None,
 	detail_channel: str = "auto",
 	account: str = "",
+	continue_when_has_more_unknown: bool = False,
 ) -> SearchPipelineResult:
 	"""Run the full search pipeline: API search → list prefilter → welfare / active detail fallback.
 
@@ -1075,6 +1081,10 @@ def run_search_pipeline(
 	  detail_channel=browser 时只走浏览器通道取 job_card。
 	- CDP 模式（client.is_browser_only()，或 detail_channel=browser）下福利补详情也串行，
 	  不开线程池，避免多个请求同时打到用户 Chrome。
+
+	``continue_when_has_more_unknown`` 只给导出场景使用：平台缺失 / 非布尔的
+	``hasMore`` 不等于「没有下一页」，顶层 `export` 会按 count / max_pages
+	预算继续扫描（Issue #903）。搜索类调用保持默认 False，仍按保守口径停止。
 	"""
 	stats = SearchPipelineStats()
 	matched: list[dict[str, Any]] = []
@@ -1085,6 +1095,8 @@ def run_search_pipeline(
 	last_page_scanned = 0
 	has_more = False
 	has_more_reported: bool | None = None
+	# 循环自然跑完 max_pages 才算预算耗尽；下面每个 break 覆盖成具体原因。
+	stop_reason = "page_budget_exhausted"
 	active_only = bool(active_level) and not welfare_conditions
 	if active_only:
 		max_pages = min(max_pages, detail_filter_max_pages(None, active_level))
@@ -1093,6 +1105,7 @@ def run_search_pipeline(
 
 	for _ in range(max_pages):
 		if limit and len(matched) >= limit:
+			stop_reason = "limit_reached"
 			break
 
 		logger.info(f"正在搜索第 {current_page} 页...")
@@ -1131,6 +1144,7 @@ def run_search_pipeline(
 		stats.jobs_seen += len(job_list)
 
 		if not job_list:
+			stop_reason = "empty_page"
 			break
 
 		# Phase 1: list-page prefilter
@@ -1247,15 +1261,23 @@ def run_search_pipeline(
 		matched.extend(page_matched)
 
 		raw_has_more = platform_data.get("hasMore")
-		# 控制流：缺失/非布尔一律视为「本页之后不再翻」，避免无界请求。
+		# 控制流：缺失/非布尔默认视为「本页之后不再翻」，避免无界请求；
+		# 导出场景（continue_when_has_more_unknown）按 count / max_pages
+		# 继续扫描，与顶层 `boss export` 的 #903 口径一致。
 		has_more = raw_has_more is True
 		has_more_reported = raw_has_more if isinstance(raw_has_more, bool) else None
-		if not has_more:
+		if raw_has_more is False:
+			stop_reason = "has_more_false"
+			break
+		if raw_has_more is not True and not continue_when_has_more_unknown:
+			stop_reason = "has_more_unknown"
 			break
 		if limit and len(matched) >= limit:
+			stop_reason = "limit_reached"
 			break
 		if active_only and (len(matched) >= active_target or not page_needed_detail):
 			# 已凑够，或本页全靠列表字段判定完——不再为活跃度多翻页
+			stop_reason = "active_target_reached"
 			break
 		current_page += 1
 
@@ -1266,6 +1288,7 @@ def run_search_pipeline(
 		items=matched,
 		has_more=has_more,
 		has_more_reported=has_more_reported,
+		stop_reason=stop_reason,
 		total=len(matched),
 		last_page=last_page_scanned,
 		stats=stats,
