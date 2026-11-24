@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.195（2026-11-24）：MCP 工具 `boss_watch_run` 新增 `all` 布尔参数，与 CLI `watch run --all` 同口径批量运行已保存 watch（部分记录损坏、命中风控的既有口径一并可用）；`name` 不再是 MCP 侧必填，由 CLI 判定二者互斥（Issue #2695）。
+
 v3.4.194（2026-11-24）：向导 / MCP 修复两处与 CLI 口径不一致的行为——`search_url` 展开时显式 `raw_params` 优先于链接里的同名 code 参数（与 `search --url` 的「显式选项覆盖链接参数」一致），`job_search` / `export` 的 `page`、`max_pages` 在构造平台实例前校验（与 #2625 口径一致，非法值不再先启动浏览器 / 登录探测）（Issue #2690、#2692）。
 
 v3.4.193（2026-11-24）：向导 / MCP 新增招聘者 `recommendations` goal（按 `job_id` 读取推荐牛人并回显 `pagination`）；`job_search` / `export` 支持 `search_url`，`job_search` 同时支持 `preset`，与顶层 `search --url` / `--preset`、`export --url` 同口径展开链接与本地预设，`wizard_catalog` 新增 `either_inputs` 声明「query / search_url / preset 至少一个」；`wizard --resume` 恢复历史 run 时校验 inputs 可存储性，坏记录统一报 `CACHE_RECORD_INVALID` 并给出重建指引（Issue #2682、#2685、#2687）。
