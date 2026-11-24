@@ -6,12 +6,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from boss_agent_cli.output import Logger
-from boss_agent_cli.services.pagination import export_page_budget
+from boss_agent_cli.search_filters import detail_filter_max_pages
+from boss_agent_cli.services.pagination import DEFAULT_EXPORT_COUNT, export_page_budget
 from boss_agent_cli.wizard.actions import (
 	ActionContext,
 	DEFAULT_ACTIONS,
@@ -51,6 +53,9 @@ class _Result:
 		self.has_more = has_more
 		if stop_reason is not None:
 			self.stop_reason = stop_reason
+		# `active_filter_hint` 需要真实管线都会带上的统计字段。
+		self.stats = SimpleNamespace(active_rejected=0, active_unknown=0, detail_requests=0)
+		self.active_unknown_descs: dict[str, int] = {}
 
 
 def _export(context: ActionContext, inputs: dict[str, Any], monkeypatch, result: _Result) -> tuple[dict, dict, dict]:
@@ -225,3 +230,72 @@ def test_export_invalid_format_still_rejected_with_count(tmp_path):
 		)
 
 	assert exc_info.value.code == "INVALID_PARAM"
+
+
+def test_export_welfare_without_count_uses_cli_default_and_page_cap(tmp_path, monkeypatch):
+	"""带福利筛选但没给 count 时按 CLI 默认 50 扫描，并受详情页上限钳制（Issue #2716）。"""
+	data, search_inputs, extra = _export(
+		_context(tmp_path),
+		{"query": "Golang", "welfare": "双休", "output": str(tmp_path / "out.json")},
+		monkeypatch,
+		_Result([{"job_id": "job-1"}], has_more=True, stop_reason="page_budget_exhausted"),
+	)
+
+	assert extra["limit"] == DEFAULT_EXPORT_COUNT == 50
+	assert extra["continue"] is True
+	assert search_inputs["max_pages"] == min(
+		export_page_budget(DEFAULT_EXPORT_COUNT), detail_filter_max_pages([("双休", [])], None)
+	)
+	assert data["requested"] == 50
+	assert data["stop_reason"] == "page_budget_exhausted"
+	assert data["truncated"] is True
+
+
+def test_export_active_online_without_count_uses_single_page_cap(tmp_path, monkeypatch):
+	"""active=online 不传 count 时同样按 CLI 默认 50，但页数上限只有 1 页。"""
+	data, search_inputs, extra = _export(
+		_context(tmp_path),
+		{"query": "Golang", "active": "online", "output": str(tmp_path / "out.json")},
+		monkeypatch,
+		_Result([{"job_id": "job-1"}], has_more=True, stop_reason="active_target_reached"),
+	)
+
+	assert extra["limit"] == 50
+	assert search_inputs["max_pages"] == 1
+	assert data["requested"] == 50
+	assert data["truncated"] is True
+
+
+def test_export_detail_filters_clamp_explicit_max_pages(tmp_path, monkeypatch):
+	"""显式 max_pages 不能突破详情筛选的风险上限。"""
+	_, search_inputs, _ = _export(
+		_context(tmp_path),
+		{
+			"query": "Golang",
+			"welfare": "双休",
+			"count": 50,
+			"max_pages": 20,
+			"output": str(tmp_path / "out.json"),
+		},
+		monkeypatch,
+		_Result([{"job_id": "job-1"}], has_more=True, stop_reason="page_budget_exhausted"),
+	)
+
+	assert search_inputs["max_pages"] == 5
+
+
+def test_export_active_writes_filter_evidence(tmp_path, monkeypatch):
+	"""向导 export 与 CLI 一样给出未知活跃度被排除的统计（Issue #2716）。"""
+	result = _Result([{"job_id": "job-1"}], has_more=True, stop_reason="limit_reached")
+	result.stats = SimpleNamespace(active_rejected=3, active_unknown=2, detail_requests=4)
+	result.active_unknown_descs = {"本周活跃": 2}
+	data, _, _ = _export(
+		_context(tmp_path),
+		{"query": "Golang", "active": "3d", "count": 10, "output": str(tmp_path / "out.json")},
+		monkeypatch,
+		result,
+	)
+
+	assert data["active_filter"]["unknown_excluded"] == 2
+	assert data["active_filter"]["detail_lookups"] == 4
+	assert data["active_filter"]["unknown_descs"] == {"本周活跃": 2}

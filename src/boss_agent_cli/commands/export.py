@@ -36,7 +36,7 @@ from boss_agent_cli.services.job_export import (
 	write_html_export,
 )
 from boss_agent_cli.services.output_path import prepare_output_path
-from boss_agent_cli.services.pagination import export_page_budget
+from boss_agent_cli.services.pagination import DEFAULT_EXPORT_COUNT, export_page_budget
 from boss_agent_cli.search_filters import (
 	ACTIVE_LEVELS,
 	SearchFilterCriteria,
@@ -174,7 +174,7 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 @click.option("--job-type", default=None, help="职位类型，支持逗号分隔多选")
 @click.option("--welfare", default=None, help="福利筛选，如 五险一金,双休；需要逐个查详情，更慢、风险更高")
 @click.option("--active", default=None, help="只导出 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）")
-@click.option("--count", default=50, type=click.IntRange(min=1), help="导出数量")
+@click.option("--count", default=DEFAULT_EXPORT_COUNT, type=click.IntRange(min=1), help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（csv/json 不指定时输出到 stdout JSON 信封；html 不指定时直出 HTML，--json 时放进 data.content；显式空串无效）")
 @click.option(

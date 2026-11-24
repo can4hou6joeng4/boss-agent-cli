@@ -23,6 +23,11 @@ MAX_TRUSTED_COUNT = MAX_TRUSTED_PAGE
 EXPORT_PAGE_SIZE_ESTIMATE = 15
 EXPORT_FILTER_PAGE_ALLOWANCE = 5
 
+#: `export` 的默认请求条数（CLI `--count` 的默认值）。向导 / MCP 的 export
+#: goal 在带福利 / 活跃度筛选且没给 count 时也必须按这个值扫描，否则管线会
+#: 按搜索的 10 条活跃度目标提前停止并静默导出不完整结果（Issue #2716）。
+DEFAULT_EXPORT_COUNT = 50
+
 
 def export_page_budget(count: int) -> int:
 	"""按请求条数估算需要扫描的页数上限（含筛选余量）。"""

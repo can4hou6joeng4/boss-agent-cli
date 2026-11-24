@@ -54,7 +54,12 @@ from boss_agent_cli.services.contact_lookup import (
 )
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
-from boss_agent_cli.services.pagination import MAX_TRUSTED_COUNT, MAX_TRUSTED_PAGE, export_page_budget
+from boss_agent_cli.services.pagination import (
+	DEFAULT_EXPORT_COUNT,
+	MAX_TRUSTED_COUNT,
+	MAX_TRUSTED_PAGE,
+	export_page_budget,
+)
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
@@ -113,6 +118,7 @@ from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
 	SearchUrlParseError,
+	active_filter_hint,
 	client_is_browser_only,
 	detail_filter_max_pages,
 	ensure_supported_city,
@@ -273,6 +279,29 @@ def _normalize_welfare_conditions(raw: Any) -> list[tuple[str, list[str]]] | Non
 	return conditions
 
 
+def _detail_filter_inputs(
+	inputs: Mapping[str, Any],
+) -> tuple[list[tuple[str, list[str]]] | None, str | None]:
+	"""把 wizard 的 ``welfare`` / ``welfare_conditions`` / ``active`` 归一。
+
+	search / watch / export 共用同一口径（Issue #2706）；export 还需要在调用
+	管线前按归一后的条件决定默认 count 与页数上限（Issue #2716）。
+	"""
+	welfare_conditions = inputs.get("welfare_conditions")
+	raw_welfare = inputs.get("welfare")
+	if welfare_conditions is None and raw_welfare is not None and raw_welfare != "":
+		welfare_conditions = _parse_welfare_input(raw_welfare)
+	else:
+		welfare_conditions = _normalize_welfare_conditions(welfare_conditions)
+	try:
+		active = resolve_active_level(_optional_str(inputs.get("active")))
+	except ValueError as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM", str(exc), recoverable=True, recovery_action="修正 active 取值后重试"
+		) from exc
+	return welfare_conditions, active
+
+
 def execute_candidate_search(
 	platform: Any,
 	cache: CacheStore,
@@ -305,18 +334,7 @@ def execute_candidate_search(
 			recoverable=True,
 			recovery_action="换成只含普通 Unicode 文本的搜索关键词后重试",
 		) from exc
-	welfare_conditions = inputs.get("welfare_conditions")
-	raw_welfare = inputs.get("welfare")
-	if welfare_conditions is None and raw_welfare is not None and raw_welfare != "":
-		welfare_conditions = _parse_welfare_input(raw_welfare)
-	else:
-		welfare_conditions = _normalize_welfare_conditions(welfare_conditions)
-	try:
-		active = resolve_active_level(_optional_str(inputs.get("active")))
-	except ValueError as exc:
-		raise WorkflowActionError(
-			"INVALID_PARAM", str(exc), recoverable=True, recovery_action="修正 active 取值后重试"
-		) from exc
+	welfare_conditions, active = _detail_filter_inputs(inputs)
 	try:
 		_validate_search_filters(inputs)
 	except ValueError as exc:
@@ -1888,13 +1906,19 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		else:
 			_required_nonblank_str(inputs, "query")
 		include_private = _bool_input(inputs, "include_private")
-		# count 与 CLI `--count` 同口径：缺省 / null / 空串表示由默认页数预算
-		# 决定导出范围（保持旧行为）；显式值必须是 ≥ 1 的整数，显式 0 不能
-		# 被当成「没给」悄悄换成缺省（与 #2621 的游标口径一致）。
+		welfare_conditions, active_level = _detail_filter_inputs(inputs)
+		detail_filters = bool(welfare_conditions or active_level)
+		# count 与 CLI `--count` 同口径：缺省 / null / 空串在无详情筛选时由默认
+		# 页数预算决定导出范围（保持旧行为）；带福利 / 活跃度时取 CLI 默认值
+		# 50，否则管线会按搜索的 10 条活跃度目标提前停止并静默导出不完整结果
+		# （Issue #2716）。显式值必须是 ≥ 1 的整数，显式 0 不能被当成「没给」
+		# 悄悄换成缺省（与 #2621 的游标口径一致）。
 		raw_count = inputs.get("count")
 		count: int | None = None
 		if raw_count is not None and raw_count != "":
 			count = _int_input(inputs, "count", 1, minimum=1, maximum=MAX_TRUSTED_COUNT)
+		elif detail_filters:
+			count = DEFAULT_EXPORT_COUNT
 		fmt = _choice_input(inputs, "format", "json")
 		if fmt not in {"json", "csv"}:
 			raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
@@ -1904,9 +1928,21 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		# 那时平台实例已构造，CDP 模式会先启动浏览器或做登录探测。这里只校验
 		# 显式值；缺省预算仍由 `export_page_budget(count)` 决定。
 		_int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
-		_int_input(inputs, "max_pages", 1, minimum=1)
+		explicit_max_pages = _int_input(inputs, "max_pages", 1, minimum=1)
 		search_inputs = {**inputs, "account": account_scope(context.auth())}
-		if count is not None and search_inputs.get("max_pages") in (None, ""):
+		if detail_filters:
+			# 福利 / 活跃度要逐个查详情：页数预算不能超过搜索的详情上限，否则
+			# 导出会比 CLI `export` / `search` 多翻几倍详情页、放大风控风险
+			# （Issue #2716）。显式 max_pages 也必须受这个硬边界约束。
+			cap = detail_filter_max_pages(welfare_conditions, active_level)
+			has_explicit_max_pages = inputs.get("max_pages") not in (None, "")
+			base_pages = (
+				explicit_max_pages
+				if has_explicit_max_pages
+				else export_page_budget(count if count is not None else DEFAULT_EXPORT_COUNT)
+			)
+			search_inputs["max_pages"] = min(base_pages, cap)
+		elif count is not None and search_inputs.get("max_pages") in (None, ""):
 			# 与顶层 `boss export` 同一页数口径：只给默认页数预算时按 count 估页，
 			# 否则默认 1 页会把 count=50 的请求截在首屏。用户显式给了 max_pages
 			# 时尊重其预算（结果仍按 count 截断）。
@@ -1931,6 +1967,10 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	items = prepare_export_items(result.items, include_private=include_private)
 	write_export_file(items, fmt, str(output))
 	data: dict[str, Any] = {"path": str(output), "format": fmt, "count": len(items)}
+	if active_level:
+		# CLI `export` 把同一份统计写进 hints.active_filter；向导步骤没有
+		# hints 通道，放进 data 供 Agent 判断未知活跃度被排除了多少（Issue #2716）。
+		data["active_filter"] = active_filter_hint(active_level, result)
 	if count is not None:
 		# 少于请求条数时区分「平台已没有更多」「空页」「取满」与「页数预算
 		# 耗尽 / 活跃度提前停止」：只有后两者才是截断，调用方不能把前缀当
