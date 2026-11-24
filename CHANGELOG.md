@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.183] - 2026-11-24
+
 ### Fixed
 - 向导 / MCP `boss_wizard` 的 `candidate_watch` 保存监控时，非字符串或纯空白的 `active` 不再被真值判断吞掉、按「不筛选」静默保存，改为在写库前返回 `INVALID_PARAM`；同时移除 `clean` 中未使用的预览集合（Issue #2645）。
 
