@@ -71,6 +71,13 @@ GOALS = {
 	},
 	"recruiter": {
 		"candidates": GoalDefinition("candidates", "recruiter", "搜索候选人", ("auth_status", "recruiter_candidates")),
+		"recommendations": GoalDefinition(
+			"recommendations",
+			"recruiter",
+			"读取推荐牛人",
+			("auth_status", "recruiter_recommendations"),
+			("job_id",),
+		),
 		"applications": GoalDefinition(
 			"applications", "recruiter", "查看投递申请", ("auth_status", "recruiter_applications")
 		),
