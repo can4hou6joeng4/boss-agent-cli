@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.193 (2026-11-24): wizard / MCP adds a recruiter `recommendations` goal (reads recommended geeks by `job_id` and reports `pagination`); `job_search` / `export` support `search_url` and `job_search` also supports `preset`, expanding copied links and saved presets with the same semantics as `search --url` / `--preset` / `export --url`, and `wizard_catalog` gains `either_inputs` ("query / search_url / preset, at least one"); `wizard --resume` now validates the storability of historical run inputs and reports `CACHE_RECORD_INVALID` with rebuild guidance for corrupt records (Issues #2682, #2685, #2687).
+
 v3.4.192 (2026-11-24): wizard / MCP (recruiter) `last_messages` now supports `limit` (default 100, max 300) and direct `friend_ids` lookup, grouping requests by friendSource in batches of 50 and reporting `skipped` / `requests`; `communication` supports `summary_limit`, filling unread counts / last messages and reporting request stats in `summary_sources`. Summary and batch-query implementations moved to `services/recruiter_last_messages.py` and `services/recruiter_chat_summary.py`, shared with the command layer (Issues #2675, #2679).
 
 v3.4.191 (2026-11-24): the remaining list-style wizard goals (`chat_history`, `candidates`, `applications`, `communication`, `last_messages`, `jobs_list`) now report pagination evidence with the same vocabulary as CLI envelopes; `jobs_list` also honors the `page` input (previously a requested page 2 still returned page 1). No extra platform requests are made (Issue #2672).
