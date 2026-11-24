@@ -12,7 +12,11 @@ from boss_agent_cli.api import recruiter_client as rc
 from boss_agent_cli.api.client import EnvironmentRiskError
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
-from boss_agent_cli.services.recruiter_chat_summary import merge_last_messages, normalize_last_message
+from boss_agent_cli.services.recruiter_chat_summary import (
+	merge_last_messages,
+	message_text,
+	normalize_last_message,
+)
 from boss_agent_cli.services.recruiter_last_messages import message_items
 from boss_agent_cli.main import cli
 
@@ -317,3 +321,23 @@ def test_total_unread_reported_even_with_empty_list():
 	hints = _run(platform)["hints"]
 	assert hints["total_unread"] == 7
 	platform.last_messages.assert_not_called()
+
+
+# ── #2730：非有限浮点不能被 str() 成 "inf"/"nan" 写进最后一条消息 ──────
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")], ids=["inf", "-inf", "nan"])
+def test_message_text_treats_nonfinite_floats_as_missing(value):
+	assert message_text({"lastMsg": value}) is None
+	assert message_text({"body": {"text": value}}) is None
+	assert message_text({"lastMsgInfo": {"showText": value}}) is None
+
+
+def test_message_text_keeps_finite_numbers_and_rejects_bool():
+	assert message_text({"lastMsg": 0}) == "0"
+	assert message_text({"lastMsg": 12.5}) == "12.5"
+	assert message_text({"lastMsg": True}) is None
+
+
+def test_merge_last_messages_ignores_nonfinite_text():
+	rows = [dict(LIVE_ITEM)]
+	merge_last_messages(rows, [{"friendId": 66001, "lastMsg": float("inf")}])
+	assert rows[0]["last_msg"] is None
