@@ -13,7 +13,7 @@ from boss_agent_cli.wizard.models import (
 	StepResult,
 	WorkflowInputError,
 	WorkflowPlan,
-	_ensure_storable_inputs,
+	ensure_storable_inputs,
 )
 from boss_agent_cli.wizard.runner import WorkflowActionError
 from boss_agent_cli.wizard.store import WorkflowStore
@@ -75,16 +75,16 @@ def test_recruiter_resume_rejects_container_ids() -> None:
 @pytest.mark.parametrize("value", [b"raw", {1, 2}, object()])
 def test_unstorable_inputs_are_rejected(value: object) -> None:
 	with pytest.raises(WorkflowInputError, match="不是可存储为 JSON 的值"):
-		_ensure_storable_inputs({"marker": value})
+		ensure_storable_inputs({"marker": value})
 
 
 def test_unstorable_mapping_key_is_rejected() -> None:
 	with pytest.raises(WorkflowInputError, match="的键类型 tuple 不能落成 JSON"):
-		_ensure_storable_inputs({("a", 1): "x"})
+		ensure_storable_inputs({("a", 1): "x"})
 
 
 def test_storable_scalars_and_containers_still_pass() -> None:
-	_ensure_storable_inputs(
+	ensure_storable_inputs(
 		{"a": None, "b": True, "c": 3, "d": 1.5, "e": "x", "f": [1, "y"], "g": {"h": 2}}
 	)
 

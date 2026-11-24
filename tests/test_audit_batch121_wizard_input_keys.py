@@ -1,6 +1,6 @@
 """审计批次 121：向导输入的对象键只接受字符串（Issue #2485）。
 
-`_ensure_storable_inputs` 原来允许数字 / 布尔 / null 键（#2420 的理由是
+`ensure_storable_inputs` 原来允许数字 / 布尔 / null 键（#2420 的理由是
 `json.dumps` 会自动转成字符串），但混合类型键在 `sort_keys=True` 排序时抛
 `TypeError`：`WizardInput.from_mapping` 通过校验后，`WorkflowStore.create`
 落库才失败，命令层只能兜成 `INTERNAL_ERROR`。
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from boss_agent_cli.wizard.catalog import build_plan
-from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError, _ensure_storable_inputs
+from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError, ensure_storable_inputs
 from boss_agent_cli.wizard.store import WorkflowStore
 
 _MAPPING = {"role": "candidate", "platform": "zhipin", "goal": "job_search"}
@@ -25,13 +25,13 @@ _MAPPING = {"role": "candidate", "platform": "zhipin", "goal": "job_search"}
 @pytest.mark.parametrize("key", [1, True, 1.5, None], ids=["int", "bool", "float", "null"])
 def test_non_string_keys_are_rejected(key):
 	with pytest.raises(WorkflowInputError, match="对象键只支持字符串"):
-		_ensure_storable_inputs({"inputs": {key: "x"}})
+		ensure_storable_inputs({"inputs": {key: "x"}})
 
 
 def test_mixed_keys_are_rejected_before_sort_keys_runs():
 	# 混合键正是 json.dumps(sort_keys=True) 抛 TypeError 的输入。
 	with pytest.raises(WorkflowInputError, match="对象键只支持字符串"):
-		_ensure_storable_inputs({"query": "x", 1: "y"})
+		ensure_storable_inputs({"query": "x", 1: "y"})
 
 
 def test_from_mapping_rejects_non_string_keys_with_entry_error():
