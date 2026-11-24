@@ -501,14 +501,15 @@ def search_cmd(
 	except ValueError as exc:
 		emit_filter_error(ctx, "search", exc, preset_origin)
 		return
-	# 福利和活跃度都可能要逐个查详情（活跃度也会变），结果不进搜索缓存
-	detail_filter = bool(welfare or active_level)
-
 	# 解析福利关键词（支持逗号分隔的多条件组合）
 	welfare_conditions = None
 	if welfare:
 		labels = [w.strip() for w in welfare.split(",") if w.strip()]
 		welfare_conditions = [(label, resolve_welfare_keywords(label)) for label in labels]
+	# 福利和活跃度都可能要逐个查详情（活跃度也会变），结果不进搜索缓存。
+	# 判定用归一后的条件：`--welfare "  "` / `","` 没有任何标签，与 export /
+	# 向导一样按「不筛选」处理，不能因此跳过缓存和翻页提示（Issue #2717）。
+	detail_filter = bool(welfare_conditions or active_level)
 
 	criteria = SearchFilterCriteria(
 		query=query, city=city, salary=salary,
