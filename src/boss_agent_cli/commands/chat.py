@@ -16,7 +16,8 @@ from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
-	contact_identity, int_code, safe_local_time, sanitize_csv_cell, escape_md_cell,
+	chat_cutoff_ts, contact_identity, int_code, matches_chat_filters, relation_text,
+	safe_local_time, sanitize_csv_cell, escape_md_cell,
 )
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
@@ -117,11 +118,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			platform_data = {}
 		items, page_items_complete = friend_list_page_observation(platform_data)
 
-		# 时间筛选阈值
-		cutoff_ts = None
-		if days is not None:
-			cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
-			cutoff_ts = cutoff.timestamp() * 1000
+		# 时间筛选阈值（与向导 communication 共用同一函数，Issue #2667）
+		cutoff_ts = chat_cutoff_ts(days)
 
 		# 发起方筛选值
 		relation_filter = _FROM_FILTER.get(from_who) if from_who else None
@@ -148,7 +146,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				"name": item.get("name") or "-",
 				"title": item.get("title") or "-",
 				"brand_name": item.get("brandName") or "-",
-				"initiated_by": _RELATION_LABELS.get(int_code(item.get("relationType")), "未知"),
+				"initiated_by": relation_text(item.get("relationType")),
 				"last_msg": item.get("lastMsg") or "-",
 				"last_time": last_time_str,
 				"last_ts": last_ts,
@@ -166,15 +164,14 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		all_friends = [_friend_record(item) for item in items]
 
 		def _matches_filter(friend: dict[str, Any]) -> bool:
-			# 快照里的 last_ts 只认真正的整数：旧格式 / 手工改过的快照可能是
-			# 字符串，与 float 比较会抛 TypeError 打断整次导出（Issue #1317）。
-			# 与 chat_snapshot._unread_count 的 unread 同口径，漂移值按 0（未知）处理。
-			last_ts = friend.get("last_ts")
-			if type(last_ts) is not int:
-				last_ts = 0
-			return (
-				(not cutoff_ts or not last_ts or last_ts >= cutoff_ts)
-				and (relation_label is None or friend.get("initiated_by", "未知") == relation_label)
+			# 判定与向导 communication 共用：last_ts 只认真正的整数，旧格式 /
+			# 手工改过的快照可能是字符串，与 float 比较会抛 TypeError 打断整次
+			# 导出（Issue #1317）；未知时间与 CLI 一样放行（Issue #2667）。
+			return matches_chat_filters(
+				initiated_by=str(friend.get("initiated_by", "未知")),
+				last_ts=friend.get("last_ts"),
+				relation_label=relation_label,
+				cutoff_ts=cutoff_ts,
 			)
 
 		friends = [friend for friend in all_friends if _matches_filter(friend)]

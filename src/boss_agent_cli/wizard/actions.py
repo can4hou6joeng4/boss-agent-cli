@@ -38,6 +38,13 @@ from boss_agent_cli.services.candidate_actions import (
 	candidate_action_provably_unsent,
 	run_candidate_action,
 )
+from boss_agent_cli.services.chat_utils import (
+	FROM_FILTER,
+	RELATION_LABELS,
+	chat_cutoff_ts,
+	matches_chat_filters,
+	relation_text,
+)
 from boss_agent_cli.services.contact_lookup import (
 	FriendListShapeError,
 	FriendLookupLimitExceeded,
@@ -656,18 +663,26 @@ def _int_input(
 	return value
 
 
-def _optional_int_input(inputs: Mapping[str, Any], name: str, *, minimum: int = 0) -> int | None:
+def _optional_int_input(
+	inputs: Mapping[str, Any], name: str, *, minimum: int = 0, maximum: int | None = None
+) -> int | None:
 	"""读取可选整数游标：缺省 / null / 空串视为未提供，显式值仍按取值范围校验。
 
 	可选游标若用 `inputs.get(name)` 真值判断决定是否下发，显式 `0` 会被当成
 	「没给」静默丢弃（Issue #2621）：向导 / MCP 的 `recruiter_chat_history`
 	因此把 `max_msg_id: 0` 悄悄换成最新一页，而顶层 `hr chatmsg --max-msg-id 0`
 	由 Click `IntRange(min=1)` 报 `INVALID_PARAM`。两份实现必须同口径。
+
+	`maximum` 只在调用方对应的 CLI 选项本身有上限时传（如 `chat --days` 的
+	`IntRange(0, 36500)`），越界值不能原样进入筛选（Issue #2667）。
 	"""
 	raw = inputs.get(name)
 	if raw is None or raw == "":
 		return None
-	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
+	value = _check_minimum(_coerce_int(raw, name), raw, name, minimum)
+	if maximum is not None:
+		value = _check_maximum(value, raw, name, maximum)
+	return value
 
 
 def _require_run_id(inputs: Mapping[str, Any]) -> str:
@@ -1402,6 +1417,20 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 页码在打开平台前校验：越界值不应先构造平台实例（Issue #2625）。
 	page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
+	# from / days 与顶层 `boss chat` 同口径：向导此前只读 page，传筛选条件仍
+	# 返回整页记录且报成功（Issue #2667）。取值与类型都在平台请求前拒绝。
+	from_who = _optional_str_strict(inputs, "from")
+	if from_who is not None and from_who not in FROM_FILTER:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"wizard 输入 from 仅支持 {' / '.join(FROM_FILTER)}，收到 {from_who!r}",
+			recoverable=True,
+			recovery_action="将 from 改为 boss 或 me 后重试；不筛发起方时省略该字段",
+		)
+	days = _optional_int_input(inputs, "days", minimum=0, maximum=36500)
+	relation_filter = FROM_FILTER.get(from_who) if from_who is not None else None
+	relation_label = RELATION_LABELS.get(relation_filter) if relation_filter is not None else None
+	cutoff_ts = chat_cutoff_ts(days)
 	with context.candidate_platform() as platform:
 		data = _unwrap(
 			platform,
@@ -1410,7 +1439,24 @@ def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 			context=context,
 		)
 	items = _extract_list_items(data, ("result", "friendList", "list", "items"))
-	return StepResult(_with_items({"result": data}, items))
+	if relation_label is not None or cutoff_ts is not None:
+		# 判定与 CLI `chat` 共用 `matches_chat_filters`：只筛当前页（与 CLI 相同），
+		# 不额外翻页；lastTS 缺失 / 漂移与 CLI 一样按未知放行。
+		items = [
+			item
+			for item in items
+			if matches_chat_filters(
+				initiated_by=relation_text(item.get("relationType")),
+				last_ts=item.get("lastTS"),
+				relation_label=relation_label,
+				cutoff_ts=cutoff_ts,
+			)
+		]
+	merged = _with_items({"result": data}, items)
+	if from_who is not None or days is not None:
+		# 回显生效的筛选，Agent 才能区分「未筛选」与「筛选项被忽略」（Issue #2667）。
+		merged["filters"] = {"from": from_who, "days": days}
+	return StepResult(merged)
 
 
 def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 向导 / MCP `communication`（`candidate_chat`）支持 `from` / `days` 筛选：`from` 只接受 `boss` / `me`，`days` 与 `boss chat --days` 同为 0–36500 的整数，非法值在平台请求前返回参数错误；筛选只作用于当前页，`lastTS` 缺失或类型漂移与 CLI 一样按未知放行，结果新增 `filters` 回显生效条件。谓词与命令层共用 `services/chat_utils.matches_chat_filters`（Issue #2667）。
+
 ## [3.4.189] - 2026-11-24
 
 ### Added
