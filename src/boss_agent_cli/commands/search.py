@@ -23,7 +23,6 @@ from boss_agent_cli.display import (
 	show_command_for_ctx,
 )
 from boss_agent_cli.index_cache import try_save_index
-from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
 from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items as _sort_search_items
 from boss_agent_cli.search_filters import (
@@ -656,6 +655,9 @@ def search_cmd(
 						),
 					},
 					pipeline=run_search_pipeline,
+					# 评分与向导同一份实现（Issue #2665）：只在开启时传参，
+					# 保持既有测试替身签名。
+					**({"with_score": True} if with_score else {}),
 				)
 			except SearchPipelinePlatformError as exc:
 				# 风控码必须走风险契约：不可恢复、不提示重试；登录过期等
@@ -678,9 +680,8 @@ def search_cmd(
 			finally:
 				if progress is not None:
 					progress.finish()
+			# 评分已在 execute_candidate_search 内完成（与向导共用，Issue #2665）。
 			items = pipeline_result.items
-			if with_score:
-				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]
 			cache_items = items
 			output_items = _sort_search_items(items, sort_mode)
 			snapshot = try_save_index(data_dir, output_items, source=f"search:{query}", page=page, logger=logger)

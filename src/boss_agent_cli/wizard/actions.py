@@ -88,6 +88,7 @@ from boss_agent_cli.display import (
 	positional_hint,
 	shell_argument,
 )
+from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
@@ -263,8 +264,14 @@ def execute_candidate_search(
 	pipeline: Callable[..., Any] = run_search_pipeline,
 	limit: int | None = None,
 	continue_when_has_more_unknown: bool = False,
+	with_score: bool = False,
 ) -> Any:
-	"""Shared platform search call used by the command and workflow action."""
+	"""Shared platform search call used by the command and workflow action.
+
+	``with_score`` 与顶层 `boss search --with-score` 同口径：用同一次搜索的
+	criteria 重算分数并附加匹配原因（Issue #2665）。缺省保持管线原始 items，
+	命令层与向导都在此之后按自己的顺序排序 / 缓存。
+	"""
 	# query 类型错误不能经 str() 静默变成空关键词或容器的 repr 文本：
 	# false / 0 会变成无关键词搜索，对象会按字面去搜（Issue #2009）。
 	query = _optional_str_strict(inputs, "query") or ""
@@ -339,7 +346,7 @@ def execute_candidate_search(
 		):
 			budget = CrawlBudget(cache)
 			extra["before_detail_request"] = lambda: budget.wait("list")
-	return pipeline(
+	result = pipeline(
 		platform,
 		cache,
 		logger,
@@ -351,6 +358,12 @@ def execute_candidate_search(
 		limit=limit,
 		**extra,
 	)
+	if with_score:
+		# 与命令层同一份评分实现（`score_job_dict`）：管线内嵌的 match_score
+		# 不带原因，命令层与向导都需要额外的 match_reasons / mismatch_reasons。
+		# 结果对象是本次调用新建的，就地替换 items 不会与调用方共享旧列表。
+		result.items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in result.items]
+	return result
 
 
 def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any]) -> dict[str, Any]:
@@ -1033,13 +1046,24 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			recoverable=True,
 			recovery_action="将 sort 改为 relevance 或 score 后重试；省略表示保持平台顺序",
 		)
+	# with_score 与顶层 `search --with-score` 同口径：向导此前完全不读该键，
+	# 传 true 仍只返回管线内嵌的 match_score、没有匹配原因（Issue #2665）。
+	# 类型错误同样在平台请求前拒绝。
+	with_score = _bool_input(inputs, "with_score")
 	account = account_scope(context.auth())
+	search_kwargs: dict[str, Any] = {}
+	if with_score:
+		# 只在需要时传入，保持既有测试替身 / Python API 的调用签名（同 #2657）。
+		search_kwargs["with_score"] = True
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
-			result = execute_candidate_search(platform, cache, context.logger, {**inputs, "account": account})
+			result = execute_candidate_search(
+				platform, cache, context.logger, {**inputs, "account": account}, **search_kwargs
+			)
 	return StepResult(
 		{
-			# 排序与顶层 `search` 共用同一份实现（匹配分类型漂移按 0 处理）。
+			# 先由 `execute_candidate_search` 评分、再排序：与命令层「先评分再
+			# sort」一致（匹配分类型漂移按 0 处理）。
 			"items": sort_search_items(list(result.items), sort_mode),
 			"pagination": {
 				"page": _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE),
