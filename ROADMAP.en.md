@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.204 (2026-11-25): `hr chat` / wizard communication no longer write non-finite floats as pseudo-text last messages; raw ValueErrors from `-o` path expansion map to local IO errors; export integer normalization counts digits without the sign, so 4300-digit negatives are no longer silently nulled; `safe_text` no longer blanks convertible 4300-digit integers (Issues #2730, #2732, #2733, #2736).
+
 v3.4.203 (2026-11-25): `friend_security_id` no longer drops a valid security_id fallback when securityId drifts; MCP `boss_export` estimates detail-page timeouts under welfare / activity filters instead of being killed at 290s; the `boss_wizard` schema now declares the 120s host default for run / resume (Issues #2723, #2725, #2726).
 
 v3.4.202 (2026-11-25): the wizard / MCP `boss_wizard` `export` goal now matches top-level `boss export` under `welfare` / `active` detail filters — default count 50, `max_pages` clamped to the detail cap, and activity stats in `data.active_filter`; wizard search now returns `data.active_filter` stats under `active`, matching the CLI; `boss search --welfare` with only whitespace no longer counts as a detail filter (Issues #2716, #2717, #2720).
