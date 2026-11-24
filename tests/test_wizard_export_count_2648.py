@@ -44,22 +44,27 @@ def _context(tmp_path) -> ActionContext:
 
 
 class _Result:
-	def __init__(self, items: list[dict[str, Any]], *, has_more: bool) -> None:
+	def __init__(
+		self, items: list[dict[str, Any]], *, has_more: bool, stop_reason: str | None = None
+	) -> None:
 		self.items = items
 		self.has_more = has_more
+		if stop_reason is not None:
+			self.stop_reason = stop_reason
 
 
 def _export(context: ActionContext, inputs: dict[str, Any], monkeypatch, result: _Result) -> tuple[dict, dict, dict]:
 	captured: dict[str, Any] = {}
 
-	def fake_search(platform_arg, cache, logger, search_inputs, *, limit=None):
+	def fake_search(platform_arg, cache, logger, search_inputs, *, limit=None, continue_when_has_more_unknown=False):
 		captured["inputs"] = dict(search_inputs)
 		captured["limit"] = limit
+		captured["continue"] = continue_when_has_more_unknown
 		return result
 
 	monkeypatch.setattr("boss_agent_cli.wizard.actions.execute_candidate_search", fake_search)
 	step = DEFAULT_ACTIONS["candidate_export"](context, inputs, {})
-	return step.data, captured["inputs"], {"limit": captured["limit"]}
+	return step.data, captured["inputs"], {"limit": captured["limit"], "continue": captured["continue"]}
 
 
 def test_export_count_passes_limit_and_expands_page_budget(tmp_path, monkeypatch):
@@ -69,13 +74,15 @@ def test_export_count_passes_limit_and_expands_page_budget(tmp_path, monkeypatch
 		_context(tmp_path),
 		{"query": "Golang", "count": 50, "output": str(tmp_path / "out.json")},
 		monkeypatch,
-		_Result(items, has_more=True),
+		_Result(items, has_more=True, stop_reason="limit_reached"),
 	)
 
 	assert extra["limit"] == 50
+	assert extra["continue"] is True
 	assert search_inputs["max_pages"] == export_page_budget(50) == 9
 	assert data["count"] == 50
 	assert data["requested"] == 50
+	assert data["stop_reason"] == "count_reached"
 	assert data["truncated"] is False
 
 
@@ -85,14 +92,15 @@ def test_export_count_respects_explicit_max_pages(tmp_path, monkeypatch):
 		_context(tmp_path),
 		{"query": "Golang", "count": 10, "max_pages": 2, "output": str(tmp_path / "out.json")},
 		monkeypatch,
-		_Result([{"job_id": "job-1"}], has_more=True),
+		_Result([{"job_id": "job-1"}], has_more=True, stop_reason="page_budget_exhausted"),
 	)
 
 	assert extra["limit"] == 10
 	assert search_inputs["max_pages"] == 2
 	assert data["count"] == 1
 	assert data["requested"] == 10
-	# 页数预算耗尽而平台仍说有下一页：结果只是前缀。
+	# 页数预算耗尽：结果只是前缀，与顶层 export 的 stop_reason 同词汇。
+	assert data["stop_reason"] == "page_budget_exhausted"
 	assert data["truncated"] is True
 
 
@@ -102,10 +110,11 @@ def test_export_count_shortfall_without_more_is_not_truncated(tmp_path, monkeypa
 		_context(tmp_path),
 		{"query": "Golang", "count": 50, "output": str(tmp_path / "out.json")},
 		monkeypatch,
-		_Result([{"job_id": "job-1"}], has_more=False),
+		_Result([{"job_id": "job-1"}], has_more=False, stop_reason="has_more_false"),
 	)
 
 	assert data["count"] == 1
+	assert data["stop_reason"] == "platform_has_more_false"
 	assert data["truncated"] is False
 
 
@@ -119,6 +128,7 @@ def test_export_without_count_keeps_legacy_behavior(tmp_path, monkeypatch):
 	)
 
 	assert extra["limit"] is None
+	assert extra["continue"] is False
 	assert "max_pages" not in search_inputs
 	assert set(data) == {"path", "format", "count"}
 
