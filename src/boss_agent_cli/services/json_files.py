@@ -163,9 +163,13 @@ def _json_safe_value(value: Any, *, null_oversized_ints: bool = False) -> Any:
 			# 4300 位，``json.dumps`` 能正常序列化。只有 ``str()`` 真的失败
 			# （> 4300 位）才归 null，不能静默丢弃可序列化的值（Issue #2568）。
 			try:
-				if len(str(value)) > _MAX_JSON_INT_DIGITS:
-					return None
+				text = str(value)
 			except ValueError:
+				return None
+			# ``str()`` 的 4300 位上限只数数字位，负号不计入；恰好 4300 位的
+			# 负数（``-(2**14284)``）转出 4301 个字符但仍可正常序列化，按原
+			# 长度判定会把它错误归 null（Issue #2733）。
+			if len(text) - (1 if text.startswith("-") else 0) > _MAX_JSON_INT_DIGITS:
 				return None
 			return value
 		return value
