@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.201] - 2026-11-25
+
 ### Fixed
 
 - 向导 / MCP `boss_wizard` 的 `export` goal 与顶层 `boss export` 共用同一份终止原因映射与截断判定（下沉到 `services/job_export.py`）：`--active` 筛选提前停止（`stop_reason=active_target_reached`）且没取满 `count` 时现在报 `truncated=true`，不再把不完整前缀报告为完整；恰好取满时仍按完整结果处理（Issue #2712）。

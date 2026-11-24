@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.201（2026-11-25）：向导 / MCP `boss_wizard` 的 `export` goal 与顶层 `boss export` 共用同一份终止原因映射与截断判定：`--active` 筛选提前停止且没取满 `count` 时现在报 `truncated=true`，不再把不完整前缀报告为完整（Issue #2712）。
+
 v3.4.200（2026-11-25）：`boss export --active` 在活跃度筛选提前停止且未取满 `--count` 时现在报 `truncated=true` 与专用 `operator_actions`（`stop_reason=active_target_reached`），不再把不完整结果报告为完整；恰好取满时仍按 `count_reached` 处理，中英文命令文档同步该终止原因（Issue #2710）。
 
 v3.4.199（2026-11-25）：CLI `boss export` 与 MCP `boss_export` 新增 `--welfare` / `--active`（`welfare` / `active`），与 `search`、`watch add` 及向导 export 同口径：复用 `run_search_pipeline` 的详情探测、间隔预算、页数上限与风控停止语义，活跃度未知文案的职位被排除并计入 `hints.active_filter`；`boss schema` 与中英文命令文档同步（Issue #2706）。
