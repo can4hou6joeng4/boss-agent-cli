@@ -398,6 +398,26 @@ def test_recursion_error_during_text_conversion_is_treated_as_missing() -> None:
 	assert job["title"] == "后端"
 
 
+# ── #2736：4300 位整数可转文本，不能被 bit_length 预检抹成缺失 ──────────────
+
+
+@pytest.mark.parametrize(
+	"value",
+	[10**4300 - 1, 2**14284, -(10**4300 - 1)],
+	ids=["max-positive", "power-of-two", "max-negative"],
+)
+def test_safe_text_keeps_4300_digit_integers(value: int) -> None:
+	# bit_length 已是 14285，但十进制恰好 4300 位，str() 正常成功。
+	assert value.bit_length() > 14284
+	assert len(str(value).lstrip("-")) == 4300
+	assert safe_text(value) == str(value)
+
+
+@pytest.mark.parametrize("value", [10**4300, -(10**4300)], ids=["positive", "negative"])
+def test_safe_text_drops_integers_beyond_the_conversion_limit(value: int) -> None:
+	assert safe_text(value) == ""
+
+
 # ── #2320：wizard 空白标识 ───────────────────────────────────────
 
 

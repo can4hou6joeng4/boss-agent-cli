@@ -5,10 +5,6 @@ from typing import Any
 
 BOSS_INTERNSHIP_RESPONSE_JOB_TYPE = 4
 
-# 平台字段里超过 4300 位的整数会让 str() 抛 ValueError（Python 3.11+ 的安全
-# 上限）；与 output._MAX_SAFE_INT_BITS 同口径，超过即按缺失文本处理。
-_MAX_TEXT_INT_BITS = 14284
-
 
 def safe_text(value: Any) -> str:
 	"""``str(value)`` 的安全版本：超大整数 / 不可转换值返回空串（Issue #2065）。
@@ -17,9 +13,12 @@ def safe_text(value: Any) -> str:
 	会被兜成 INTERNAL_ERROR 或可重试的 NETWORK_ERROR。展示字段按缺失处理。
 	深嵌套容器在 ``str()`` 时抛 ``RecursionError``（与本地 JSON 解析异常族
 	同口径），同样按缺失处理，不能穿出映射层（Issue #2319）。
+
+	不按 ``bit_length`` 预检：恰好 4300 位的整数（``10**4300 - 1`` /
+	``2**14284``）bit_length 已是 14285，但 ``str()`` 正常成功；预检会把
+	JSON 导出里保留的值在 CSV / HTML / Markdown 里静默抹成空串（Issue #2736）。
+	只有 ``str()`` 真的抛 ``ValueError``（超过转换上限）才算缺失。
 	"""
-	if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > _MAX_TEXT_INT_BITS:
-		return ""
 	try:
 		return str(value)
 	except (ValueError, RecursionError):
