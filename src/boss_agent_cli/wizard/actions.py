@@ -82,6 +82,7 @@ from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_craw
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
 from boss_agent_cli.services.recommend_items import build_recommend_items
+from boss_agent_cli.services.recruiter_chat_summary import enrich_friend_summaries
 from boss_agent_cli.services.recruiter_last_messages import (
 	DEFAULT_SUMMARY_LIMIT,
 	MAX_SUMMARY_LIMIT,
@@ -2759,17 +2760,23 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 	# （Issue #2600），向导路径保持同一语义（Issue #2618）。
 	job_id = _optional_nonblank_str(inputs, "job_id")
 	page = _int_input(inputs, "page", 1, minimum=1)
-	return _recruiter_call(
-		context,
-		lambda platform: platform.friend_list(
-			page=page,
-			label_id=_int_input(inputs, "label_id", 0),
-			job_id=job_id,
-		),
-		"投递申请获取失败",
-		list_keys=("friendList", "result", "list", "items"),
-		page=page,
-	)
+	# 与 CLI `hr chat --summary-limit` 同口径（IntRange(0, MAX_SUMMARY_LIMIT)）：
+	# 0 = 不请求最近消息；非整数 / 越界在平台请求前拒绝（Issue #2679）。
+	summary_limit = _int_input(inputs, "summary_limit", DEFAULT_SUMMARY_LIMIT, minimum=0, maximum=MAX_SUMMARY_LIMIT)
+	with context.recruiter_platform() as platform:
+		data = _unwrap(
+			platform,
+			platform.friend_list(page=page, label_id=_int_input(inputs, "label_id", 0), job_id=job_id),
+			"投递申请获取失败",
+			context=context,
+		)
+		rows = _extract_list_items(data, ("friendList", "result", "list", "items"))
+		# 向导路径没有 CDP 页面快照，全部走接口；来源统计与 CLI hints.summary_sources 同词汇。
+		summary = enrich_friend_summaries(platform, rows, summary_limit=summary_limit)
+	payload = _with_items({"result": data, "pagination": _pagination_evidence(data, page, rows)}, rows)
+	if rows:
+		payload["summary_sources"] = summary
+	return StepResult(payload)
 
 
 def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:

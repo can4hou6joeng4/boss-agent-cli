@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 向导 / MCP `communication`（`recruiter_applications`）支持 `summary_limit`（默认 100、上限 300，0 = 不请求最近消息），与 `hr chat --summary-limit` 同口径给沟通列表补 `unread` / `msg_status` / `last_msg` / `last_time`，并在 `summary_sources` 回显 `last_messages_requests` / `last_messages_skipped` / `summary_limit` / `counts`；请求按 friendSource 分组、每批 50 串行，非整数 / 越界在平台请求前拒绝。摘要归一化与合并实现下沉 `services/recruiter_chat_summary.py` 与命令层共用（Issue #2679）。
 - 向导 / MCP（招聘者）`last_messages` 补齐与 `hr last-messages` 同口径的 `limit`（默认 100、上限 300）与 `friend_ids` 直查：先按 `limit` 截断再请求并回显 `skipped`；请求按 friendSource 分组、每批 50 串行（此前把整页 friendId 一次请求，超过平台单批上限会被拒），回显 `requests`，部分批次失败给 `partial_error`；`friend_ids` 直查跳过沟通列表且不产出 `pagination`。批量查询实现下沉 `services/recruiter_last_messages.py` 与命令层共用（Issue #2675）。
 
 ### Fixed

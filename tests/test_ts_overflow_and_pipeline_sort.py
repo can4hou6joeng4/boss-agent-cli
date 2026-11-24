@@ -8,7 +8,7 @@
 
 from boss_agent_cli.commands.chat import _format_ts
 from boss_agent_cli.commands.chatmsg import _normalize_message
-from boss_agent_cli.commands.recruiter.chat import _format_chat_time
+from boss_agent_cli.services.recruiter_chat_summary import format_chat_time
 from boss_agent_cli.pipeline_state import _ts_to_label, build_pipeline_items, now_ts_or_clock
 
 _OVERLONG_INT = "9" * 4301
@@ -33,10 +33,10 @@ def test_chatmsg_normalize_message_drops_out_of_range_time():
 
 
 def test_recruiter_chat_time_rejects_out_of_range_values():
-	assert _format_chat_time(10**17) is None
-	assert _format_chat_time(float("inf")) is None
+	assert format_chat_time(10**17) is None
+	assert format_chat_time(float("inf")) is None
 	# 超过 4300 位的数字串 int() 抛 ValueError：原样展示平台字符串。
-	assert _format_chat_time(_OVERLONG_INT) == _OVERLONG_INT
+	assert format_chat_time(_OVERLONG_INT) == _OVERLONG_INT
 
 
 def test_pipeline_ts_label_rejects_out_of_range_values():

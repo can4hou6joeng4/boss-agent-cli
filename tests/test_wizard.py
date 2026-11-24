@@ -1281,7 +1281,9 @@ def test_recruiter_actions_accept_omitted_or_null_optional_filters(tmp_path):
 	DEFAULT_ACTIONS["recruiter_applications"](context, {"job_id": None}, {})
 	DEFAULT_ACTIONS["recruiter_last_messages"](context, {"job_id": None}, {})
 
-	assert [call[0] for call in platform.calls] == ["search_geeks", "friend_list", "friend_list", "last_messages"]
+	assert [call[0] for call in platform.calls] == [
+		"search_geeks", "friend_list", "last_messages", "friend_list", "last_messages",
+	]
 
 
 @pytest.mark.parametrize("max_msg_id", [0, -1, "0", "-3"])
