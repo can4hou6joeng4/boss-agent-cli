@@ -8,6 +8,7 @@
 
 - `boss search --welfare` 在归一后没有任何福利标签时（如 `"  "` / `","`）不再按详情筛选处理：此前会无谓跳过搜索缓存并抑制 `--page 2` 翻页提示，与 `export` / 向导把同一输入当「不筛选」的口径不一致；现在先归一标签再决定是否走详情管线（Issue #2717）。
 - 向导 / MCP `boss_wizard` 的 `export` goal 在带 `welfare` / `active` 详情筛选时与顶层 `boss export` 对齐：未给 `count` 时按 CLI 默认 50 扫描（此前会按搜索的 10 条活跃度目标提前停止，只返回 `{path, format, count}` 且不报截断）；`max_pages`（含显式值）按 `detail_filter_max_pages` 钳制（此前 `count=50` + 福利会扫 9 页而不是 5 页）；`active` 筛选统计写入 `data.active_filter`，与 CLI `hints.active_filter` 同口径（Issue #2716）。
+- 向导 / MCP `boss_wizard` 的 `search` goal 在使用 `active` 筛选时返回 `data.active_filter`（`rejected` / `unknown_excluded` / `detail_lookups` 等），与 CLI `search` 的 `hints.active_filter` 同口径；非法 `welfare` / `active` 取值也在构造平台实例前报 `INVALID_PARAM`（Issue #2720）。
 
 ## [3.4.201] - 2026-11-25
 

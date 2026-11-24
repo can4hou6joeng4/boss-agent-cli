@@ -1243,6 +1243,9 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		# 那时平台实例已构造，CDP 模式会先启动浏览器或做登录探测。
 		page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
 		_int_input(inputs, "max_pages", 1, minimum=1)
+		# 福利 / 活跃度在构造平台实例前校验（与 #2692 口径一致），并保留
+		# 活跃度档位用于返回筛选统计（Issue #2720）。
+		_, active_level = _detail_filter_inputs(inputs)
 		account = account_scope(context.auth())
 		search_kwargs: dict[str, Any] = {}
 		if with_score:
@@ -1252,21 +1255,24 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			result = execute_candidate_search(
 				platform, cache, context.logger, {**inputs, "account": account}, **search_kwargs
 			)
-	return StepResult(
-		{
-			# 先由 `execute_candidate_search` 评分、再排序：与命令层「先评分再
-			# sort」一致（匹配分类型漂移按 0 处理）。
-			"items": sort_search_items(list(result.items), sort_mode),
-			"pagination": {
-				"page": page,
-				# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。
-				"has_more": result.has_more_reported,
-				"has_more_source": "platform_hasMore" if result.has_more_reported is not None else "unknown",
-				"total": result.total or len(result.items),
-				"total_kind": "returned_page_count",
-			},
-		}
-	)
+	data: dict[str, Any] = {
+		# 先由 `execute_candidate_search` 评分、再排序：与命令层「先评分再
+		# sort」一致（匹配分类型漂移按 0 处理）。
+		"items": sort_search_items(list(result.items), sort_mode),
+		"pagination": {
+			"page": page,
+			# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。
+			"has_more": result.has_more_reported,
+			"has_more_source": "platform_hasMore" if result.has_more_reported is not None else "unknown",
+			"total": result.total or len(result.items),
+			"total_kind": "returned_page_count",
+		},
+	}
+	if active_level:
+		# CLI search 把同一份统计写进 hints.active_filter；向导步骤没有 hints
+		# 通道，放进 data 供 Agent 判断未知活跃度被排除了多少（Issue #2720）。
+		data["active_filter"] = active_filter_hint(active_level, result)
+	return StepResult(data)
 
 
 def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
