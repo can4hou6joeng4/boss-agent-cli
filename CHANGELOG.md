@@ -7,6 +7,7 @@
 ### Fixed
 
 - `config get/set/reset` 的未知 key、非法取值与写入失败三条错误路径改走统一的 TTY 错误渲染：终端不再把 JSON 信封打到 stdout，改为在 stderr 显示错误码、消息、恢复动作与后继命令；`--json` / 管道信封与退出码不变（Issue #2781）。
+- `render_sectioned_record` 与 `render_batch_operation_summary` 统一在面板前打印命令标题（先做安全文本与 markup 转义，超大整数等值漂移回落 `info`），`me` / `agent stats` / `crawl start` / `resume show` / `batch-greet` 与 `hr resume` 等命令在终端不再只看到分段名或计数；`hr resume` 此前在调用点的局部补标题已移除（Issue #2783）。
 
 ## [3.4.210] - 2026-11-25
 

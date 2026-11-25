@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from boss_agent_cli import display
 from boss_agent_cli.display import (
 	render_list_result,
 	render_message_panel,
@@ -240,9 +239,7 @@ def render_identity(record: Any, *, title: str, next_steps: list[str]) -> None:
 
 def render_resume(data: Any, *, title: str, next_steps: list[str]) -> None:
 	if isinstance(data, dict):
-		# render_sectioned_record 只按分段打印面板，不显示 title；这里补上命令标识。
-		display.console.print(f"[bold cyan]{display.escape_markup(title)}[/bold cyan]")
-		render_sectioned_record(data)
+		render_sectioned_record(data, title=title)
 	else:
 		render_message_panel({"result": data}, title=title)
 	render_next_steps(next_steps)
