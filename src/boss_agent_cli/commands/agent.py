@@ -33,6 +33,7 @@ from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
 from boss_agent_cli.api.egress import EgressContradictionError
+from boss_agent_cli.api.models import field_text
 from boss_agent_cli.commands.crawl import (
 	_LoginSeedUnavailable,
 	_report_corrupt_run,
@@ -985,22 +986,25 @@ def _crawl_fit_jobs(cache: CacheStore, crawl_jobs: list[dict[str, Any]]) -> tupl
 	for crawl_job in crawl_jobs:
 		item = crawl_job["payload"]
 		selector = str(crawl_job["selector"])
-		job_id = str(item.get("job_id") or "")
-		description = cache.get_job_desc(job_id) or str(item.get("post_description") or "")
+		# 载荷字段按 ``field_text`` 口径取文本（Issue #2833）：容器 / 非有限数按
+		# 缺失处理，裸 ``str()`` 会把 Python repr 当成职位描述送进 AI 提示，还会
+		# 让污染行冒充「已有详情」而不出现在 missing 里。
+		job_id = field_text(item, "job_id")
+		description = cache.get_job_desc(job_id) or field_text(item, "post_description")
 		if description:
 			jobs.append({
 				"selector": selector,
-				"title": item.get("title", ""),
-				"company": item.get("company", ""),
-				"city": item.get("city", ""),
-				"salary": item.get("salary", ""),
+				"title": field_text(item, "title"),
+				"company": field_text(item, "company"),
+				"city": field_text(item, "city"),
+				"salary": field_text(item, "salary"),
 				"description": description,
 			})
 		else:
 			missing.append({
 				"selector": selector,
-				"title": item.get("title", ""),
-				"company": item.get("company", ""),
+				"title": field_text(item, "title"),
+				"company": field_text(item, "company"),
 				"status": "缺详情",
 			})
 	return jobs, missing
