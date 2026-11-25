@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.223 (2026-11-26): `escape_markup()` now follows the same contract as `safe_text()` for huge integers and deeply nested values, AI result object-list inline fields use safe text and cell normalization, and the panel titles of `render_message_panel()` / `render_sectioned_record()` / `render_ai_result()` are escaped as external values (Issues #2826, #2828).
+
 v3.4.222 (2026-11-26): the wizard menu's corrupt-task notice now escapes run IDs read from the database before handing them to Rich, so markup, links or control characters in a run ID no longer break the whole TTY render (Issue #2823).
 
 v3.4.221 (2026-11-26): the `boss ai local status` terminal output now renders through safe scalar normalization; local AI config and recommended-model fields that are objects, booleans, non-finite numbers or huge integers show `-` instead of raising `ValueError` or leaking Python reprs (Issue #2820).
