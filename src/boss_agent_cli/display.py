@@ -171,8 +171,13 @@ def escape_markup(value: Any) -> str:
 	包进空样式标签 ``[none]…[/none]``：Rich 的标签正则不能跨越 ``[``，值内
 	悬空的 ``[`` 够不到值外的 ``]``；结尾反斜杠加倍后恰好还原成原数量，
 	闭合标签保持有效。
+
+	``str()`` 走 ``safe_text`` 同口径（Issue #2826）：调用点常把平台 / AI
+	返回的原始标量直接传进来，合法 JSON 的超大整数会让 ``str()`` 抛
+	``ValueError``、深嵌套容器抛 ``RecursionError``，异常发生在构造 markup
+	之前，渲染出口的 ``_SanitizingConsole`` 兜不住。这两种形状按缺失处理。
 	"""
-	text = strip_control(sanitize_surrogates(str(value)))
+	text = strip_control(sanitize_surrogates(safe_text(value)))
 	if "[" not in text and not text.endswith("\\"):
 		return text
 	parts: list[str] = []
@@ -1328,7 +1333,9 @@ def _ai_value_lines(value: Any) -> list[str]:
 		lines = []
 		for item in value:
 			if isinstance(item, dict):
-				inline = "  ".join(f"{k}={v}" for k, v in item.items())
+				# 直接 f-string 插值会让超大整数在 ``str()`` 上限处抛 ValueError，
+				# 容器还会漏出 Python repr；键值分别走安全文本与单元格归一（Issue #2826）。
+				inline = "  ".join(f"{safe_text(key)}={cell_text(child)}" for key, child in item.items())
 				lines.append(f"  · {escape_markup(inline)}")
 			else:
 				lines.append(f"  · {escape_markup(item)}")
