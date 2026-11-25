@@ -834,18 +834,20 @@ def _last_message_summaries(data: Any) -> dict[int, Mapping[str, Any]]:
 def _as_friend_int(value: Any) -> int | None:
 	if type(value) is int:
 		return value
-	if isinstance(value, str) and value.strip().isdigit():
-		try:
-			return int(value.strip())
-		except ValueError:
-			return None
+	if isinstance(value, str):
+		text = value.strip()
+		if text.lstrip("+-").isdigit():
+			try:
+				return int(text)
+			except ValueError:
+				return None
 	return None
 
 
 def _friend_id_for_raw(item: Mapping[str, Any], summaries: Mapping[int, Mapping[str, Any]]) -> int | None:
 	candidates = [
 		friend_id
-		for key in ("friendId", "friend_id", "gid", "uid")
+		for key in ("friendId", "friend_id", "uid", "gid")
 		if (friend_id := _as_friend_int(item.get(key))) is not None
 	]
 	# 与 CLI 的 known_ids 同口径：能命中本次归一化摘要的 ID 优先于其他 ID。
@@ -948,7 +950,7 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 					name = _safe_text(friend_id, "未命名")
 				last_msg = _first_safe_text(summary or {}, ("last_msg", "lastMsg", "message"))
 				if not last_msg:
-					last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "message", "content"))
+					last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "message", "text", "content"))
 				if not last_msg:
 					body = item.get("body")
 					last_msg = (

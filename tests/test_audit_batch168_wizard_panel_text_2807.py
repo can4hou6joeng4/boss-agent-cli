@@ -209,3 +209,42 @@ def test_digest_keeps_company_precedence_and_mapping(rendered: io.StringIO) -> N
 	text = rendered.getvalue()
 	assert "职位甲 · 已有公司" in text
 	assert "职位乙 · 对象公司" in text
+
+
+def test_last_messages_does_not_cross_two_contacts(rendered: io.StringIO) -> None:
+	data = {
+		"items": [
+			{"uid": 9, "gid": 17, "name": "联系人甲", "lastMsg": "正文甲"},
+			{"friendId": 17, "name": "联系人乙", "lastMsg": "正文乙"},
+		],
+		"messages": [
+			{"friendId": 9, "last_msg": "正文甲"},
+			{"friendId": 17, "last_msg": "正文乙"},
+		],
+	}
+	renderer.render_run(_run("last_messages", data))
+
+	text = rendered.getvalue()
+	assert "联系人甲" in text and "正文甲" in text
+	assert "联系人乙" in text and "正文乙" in text
+	assert text.index("正文甲") < text.index("正文乙")
+
+
+def test_last_messages_accepts_signed_string_id(rendered: io.StringIO) -> None:
+	data = {
+		"items": [{"friendId": "+9", "lastMsg": "正文甲"}],
+		"messages": [{"friendId": 9, "last_msg": "正文甲"}],
+	}
+	renderer.render_run(_run("last_messages", data))
+
+	text = rendered.getvalue()
+	assert "9" in text
+	assert "正文甲" in text
+	assert "未命名" not in text
+
+
+def test_last_messages_legacy_top_level_text(rendered: io.StringIO) -> None:
+	row = {"friend_id": 9, "name": "联系人甲", "text": "正文甲"}
+	renderer.render_run(_run("last_messages", {"items": [row], "messages": [row]}))
+
+	assert "正文甲" in rendered.getvalue()
