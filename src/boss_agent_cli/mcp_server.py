@@ -120,6 +120,9 @@ _HR_BATCH_SIZE = 50
 #: pipeline / follow-up / digest 聚合好友列表的估算页数上限：与 collector
 #: 的真实翻页上限一致；按 5 页估算会让 8 页以上的账号被提前掐断（Issue #2024）。
 _FRIEND_LIST_ESTIMATE_PAGES = MAX_FRIEND_LIST_PAGES
+#: ``boss me`` 未指定 ``--section`` 时依次请求的四段：用户信息、简历基本信息、
+#: 求职期望、投递记录；相邻两次请求都要经过默认节流（Issue #2852）。
+_ME_FULL_SECTION_REQUESTS = 4
 #: batch-greet 的 CLI 默认值与上限（命令内会把 --count 截断到 10）。
 _BATCH_GREET_DEFAULT_COUNT = 10
 _BATCH_GREET_MAX_COUNT = 10
@@ -486,6 +489,11 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 		# 最坏情况与 search --welfare 共用同一翻页上限（Issue #1860）。
 		pages = detail_filter_max_pages("welfare", "today")
 		return pages * (_SEARCH_PAGE_SIZE + 1)
+	if command == "me":
+		# 不指定 --section 时四段信息各发一次请求；单段调用只有一次。
+		# 缺省 120s 只够一次请求加一次节流，四段全量会被宿主提前掐断
+		# （Issue #2852）。
+		return 1 if _option_value(args, "--section") is not None else _ME_FULL_SECTION_REQUESTS
 	if command in {"pipeline", "follow-up", "digest"}:
 		# 好友列表逐页聚合，再追加一次面试数据请求（Issue #2024）。
 		return _FRIEND_LIST_ESTIMATE_PAGES + 1
