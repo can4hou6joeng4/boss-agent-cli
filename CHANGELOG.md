@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.223] - 2026-11-26
+
 ### Fixed
 
 - `escape_markup()` 与 `safe_text()` 同口径：超过 4300 位转换上限的整数或深嵌套容器按缺失处理为空串，AI 结果、批量问候结果等把原始值直接交给它的渲染入口不再让整条 TTY 输出抛 `ValueError` / `RecursionError`（Issue #2826）。
