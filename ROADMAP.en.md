@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.220 (2026-11-26): CLI job detail, `boss status` risk lock and generic key-value panels now render through safe scalar normalization, with wizard job detail, local crawl brief and chat direction aligned; objects, booleans, non-finite numbers and huge integers no longer leak Python reprs or break the panel (Issues #2812, #2815, #2817).
+
 v3.4.219 (2026-11-26): wizard non-list panels now render through safe scalar normalization; objects, booleans, non-finite numbers and huge integers no longer leak Python reprs, nan / inf / True or break the panel (Issue #2809).
 
 v3.4.218 (2026-11-26): wizard panels now match CLI / menu field precedence and render table text through safe scalar normalization; containers, booleans, non-finite numbers and huge integers no longer leak Python reprs or break the panel (Issue #2807).

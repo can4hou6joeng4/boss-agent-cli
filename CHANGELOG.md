@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.220] - 2026-11-26
+
 ### Fixed
 
 - `boss status` 的本地风控锁与通用键值面板按安全标量渲染：`locked_at` / `reason` 是对象、布尔、`NaN` / `Infinity` 或超大整数时回退 `unknown` / `ENVIRONMENT_RISK`，不再显示 repr 或中断；通用面板的 `NaN` / `Infinity` 显示 `-`，布尔沿用既有 `True` / `False` 写法（Issue #2817）。
