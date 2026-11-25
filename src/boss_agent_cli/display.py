@@ -1145,7 +1145,8 @@ def render_message_panel(data: dict[str, Any], *, title: str = "result") -> None
 	lines: list[str] = []
 	for k, v in data.items():
 		lines.extend(_panel_field_lines(k, v))
-	panel = Panel("\n".join(lines), title=title, border_style="green")
+	# 标题按外部值转义：公共 helper 的调用方可能传平台 / 记录里的原始文本（Issue #2828）。
+	panel = Panel("\n".join(lines), title=escape_markup(title), border_style="green")
 	console.print(panel)
 
 
@@ -1191,7 +1192,12 @@ def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> Non
 			for k, v in content.items():
 				# 嵌套的列表 / 对象有界展开，避免一条记录刷屏；0 / False 不再被当成缺失。
 				lines.extend(_panel_field_lines(k, v, bounded=True))
-			panel = Panel("\n".join(lines) if lines else "[dim]empty[/dim]", title=section, border_style="cyan")
+			# 分段名来自 data 的键（招聘者侧直接是平台响应），按外部值转义（Issue #2828）。
+			panel = Panel(
+				"\n".join(lines) if lines else "[dim]empty[/dim]",
+				title=escape_markup(section),
+				border_style="cyan",
+			)
 			console.print(panel)
 		else:
 			# 顶层段落（resume show 的 modules 等）本身就是这条记录的正文，完整展开。
@@ -1349,7 +1355,10 @@ def render_ai_result(
 		body.append(f"[bold cyan]{escape_markup(key)}[/bold cyan]")
 		body.extend(_ai_value_lines(value))
 		body.append("")
-	console.print(Panel("\n".join(body).rstrip() or "[dim]empty[/dim]", title=title, border_style="magenta"))
+	# 标题按外部值转义，与正文同一口径（Issue #2828）。
+	console.print(
+		Panel("\n".join(body).rstrip() or "[dim]empty[/dim]", title=escape_markup(title), border_style="magenta")
+	)
 	render_next_steps(next_steps)
 
 

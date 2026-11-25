@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `render_message_panel()` / `render_sectioned_record()` / `render_ai_result()` 的 Panel 标题统一按外部值转义：分段名来自平台响应键、公共 helper 的标题参数不再让未配对 markup 打断整条 TTY，普通标题与正文渲染不变（Issue #2828）。
+
 ## [3.4.222] - 2026-11-26
 
 ### Fixed
