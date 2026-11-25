@@ -4,7 +4,8 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, current_friend_uid_or_emit, resolve_friend_or_emit
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, positional_hint, render_message_panel
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, positional_hint, render_message_panel
+from boss_agent_cli.services.candidate_actions import cli_error_details
 from boss_agent_cli.services.contact_lookup import friend_display_name
 
 
@@ -46,6 +47,28 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			handle_not_supported(ctx, "exchange", exc, fallback_message=f"当前平台不支持{type_label}交换能力")
 			return
 		if not platform.is_success(resp):
+			error_code, _ = platform.parse_error(resp)
+			if error_code == "ACTION_UNCONFIRMED":
+				# 求职者侧核对：登记表的恢复文案指向招聘者的 `boss hr chatmsg`
+				# 与 `<friend_id>`，求职者账号既没有该标识也跑不了那条命令
+				# （Issue #990、#2849）。
+				chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
+				handle_error_output(
+					ctx,
+					"exchange",
+					code="ACTION_UNCONFIRMED",
+					message="交换请求结果未确认；请求可能已生效，请先核对，勿直接重试",
+					recoverable=False,
+					recovery_action=f"动作可能已生效：先用 {chat_cmd} 核对会话，不要直接重试",
+					details={"outcome_unknown": True, "replay_safe": False, **cli_error_details(resp)},
+					hints={
+						"next_actions": [chat_cmd],
+						"operator_actions": [
+							f"先到 BOSS 直聘会话页核对是否已向 {friend_name} 发出{type_label}交换请求；不要自动重发"
+						],
+					},
+				)
+				return
 			handle_platform_error_output(ctx, "exchange", platform, resp, fallback_message=f"{type_label}交换请求失败")
 			return
 

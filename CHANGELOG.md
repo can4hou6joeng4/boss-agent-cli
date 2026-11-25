@@ -7,6 +7,7 @@
 ### Fixed
 
 - MCP `batch-greet` 只读调用中断后不再建议「调整 `--count` / 筛选条件后重试」：未开启预览时增大零上限会变成真实写入，恢复指引改为保留原预览模式或零上限、按原参数重试（Issue #2847）。
+- 求职者侧 `exchange` / `mark` 的结果未知信封改用求职者核对指引：`ACTION_UNCONFIRMED` 不再指向招聘者的 `boss hr chatmsg <friend_id>`，而是用同一数据目录的 `boss chat` 核对会话 / 标签，并保留 `outcome_unknown` / `replay_safe=false`（Issue #2849）。
 
 ## [3.4.225] - 2026-11-26
 

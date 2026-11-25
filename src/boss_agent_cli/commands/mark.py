@@ -4,7 +4,8 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_uid_or_emit, resolve_friend_or_emit
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
+from boss_agent_cli.services.candidate_actions import cli_error_details
 from boss_agent_cli.services.contact_lookup import friend_display_name
 from boss_agent_cli.services.labels import (
 	LABEL_MAP as _LABEL_MAP,
@@ -94,6 +95,26 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			handle_not_supported(ctx, "mark", exc, fallback_message="当前平台不支持联系人标签能力")
 			return
 		if not platform.is_success(resp):
+			error_code, _ = platform.parse_error(resp)
+			if error_code == "ACTION_UNCONFIRMED":
+				# 与 greet / apply / exchange 同口径：求职者侧结果未知时用
+				# `boss chat` 核对，不能用登记表里的招聘者命令 `boss hr chatmsg`
+				# 与 `<friend_id>`（Issue #990、#2849）。
+				chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
+				handle_error_output(
+					ctx,
+					"mark",
+					code="ACTION_UNCONFIRMED",
+					message="标签操作结果未确认；请求可能已生效，请先核对，勿直接重试",
+					recoverable=False,
+					recovery_action=f"动作可能已生效：先用 {chat_cmd} 核对标签，不要直接重试",
+					details={"outcome_unknown": True, "replay_safe": False, **cli_error_details(resp)},
+					hints={
+						"next_actions": [chat_cmd],
+						"operator_actions": [f"先在 BOSS 直聘会话页核对标签「{label_name}」是否已{action_text}；不要自动重发"],
+					},
+				)
+				return
 			handle_platform_error_output(ctx, "mark", platform, resp, fallback_message=f"{action_text}标签失败")
 			return
 
