@@ -45,6 +45,7 @@ from boss_agent_cli.services.candidate_actions import (
 	CandidateActionReleaseFailed,
 	candidate_action_provably_unsent,
 	classify_platform_response,
+	cli_error_details,
 	outcome_unknown_cause,
 	release_candidate_action,
 	reserve_candidate_action,
@@ -241,7 +242,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str | 
 						recovery_action=f"动作可能已生效：先用 {chat_cmd} 核对会话，不要直接重试",
 						details={
 							"outcome_unknown": True,
-							**_cli_error_details(resp),
+							**cli_error_details(resp),
 						},
 						hints={
 							"next_actions": [chat_cmd],
@@ -306,20 +307,6 @@ def _explicit_global_options(ctx: click.Context) -> list[str]:
 		if value:
 			options.extend([flag, str(value)])
 	return options
-
-
-def _cli_error_details(response: Any) -> dict[str, Any]:
-	"""提取平台层挂在响应上的 ``__cli_error_details__``（如 ``replay_safe=false``）。
-
-	未知结果的信封必须保留「操作可能已生效」的语义字段，否则 Agent 只看到一个
-	字符串错误码，会当成普通失败重试（Issue #984）。
-	"""
-	if not isinstance(response, dict):
-		return {}
-	details = response.get("__cli_error_details__")
-	if not isinstance(details, dict):
-		return {}
-	return {str(key): value for key, value in details.items() if not str(key).startswith("__")}
 
 
 def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
@@ -544,7 +531,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										**item.to_dict(),
 										"status": "unconfirmed",
 										"error": error_code,
-										"details": _cli_error_details(resp),
+										"details": cli_error_details(resp),
 									}
 									results.append(unconfirmed)
 									stopped_reason = error_code
@@ -560,7 +547,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										**item.to_dict(),
 										"status": "unconfirmed",
 										"error": error_code,
-										"details": {"outcome_unknown": True, "replay_safe": False, **_cli_error_details(resp)},
+										"details": {"outcome_unknown": True, "replay_safe": False, **cli_error_details(resp)},
 									}
 									results.append(unconfirmed)
 									stopped_reason = error_code
@@ -575,7 +562,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										**item.to_dict(),
 										"status": "unconfirmed",
 										"error": error_code,
-										"details": {"outcome_unknown": True, "replay_safe": False, **_cli_error_details(resp)},
+										"details": {"outcome_unknown": True, "replay_safe": False, **cli_error_details(resp)},
 									}
 									results.append(unconfirmed)
 									stopped_reason = "UNKNOWN"
@@ -594,7 +581,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										"company": item.company,
 										"status": "failed",
 										"error": error_code,
-										"details": _cli_error_details(resp),
+										"details": cli_error_details(resp),
 									})
 									stopped_reason = error_code
 									break

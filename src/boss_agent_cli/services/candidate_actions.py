@@ -222,6 +222,19 @@ def outcome_unknown_cause(exc: BaseException | None) -> dict[str, Any]:
 	return {"cause": code if isinstance(code, str) and code else type(exc).__name__}
 
 
+def cli_error_details(response: Any) -> dict[str, Any]:
+	"""提取平台层挂在响应上的 ``__cli_error_details__``（如 ``replay_safe=false``）。
+
+	内部命名空间的键（``__`` 前缀）不进入信封：调用方拿到的只是可对外透传的
+	判定字段。四个求职者侧写命令（greet / apply / exchange / mark）共用同一份
+	提取口径，避免各入口的 ``outcome_unknown`` / ``replay_safe`` 字段各自漂移。
+	"""
+	details = response.get("__cli_error_details__") if isinstance(response, dict) else None
+	if not isinstance(details, dict):
+		return {}
+	return {str(key): value for key, value in details.items() if not str(key).startswith("__")}
+
+
 def run_candidate_action(
 	cache: CacheStore,
 	*,
