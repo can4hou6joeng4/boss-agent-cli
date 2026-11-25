@@ -600,6 +600,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					},
 				},
 				"required": [],
+				# resume 必须显式 dry_run=false：缺省 true 时映射层（与 CLI）拒绝
+				# `--dry-run --resume`，schema 不能放行这个必失败组合（Issue #2798，
+				# 同 #1591 的保护）。
+				"if": {"properties": {"resume": {"const": True}}, "required": ["resume"]},
+				"then": {"properties": {"dry_run": {"const": False}}, "required": ["dry_run"]},
 			},
 		),
 		ToolDefinition(
