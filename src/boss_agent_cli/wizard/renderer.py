@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -14,6 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from boss_agent_cli import display
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.services.chat_utils import message_text_value
 from boss_agent_cli.wizard.catalog import GOALS
 from boss_agent_cli.wizard.models import count_or_none
@@ -815,6 +817,33 @@ def _chat_content_text(item: Mapping[str, Any]) -> str:
 	return body_text or "—"
 
 
+def _last_message_summaries(data: Any) -> dict[int, Mapping[str, Any]]:
+	"""最近消息的归一化摘要按 friendId 建索引，供裸原始消息回退使用。"""
+	result: dict[int, Mapping[str, Any]] = {}
+	if not isinstance(data, Mapping):
+		return result
+	messages = data.get("messages")
+	if not isinstance(messages, list):
+		return result
+	for message in messages:
+		if isinstance(message, Mapping) and type(message.get("friendId")) is int:
+			result[message["friendId"]] = message
+	return result
+
+
+def _friend_id_for_raw(item: Mapping[str, Any], summaries: Mapping[int, Mapping[str, Any]]) -> int | None:
+	for key in ("friendId", "friend_id", "gid", "uid"):
+		value = item.get(key)
+		if type(value) is int:
+			return value
+	for side in ("from", "to"):
+		party = item.get(side)
+		uid = party.get("uid") if isinstance(party, Mapping) else None
+		if type(uid) is int and uid in summaries:
+			return uid
+	return None
+
+
 def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> None:
 	"""Markdown-style preview for generic list goals (search / shortlist / pipeline…)."""
 	from rich import box
@@ -822,6 +851,9 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 	from rich.text import Text
 
 	goal = str(run.get("goal") or "")
+	last = _as_mapping(run.get("last_result")) or {}
+	data = _as_mapping(last.get("data")) or last
+	summaries = _last_message_summaries(data) if goal == "last_messages" else {}
 	# 聊天记录的 messages 已与 CLI 同口径；裸 items 可能含 dict.from / dict.body。
 	items = _list_items_from_run(run, preferred_keys=("messages",) if goal == "chat_history" else ())
 	if not items:
@@ -842,22 +874,35 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			updated = item.get("updated_at")
 			if isinstance(updated, str) and "T" in updated:
-				updated = display.iso_time_label(updated)
+				converted = display.iso_time_label(updated)
+				if converted != "-":
+					updated = converted
 			table.add_row(
 				str(index),
-				_clip_text(_safe_text(item.get("name") or item.get("title"), "未命名简历"), 24),
-				_clip_text(_safe_text(updated or item.get("created_at"), "—"), 20),
+				_clip_text(_first_safe_text(item, ("name", "title"), "未命名简历"), 24),
+				_clip_text(
+					_first_safe_text(
+						{"updated_at": updated, "created_at": item.get("created_at")}, ("updated_at", "created_at"), "—"
+					),
+					20,
+				),
 			)
 	elif goal in {"watch"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
 		table.add_column("监控名", style="bold", no_wrap=True)
 		table.add_column("关键词", style="dim", no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
-			params = item.get("params") if isinstance(item.get("params"), Mapping) else {}
+			raw_params = item.get("params")
+			params: Mapping[str, Any] = raw_params if isinstance(raw_params, Mapping) else {}
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or "未命名", 16),
-				_clip_text((params or {}).get("query") or item.get("query") or "—", 24),
+				_clip_text(_first_safe_text(item, ("name",), "未命名"), 16),
+				_clip_text(
+					_first_safe_text(
+						{"query": params.get("query"), "fallback": item.get("query")}, ("query", "fallback"), "—"
+					),
+					24,
+				),
 			)
 	elif goal in {"pipeline"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -867,9 +912,9 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("title") or item.get("jobName") or "未命名", 24),
-				_clip_text(item.get("company") or item.get("brandName") or "—", 14),
-				_clip_text(item.get("stage") or item.get("relation") or "—", 12),
+				_clip_text(_first_safe_text(item, ("title", "jobName"), "未命名"), 24),
+				_clip_text(_first_safe_text(item, ("company", "brandName"), "—"), 14),
+				_clip_text(_first_safe_text(item, ("stage", "relation"), "—"), 12),
 			)
 	elif goal in {"communication", "last_messages"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -877,19 +922,25 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("公司/职位", style="dim", overflow="ellipsis", max_width=20, no_wrap=True)
 		table.add_column("最近消息", style="dim", overflow="ellipsis", max_width=28, no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
-			name = _safe_text(item.get("name") or item.get("friendName") or item.get("geekName"))
-			if not name:
-				name = _safe_text(item.get("friendId") or item.get("uid"), "未命名")
+			if goal == "last_messages":
+				friend_id = _friend_id_for_raw(item, summaries)
+				summary = summaries.get(friend_id) if friend_id is not None else None
+				name = _first_safe_text(summary or {}, ("name", "friendName", "geekName"))
+				if not name:
+					name = _first_safe_text(item, ("name", "friendName", "geekName"))
+				if not name and friend_id is not None:
+					name = str(friend_id)
+				last_msg = _first_safe_text(summary or {}, ("last_msg", "lastMsg", "message"))
+				if not last_msg:
+					last_msg = _chat_content_text(item)
+			else:
+				name = _first_safe_text(item, ("name", "friendName", "geekName"))
+				last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "content"))
 			table.add_row(
 				str(index),
-				_clip_text(name, 16),
-				_clip_text(
-					_safe_text(
-						item.get("brandName") or item.get("company") or item.get("jobName") or item.get("title"), "—"
-					),
-					20,
-				),
-				_clip_text(_safe_text(item.get("lastMsg") or item.get("last_msg") or item.get("content"), "—"), 28),
+				_clip_text(name or "未命名", 16),
+				_clip_text(_first_safe_text(item, ("brandName", "company", "jobName", "title"), "—"), 20),
+				_clip_text(last_msg or "—", 28),
 			)
 	elif goal in {"chat_history"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -909,9 +960,9 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or item.get("geekName") or "未命名", 16),
-				_clip_text(_safe_text(item.get("expectPosition") or item.get("positionName") or item.get("jobName") or item.get("title"), "—"), 20),
-				_clip_text(item.get("city") or item.get("cityName") or "—", 8),
+				_clip_text(_first_safe_text(item, ("name", "geekName"), "未命名"), 16),
+				_clip_text(_first_safe_text(item, ("expectPosition", "positionName", "jobName", "title"), "—"), 20),
+				_clip_text(_first_safe_text(item, ("city", "cityName"), "—"), 8),
 			)
 	elif goal in {"jobs_list"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -920,14 +971,8 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("title") or item.get("jobName") or item.get("name") or "未命名", 28),
-				_clip_text(
-					_safe_text(
-						item.get("jobStatusDesc") or item.get("statusDesc") or item.get("status") or item.get("jobStatus"),
-						"—",
-					),
-					10,
-				),
+				_clip_text(_first_safe_text(item, ("title", "jobName", "name"), "未命名"), 28),
+				_clip_text(_first_safe_text(item, ("jobStatusDesc", "statusDesc", "status", "jobStatus"), "—"), 10),
 			)
 	else:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -938,10 +983,10 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("title") or item.get("jobName") or item.get("name") or "未命名", 28),
-				_clip_text(item.get("company") or item.get("brandName") or "—", 14),
-				_clip_text(item.get("city") or item.get("cityName") or "—", 8),
-				_clip_text(item.get("salary") or item.get("salaryDesc") or "—", 12),
+				_clip_text(_first_safe_text(item, ("title", "jobName", "name"), "未命名"), 28),
+				_clip_text(_first_safe_text(item, ("company", "brandName"), "—"), 14),
+				_clip_text(_first_safe_text(item, ("city", "cityName"), "—"), 8),
+				_clip_text(_first_safe_text(item, ("salary", "salaryDesc"), "—"), 12),
 			)
 	footer = Text()
 	if len(items) > limit:
@@ -989,12 +1034,12 @@ def _render_management_result(
 			for item in bucket[:3]:
 				if not isinstance(item, Mapping):
 					continue
-				label = _safe_text(item.get("title") or item.get("jobName") or item.get("name"), "—")
-				raw_company = item.get("company") if item.get("company") is not None else item.get("brandName")
-				if isinstance(raw_company, Mapping):
-					company = _safe_text(raw_company.get("name") or raw_company.get("brandName"))
-				else:
-					company = _safe_text(raw_company)
+				label = _first_safe_text(item, ("title", "jobName", "name"), "—")
+				company = _first_safe_text(item, ("brandName", "companyName"))
+				if not company and isinstance(item.get("company"), Mapping):
+					company = _first_safe_text(item["company"], ("name", "brandName"))
+				if not company:
+					company = _first_safe_text(item, ("company",))
 				text = f"{label}" + (f" · {company}" if company else "")
 				preview.add_row(kind, display.escape_markup(text))
 		parts: list[Any] = [headline, Text(""), meta]
@@ -1226,8 +1271,23 @@ def _short_artifact_lines(paths: Mapping[str, Any] | Sequence[Any]) -> tuple[str
 
 
 def _safe_text(value: Any, default: str = "") -> str:
-	"""表格文本字段：容器 / 布尔 / 非有限数 / 超大整数按缺失处理（Issue #2807）。"""
-	return message_text_value(value) or default
+	"""表格文本字段：容器 / 布尔 / 非有限数按缺失，整数走 ``safe_text`` 不预检位长。"""
+	if value is None or isinstance(value, (dict, list, tuple, bool)):
+		return default
+	if isinstance(value, float) and not math.isfinite(value):
+		return default
+	return safe_text(value) or default
+
+
+def _first_safe_text(item: Any, keys: tuple[str, ...], default: str = "") -> str:
+	"""按优先级取第一个可用文本；前一键漂移成容器 / 非文本时不吞掉后续回退。"""
+	if not isinstance(item, Mapping):
+		return default
+	for key in keys:
+		text = _safe_text(item.get(key))
+		if text:
+			return text
+	return default
 
 
 def _count_text(value: Any, default: str = "—") -> str:
