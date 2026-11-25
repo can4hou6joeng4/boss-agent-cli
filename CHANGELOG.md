@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.210] - 2026-11-25
+
 ### Fixed
 
 - 职位详情与职位表的空字段显示 `-`：缺失 / 空串 / 纯空白统一走 `job_field_text`，不再出现 `exp:  | edu:  |` 与 `boss:  ()`，`boss_name` 为空时只显示 `boss: -` 或名字（Issue #2767）。
