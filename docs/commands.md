@@ -393,7 +393,7 @@ HTTP `429` 或业务 code `9` 会保存共享冷却，支持 `Retry-After` 的�
 
 计量覆盖接入预算的 HTTP dispatch、浏览器 fetch / 首页导航 / 招聘者前端动作、附件下载，以及 crawl 的导航、分页动作、页面 fetch 和 CDP fallback；不同尝试分别计数。这是主动操作预算：一个页面动作可能产生多条网站请求，浏览器自主资源、轮询、自动重定向和认证启动内部请求未逐包计量，也不会按公网 IP 自动发现或合并其他进程。该机制限制本地负载，不保证平台接受访问，也不解除平台封禁。
 
-`--delay`、`request_delay` 和 `batch_greet_delay` 必须是有限数值且满足 `0 <= 下限 <= 上限`；非法预算配置返回 `INVALID_PARAM`，不会写入配置文件。已有非法配置仍可通过 `config set/reset` 修复。显式 `--delay ""` / `--cdp-url ""` 同样按参数错误拒绝，不会回落到配置文件；只有省略选项时才使用已保存的值。
+`--delay`、`request_delay` 和 `batch_greet_delay` 必须是有限数值且满足 `0 <= 下限 <= 上限`；非法预算配置返回 `INVALID_PARAM`，不会写入配置文件。`config set` 对 `request_delay` / `batch_greet_delay` 同时接受逗号写法（`boss config set request_delay 60,120`）与数组写法（`boss config set request_delay "[60, 120]"`，即 `config get` / `config list` 展示的形式），读到的值可以原样写回。已有非法配置仍可通过 `config set/reset` 修复。显式 `--delay ""` / `--cdp-url ""` 同样按参数错误拒绝，不会回落到配置文件；只有省略选项时才使用已保存的值。
 
 ## 搜索筛选参数详解
 

@@ -272,13 +272,15 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 
 ### `RATE_LIMITED`
 
-同一时间窗口内请求过多。增大请求间隔：
+同一时间窗口内请求过多。先停下等一段时间再重试，不要立刻连续重跑。默认请求间隔已是 30–60 秒，`boss doctor` 在下限低于 30 秒时给出 warn；仍被限流时把间隔调到默认值以上：
 
 ```bash
-boss --delay 3-7 search "python"
-# 或全局配置
-boss config set request_delay "[3.0, 7.0]"
+boss --delay 60-120 search "python"
+# 或全局配置（数组写法 "[60, 120]" 等价）
+boss config set request_delay 60,120
 ```
+
+不要把间隔调到 30 秒以下：实测 15 秒间隔连续第 3 次 `search` 就命中 code 37，见 [平台风险边界](platform-risk.md) 的「请求节奏的实测边界」。
 
 ### `JOB_NOT_FOUND`
 

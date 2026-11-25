@@ -283,13 +283,15 @@ Risk control stopped the workflow. Keep its run ID/checkpoint, resolve the accou
 
 ### `RATE_LIMITED`
 
-Too many requests in a window. Increase delay:
+Too many requests in a window. Stop and wait before retrying instead of re-running right away. The default interval is already 30–60 seconds, and `boss doctor` warns when the lower bound is below 30 seconds; if you are still rate limited, raise the interval above the default:
 
 ```bash
-boss --delay 3-7 search "python"
-# Or set globally
-boss config set request_delay "[3.0, 7.0]"
+boss --delay 60-120 search "python"
+# Or set globally (the array form "[60, 120]" is equivalent)
+boss config set request_delay 60,120
 ```
+
+Do not go below 30 seconds: in the measured run a 15-second interval hit code 37 on the third consecutive `search`; see "Measured request-rate boundary" in [Platform Risk Boundaries](platform-risk.en.md).
 
 ### `JOB_NOT_FOUND`
 

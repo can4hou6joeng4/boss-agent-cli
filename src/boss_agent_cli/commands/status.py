@@ -103,8 +103,11 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 		user_info = platform.unwrap_data(info)
 		if not isinstance(user_info, dict):
 			user_info = {}
-		user_name = user_info.get("name", "未知用户")
-		data["user_name"] = user_name
+		# `.get("name", "未知用户")` 只挡键缺失：显式 null、对象、布尔、数字与空白串
+		# 会原样写进 user_name，终端再打出 `logged in as None`（Issue #2754）。
+		# 只认非空白字符串，其余与缺失同样回落。
+		raw_name = user_info.get("name")
+		data["user_name"] = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else "未知用户"
 		# 非 live 的下一步正是 `--live`；在线验证本身成功后不能到此为止，
 		# 否则 Agent 做完健康检查拿不到任何可执行的业务命令（TTY 里也只有一行
 		# 「logged in」，真人同样不知道该干什么）。

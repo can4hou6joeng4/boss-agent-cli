@@ -27,6 +27,28 @@ _CONFIG_CHOICES = {
 }
 _PUBLIC_CONFIG_KEYS = tuple(key for key in DEFAULTS if key != "low_risk_mode")
 _AVAILABLE_CONFIG_MESSAGE = f"可用项: {', '.join(sorted(_PUBLIC_CONFIG_KEYS))}"
+_STRUCTURED_PLACEHOLDER = "（JSON，见下方）"
+
+
+def _config_value_text(value: Any) -> Any:
+	"""配置值在终端里的写法：未设置项与列表不走 Python repr（Issue #2755）。
+
+	- ``None``（未设置的 ``cdp_url`` / ``export_dir`` / ``request_budget_dir``）显示
+	  「（未设置）」，而不是字符串 ``None``；
+	- 列表按 JSON 数组显示（``[30.0, 60.0]``），与 ``--json`` 信封、文档默认值表
+	  一致，照抄就能写回 ``config set``；
+	- 对象值仍占位，由调用方在表格 / 面板下方展开完整 JSON。
+	"""
+	if value is None:
+		return "（未设置）"
+	if isinstance(value, dict):
+		return _STRUCTURED_PLACEHOLDER
+	if isinstance(value, list):
+		try:
+			return json.dumps(value, ensure_ascii=False, default=str)
+		except (TypeError, ValueError, RecursionError):
+			return str(value)
+	return value
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -85,10 +107,7 @@ def _render_config_list(data: dict[str, Any]) -> None:
 	"""
 	items: list[dict[str, Any]] = data["items"]
 	structured = {item["key"]: item["value"] for item in items if isinstance(item["value"], dict)}
-	rows = [
-		{**item, "value": "（JSON，见下方）" if item["key"] in structured else item["value"]}
-		for item in items
-	]
+	rows = [{**item, "value": _config_value_text(item["value"])} for item in items]
 	render_simple_list(
 		rows,
 		f"配置 ({data['config_path']})",
@@ -156,7 +175,7 @@ def _render_config_result(data: dict[str, Any], *, title: str, next_actions: lis
 	「当前值」和「默认值 / 上一次的值」很难读，也难以对比。
 	"""
 	structured = {k: v for k, v in data.items() if isinstance(v, dict)}
-	flat = {**data, **{k: "（JSON，见下方）" for k in structured}}
+	flat = {key: _config_value_text(value) for key, value in data.items()}
 	render_action_result(flat, title=title, next_steps=next_actions)
 	if not structured:
 		return
@@ -404,11 +423,20 @@ def _parse_value(key: str, raw: str, default: Any) -> Any:
 			raise ValueError("结构化配置项的值必须是 JSON object")
 		return parsed
 	if isinstance(default, list):
-		parts = raw.split(",")
 		if all(isinstance(d, (int, float)) for d in default):
+			# `config get` / `config list` 与文档展示的都是数组写法 `[30.0, 60.0]`：
+			# 读到什么就要能写回什么，只认逗号写法会让原样回写变成 INVALID_PARAM
+			# （Issue #2757）。两种写法等价，元素个数与取值范围仍由后续校验把关。
+			text = raw.strip()
+			if text.startswith("[") and text.endswith("]"):
+				text = text[1:-1]
 			try:
-				return [float(p.strip()) for p in parts]
+				return [float(part.strip()) for part in text.split(",")]
 			except ValueError as exc:
-				raise ValueError(f"{key} 必须是逗号分隔的数值列表，例如 '1.5,3.0'，收到 {raw!r}") from exc
-		return [p.strip() for p in parts]
+				# 示例取该配置项自己的默认值：不会给出低于 doctor 告警线的间隔。
+				example = [f"{number:g}" for number in default]
+				raise ValueError(
+					f"{key} 必须是逗号分隔的数值列表，例如 '{','.join(example)}' 或 '[{', '.join(example)}]'，收到 {raw!r}"
+				) from exc
+		return [p.strip() for p in raw.split(",")]
 	return raw

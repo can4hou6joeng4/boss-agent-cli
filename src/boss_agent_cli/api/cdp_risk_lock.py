@@ -43,7 +43,13 @@ def _finite_timestamp(raw: Any) -> float:
 	``float(10**400)`` 抛 ``OverflowError``，会绕过 ``read_lock`` 的 fail-closed
 	分支；``inf`` 能通过读取，却会让 ``lock_status`` 的 ``time.localtime`` 崩溃。
 	两种坏值都按「时间未知」处理，锁的阻断语义不变（Issue #1214）。
+
+	布尔同样不是时间戳：``float(True)`` 是 ``1.0``，``locked_at: true`` 会被展示成
+	``1970-01-01 08:00:01``、``age_seconds`` 约 18 亿秒（Issue #2756）。与
+	``index_cache._finite_number`` 同口径，先按缺失排除。
 	"""
+	if isinstance(raw, bool):
+		return 0.0
 	try:
 		parsed = float(raw or 0)
 	except (OverflowError, TypeError, ValueError):
