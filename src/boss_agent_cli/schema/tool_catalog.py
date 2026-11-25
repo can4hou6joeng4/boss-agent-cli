@@ -832,6 +832,15 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"all": {"type": "boolean", "description": "运行所有已保存的监控；与 name 互斥"},
 				},
 				"required": [],
+				# CLI 用「name 或 all 恰好一个」拒绝缺省与同时给出；schema 必须
+				# 编码同一约束，否则「schema 合法但命令必失败」（Issue #2792）。
+				# all=false 等同省略，与 name 同时出现不算冲突，与 crawl.shortlist
+				# 的 Issue #2340 同口径。
+				"anyOf": [
+					{"required": ["name"]},
+					{"properties": {"all": {"const": True}}, "required": ["all"]},
+				],
+				"not": {"required": ["name"], "properties": {"all": {"const": True}}},
 			},
 		),
 		ToolDefinition(
