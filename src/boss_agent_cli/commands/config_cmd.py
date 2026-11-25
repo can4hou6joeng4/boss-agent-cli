@@ -12,7 +12,13 @@ from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.automation.config import automation_config_from_dict
 from boss_agent_cli.config import CDP_URL_REQUIREMENT, DEFAULTS, ROLES, is_valid_cdp_url, validate_request_config
 from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
-from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_action_result, render_simple_list
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_error_output,
+	handle_output,
+	render_action_result,
+	render_simple_list,
+)
 from boss_agent_cli.output import LOG_LEVELS
 from boss_agent_cli.platforms import list_platforms
 from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
@@ -58,9 +64,8 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 
 def _emit_unknown_key(ctx: click.Context) -> None:
 	"""未知配置项：消息里列出可用项，hints 给出能看到当前值的 config list。"""
-	from boss_agent_cli.output import emit_error
-
-	emit_error(
+	handle_error_output(
+		ctx,
 		"config",
 		code="INVALID_PARAM",
 		message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
@@ -75,9 +80,8 @@ def _emit_invalid_value(ctx: click.Context, key: str, message: str) -> None:
 	message，``recovery_action`` 是笼统的「修正参数」、``hints`` 为 null；Agent 拿不到
 	结构化的 ``config get <键>`` / ``config list``。
 	"""
-	from boss_agent_cli.output import emit_error
-
-	emit_error(
+	handle_error_output(
+		ctx,
 		"config",
 		code="INVALID_PARAM",
 		message=message,
@@ -283,7 +287,7 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	try:
 		_save_user_overrides(config_path, user_cfg)
 	except OSError as exc:
-		_emit_write_error(config_path, exc)
+		_emit_write_error(ctx, config_path, exc)
 		return
 
 	data = {"key": key, "value": parsed_value, "previous": ctx.obj["config"].get(key)}
@@ -320,7 +324,7 @@ def config_reset_cmd(ctx: click.Context, key: str) -> None:
 	try:
 		_save_user_overrides(config_path, user_cfg)
 	except OSError as exc:
-		_emit_write_error(config_path, exc)
+		_emit_write_error(ctx, config_path, exc)
 		return
 
 	data = {"key": key, "value": DEFAULTS[key], "restored": True}
@@ -362,11 +366,10 @@ def _save_user_overrides(config_path: Path, user_cfg: dict[str, Any]) -> None:
 	write_json_atomic(config_path, user_cfg, trailing_newline=True)
 
 
-def _emit_write_error(config_path: Path, exc: OSError) -> None:
+def _emit_write_error(ctx: click.Context, config_path: Path, exc: OSError) -> None:
 	"""配置文件写不进去时给信封：目录只读、路径被同名文件占用都不该变成 traceback。"""
-	from boss_agent_cli.output import emit_error
-
-	emit_error(
+	handle_error_output(
+		ctx,
 		"config",
 		code="LOCAL_IO_ERROR",
 		message=f"写入 {config_path} 失败: {exc.strerror or exc}",
