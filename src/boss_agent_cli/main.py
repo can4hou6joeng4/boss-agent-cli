@@ -7,7 +7,7 @@ from typing import Any
 
 import click
 
-from boss_agent_cli import __version__
+from boss_agent_cli import __version__, display
 from boss_agent_cli.api._base_client import PlatformStatusRejected, RequestTextEncodingError, parameter_status_code
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.cache.store import (
@@ -29,9 +29,14 @@ from boss_agent_cli.config import (
 	validate_request_config,
 )
 from boss_agent_cli.api.request_budget import validate_delay
-from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code, shell_argument
+from boss_agent_cli.display import (
+	INTERNAL_ERROR_TYPES,
+	error_contract_for_code,
+	handle_error_output,
+	shell_argument,
+)
 from boss_agent_cli.hooks import create_hook_bus
-from boss_agent_cli.output import LOG_LEVELS, emit_error, is_local_io_error, Logger, set_exit_codes_mode
+from boss_agent_cli.output import LOG_LEVELS, is_local_io_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
 from boss_agent_cli.services.private_files import DIRECTORY_MODE, tighten_private_directory
 
@@ -823,6 +828,17 @@ def _declare_dash_prefixed_positionals(
 	return [*kept, "--", *positionals]
 
 
+def _entry_json_mode(args: Sequence[str] | None) -> bool:
+	"""启动期错误也可能带显式 ``--json``：即使 stdout 是 TTY 也要出信封。"""
+	ctx = click.get_current_context(silent=True)
+	if ctx is not None:
+		# 复用 display 的判定：显式 --json 或非 TTY 都要出信封，TTY 测试也可替换该函数。
+		return display.is_json_mode(ctx)
+	# console script 调用 cli.main(args=None)，参数在 sys.argv 里；与 _prescan_exit_codes 同款回退。
+	effective_args = sys.argv[1:] if args is None else args
+	return "--json" in tuple(effective_args) or display.is_json_mode(None)
+
+
 class BossCliGroup(click.Group):
 	"""Click group that preserves the JSON envelope contract for usage errors."""
 
@@ -839,6 +855,11 @@ class BossCliGroup(click.Group):
 		**extra: Any,
 	) -> Any:
 		_prescan_exit_codes(args)
+
+		def report_error(command: str, **kwargs: Any) -> None:
+			# ctx=None 保持原信封文案不变；显式 --json 由 _entry_json_mode 决定通道。
+			handle_error_output(None, command, json_mode=_entry_json_mode(args), **kwargs)
+
 		try:
 			return super().main(
 				args=args,
@@ -888,7 +909,7 @@ class BossCliGroup(click.Group):
 				unknown_option = _unknown_option_error(exc)
 				if unknown_option is not None:
 					message, recovery_action, hints = unknown_option
-			emit_error(
+			report_error(
 				command,
 				code="INVALID_PARAM",
 				message=message,
@@ -905,7 +926,7 @@ class BossCliGroup(click.Group):
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
 			busy_recoverable, busy_recovery_action = error_contract_for_code("CACHE_BUSY")
-			emit_error(
+			report_error(
 				command,
 				code="CACHE_BUSY",
 				message=str(exc),
@@ -919,7 +940,7 @@ class BossCliGroup(click.Group):
 			if not standalone_mode:
 				raise
 			record_recoverable, record_recovery_action = error_contract_for_code("CACHE_RECORD_INVALID")
-			emit_error(
+			report_error(
 				_invoked_command_name(args, self.name or "boss"),
 				code="CACHE_RECORD_INVALID",
 				message=str(exc),
@@ -933,7 +954,7 @@ class BossCliGroup(click.Group):
 			if not standalone_mode:
 				raise
 			invalid_recoverable, _invalid_recovery = error_contract_for_code("INVALID_PARAM")
-			emit_error(
+			report_error(
 				_invoked_command_name(args, self.name or "boss"),
 				code="INVALID_PARAM",
 				message=str(exc),
@@ -950,7 +971,7 @@ class BossCliGroup(click.Group):
 					raise
 				command = _invoked_command_name(args, self.name or "boss")
 				db_recoverable, db_recovery_action = error_contract_for_code("LOCAL_IO_ERROR")
-				emit_error(
+				report_error(
 					command,
 					code="LOCAL_IO_ERROR",
 					message=f"{command} 本地数据库文件无法打开: {exc}",
@@ -962,7 +983,7 @@ class BossCliGroup(click.Group):
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
 			busy_recoverable, busy_recovery_action = error_contract_for_code("CACHE_BUSY")
-			emit_error(
+			report_error(
 				command,
 				code="CACHE_BUSY",
 				message=f"本地缓存库正被其他进程写入（{exc}）",
@@ -975,7 +996,7 @@ class BossCliGroup(click.Group):
 			# 异常发生在命令自己的 try 之外，只能在这里统一给信封。
 			if not standalone_mode:
 				raise
-			emit_error(
+			report_error(
 				_invoked_command_name(args, self.name or "boss"),
 				code="CACHE_DATABASE_INVALID",
 				message=str(exc),
@@ -1001,7 +1022,7 @@ class BossCliGroup(click.Group):
 				# 与命令层同口径报 INVALID_PARAM，不给 INTERNAL_ERROR 的升级指引
 				# （Issue #2567）。
 				invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
-				emit_error(
+				report_error(
 					command,
 					code="INVALID_PARAM",
 					message=f"{command} 请求被平台拒绝（HTTP {status}），同一组参数重试不会改变结果",
@@ -1010,7 +1031,7 @@ class BossCliGroup(click.Group):
 				)
 				return None
 			internal_recoverable, internal_recovery_action = error_contract_for_code("INTERNAL_ERROR")
-			emit_error(
+			report_error(
 				command,
 				code="INTERNAL_ERROR",
 				message=f"{command} 失败: {type(exc).__name__}: {exc}",
@@ -1026,7 +1047,7 @@ class BossCliGroup(click.Group):
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
 			encoding_recoverable, _encoding_recovery = error_contract_for_code("INVALID_PARAM")
-			emit_error(
+			report_error(
 				command,
 				code="INVALID_PARAM",
 				message=f"{command} 请求参数含有无法按 UTF-8 编码的字符（如孤立代理项），请求未发出",
@@ -1044,7 +1065,7 @@ class BossCliGroup(click.Group):
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
 			encode_recoverable, encode_recovery_action = error_contract_for_code("LOCAL_IO_ERROR")
-			emit_error(
+			report_error(
 				command,
 				code="LOCAL_IO_ERROR",
 				message=f"{command} 处理本地文本失败: {exc}",
@@ -1063,7 +1084,7 @@ class BossCliGroup(click.Group):
 					raise
 				command = _invoked_command_name(args, self.name or "boss")
 				busy_recoverable, _ = error_contract_for_code("CACHE_BUSY")
-				emit_error(
+				report_error(
 					command,
 					code="CACHE_BUSY",
 					message=str(exc),
@@ -1084,7 +1105,7 @@ class BossCliGroup(click.Group):
 			# 可写 / 磁盘空间正常」对 Agent 只是自然语言，没有一条能直接跑的命令。
 			# 全量路径带本机绝对路径，只在 details 里保留，message 不进敏感位置信息
 			# （与其他错误码一致：message 说原因，details 说位置）。
-			emit_error(
+			report_error(
 				command,
 				code=code,
 				message=f"{command} 本地文件读写失败: {exc}"
@@ -1112,7 +1133,7 @@ class BossCliGroup(click.Group):
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
 			invalid_recoverable, invalid_recovery = error_contract_for_code("CONFIG_INVALID")
-			emit_error(
+			report_error(
 				command,
 				code="CONFIG_INVALID",
 				message=str(exc),
