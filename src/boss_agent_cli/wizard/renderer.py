@@ -840,10 +840,13 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("简历", style="bold", no_wrap=True)
 		table.add_column("更新", style="dim", no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
+			updated = item.get("updated_at")
+			if isinstance(updated, str) and "T" in updated:
+				updated = display.iso_time_label(updated)
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or item.get("title") or "未命名简历", 24),
-				_clip_text(item.get("updated_at") or item.get("created_at") or "—", 20),
+				_clip_text(_safe_text(item.get("name") or item.get("title"), "未命名简历"), 24),
+				_clip_text(_safe_text(updated or item.get("created_at"), "—"), 20),
 			)
 	elif goal in {"watch"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -874,14 +877,19 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("公司/职位", style="dim", overflow="ellipsis", max_width=20, no_wrap=True)
 		table.add_column("最近消息", style="dim", overflow="ellipsis", max_width=28, no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
+			name = _safe_text(item.get("name") or item.get("friendName") or item.get("geekName"))
+			if not name:
+				name = _safe_text(item.get("friendId") or item.get("uid"), "未命名")
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or item.get("friendName") or item.get("geekName") or "未命名", 16),
+				_clip_text(name, 16),
 				_clip_text(
-					item.get("brandName") or item.get("company") or item.get("jobName") or item.get("title") or "—",
+					_safe_text(
+						item.get("brandName") or item.get("company") or item.get("jobName") or item.get("title"), "—"
+					),
 					20,
 				),
-				_clip_text(item.get("lastMsg") or item.get("last_msg") or item.get("content") or "—", 28),
+				_clip_text(_safe_text(item.get("lastMsg") or item.get("last_msg") or item.get("content"), "—"), 28),
 			)
 	elif goal in {"chat_history"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -902,7 +910,7 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 			table.add_row(
 				str(index),
 				_clip_text(item.get("name") or item.get("geekName") or "未命名", 16),
-				_clip_text(item.get("expectPosition") or item.get("jobName") or item.get("title") or "—", 20),
+				_clip_text(_safe_text(item.get("expectPosition") or item.get("positionName") or item.get("jobName") or item.get("title"), "—"), 20),
 				_clip_text(item.get("city") or item.get("cityName") or "—", 8),
 			)
 	elif goal in {"jobs_list"}:
@@ -913,7 +921,13 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 			table.add_row(
 				str(index),
 				_clip_text(item.get("title") or item.get("jobName") or item.get("name") or "未命名", 28),
-				_clip_text(item.get("status") or item.get("jobStatus") or "—", 10),
+				_clip_text(
+					_safe_text(
+						item.get("jobStatusDesc") or item.get("statusDesc") or item.get("status") or item.get("jobStatus"),
+						"—",
+					),
+					10,
+				),
 			)
 	else:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -960,9 +974,9 @@ def _render_management_result(
 		meta = Table(show_header=False, box=None, pad_edge=False)
 		meta.add_column("k", style="dim", width=10)
 		meta.add_column("v", style="bold")
-		meta.add_row("新匹配", display.escape_markup(data.get("new_match_count") or 0))
-		meta.add_row("待跟进", display.escape_markup(data.get("follow_up_count") or 0))
-		meta.add_row("面试", display.escape_markup(data.get("interview_count") or 0))
+		meta.add_row("新匹配", display.escape_markup(_count_text(data.get("new_match_count"), "0")))
+		meta.add_row("待跟进", display.escape_markup(_count_text(data.get("follow_up_count"), "0")))
+		meta.add_row("面试", display.escape_markup(_count_text(data.get("interview_count"), "0")))
 		if summary:
 			meta.add_row("摘要", display.escape_markup(summary))
 		# Sample rows from each bucket.
@@ -975,8 +989,12 @@ def _render_management_result(
 			for item in bucket[:3]:
 				if not isinstance(item, Mapping):
 					continue
-				label = item.get("title") or item.get("jobName") or item.get("name") or "—"
-				company = item.get("company") or item.get("brandName") or ""
+				label = _safe_text(item.get("title") or item.get("jobName") or item.get("name"), "—")
+				raw_company = item.get("company") if item.get("company") is not None else item.get("brandName")
+				if isinstance(raw_company, Mapping):
+					company = _safe_text(raw_company.get("name") or raw_company.get("brandName"))
+				else:
+					company = _safe_text(raw_company)
 				text = f"{label}" + (f" · {company}" if company else "")
 				preview.add_row(kind, display.escape_markup(text))
 		parts: list[Any] = [headline, Text(""), meta]
@@ -1024,7 +1042,7 @@ def _render_management_result(
 				failed = entry.get("error")
 				batch.add_row(
 					display.escape_markup(entry.get("name") or "—"),
-					"—" if failed else display.escape_markup(entry.get("new_count", "—")),
+					"—" if failed else display.escape_markup(_count_text(entry.get("new_count"))),
 					display.escape_markup(failed) if failed else "完成",
 				)
 			display.console.print(Panel(batch, title=f"批量监控结果（{len(data['watches'])} 条）", border_style="cyan"))
@@ -1207,9 +1225,18 @@ def _short_artifact_lines(paths: Mapping[str, Any] | Sequence[Any]) -> tuple[str
 	return names, f"[dim]{display.escape_markup(parent)}[/dim]"
 
 
+def _safe_text(value: Any, default: str = "") -> str:
+	"""表格文本字段：容器 / 布尔 / 非有限数 / 超大整数按缺失处理（Issue #2807）。"""
+	return message_text_value(value) or default
+
+
+def _count_text(value: Any, default: str = "—") -> str:
+	return _safe_text(value, default)
+
+
 def _clip_text(value: Any, limit: int) -> str:
 	"""裁剪成表格单元格用的单行文本，并按 Rich 字面量转义（见 ``display.escape_markup``）。"""
-	text = " ".join(str(value or "").split())
+	text = " ".join(_safe_text(value).split())
 	if len(text) <= limit:
 		return display.escape_markup(text)
 	if limit <= 1:
