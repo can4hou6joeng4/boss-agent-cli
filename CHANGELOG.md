@@ -7,6 +7,10 @@
 ### Fixed
 
 - 沟通列表与职位收藏的多页聚合按条目去重：此前只有「整页完全重复」才会被识别，翻页期间列表前移（有新会话 / 新收藏顶到最前）时，上一页末尾的条目会在下一页开头再出现一次，`pipeline` / `follow-up` / `digest` 与向导的同名步骤把同一会话算两次（行里不带 uid、`security_id` 每次请求轮换，调用方无法自行去重），`favorites sync` 的 `existing_count` / `active_count` 也比实际收藏多。现在沟通列表按「uid + 职位 ID」、职位收藏按职位 ID 保留首条；uid 或职位 ID 不可用的条目照旧全部保留，整页重复早停、页数上限与失败页的处理不变（Issue #2753）。
+- `boss status` 在终端不再显示 `logged in as None`：没做在线验证时 `user_name` 按契约是 `null`，而 `data.get("user_name", "unknown")` 的默认值只在键缺失时生效，每次都把它打成 `None`；现在只有非空白字符串才拼 `as <名字>`，否则只显示 `logged in`。`status --live` 的 `name` 为显式 `null` / 对象 / 数组 / 布尔 / 数字 / 空白串时与键缺失同样回落「未知用户」，不再原样写进信封的 `user_name`，名字去首尾空白；非 live 的 `user_name: null` 不变（Issue #2754）。
+- 通用终端表格的单元格不再显示 Python repr：`item.get(key, "-")` 只挡键缺失，键存在而值为 `None` / 列表 / 对象时，`shortlist list` 的标签列是 `['远程', '双休']` / `[]`，`config list` 的未设置项是 `None`，`preset list` / `watch list` 的条件列与 `resume diff` 的两侧是 dict / list repr。现在 `None` 与空容器显示 `-`，纯字符串 / 数值列表用 `, ` 连接，其余容器输出与 `--json` 同写法的 JSON 文本；`config list` 与 `config get` / `set` / `reset` 面板里未设置的 `cdp_url` / `export_dir` / `request_budget_dir` 显示「（未设置）」，区间显示 `[30.0, 60.0]`。只改终端渲染，JSON 信封不变（Issue #2755）。
+- 未知时间不再显示成 1970 年：索引快照用 `saved_at: 0` 表示「保存时间未知」（旧版本写入的缓存），`show` 的编号来源行此前把它渲染成 `保存于 1970-01-01`，现在非正数与 `NaN` 显示 `-`。风险锁文件的 `locked_at` 为布尔时被 `float(True)` 当成第 1 秒，`status` / `doctor` 报出 1970 年的锁定时间与约 18 亿秒的 `age_seconds`；现在按时间未知处理（不带 `locked_at` / `age_seconds`），锁的阻断语义不变（Issue #2756）。
+- `RATE_LIMITED` 排障指引不再让用户加快请求：`docs/troubleshooting.md` 此前写「增大请求间隔」却给出 `--delay 3-7`，而默认间隔早已是 30–60 秒、`boss doctor` 对低于 30 秒的下限给 warn，照做等于把请求频率提高约十倍；同一节的全局配置示例 `config set request_delay "[3.0, 7.0]"` 还会被自家命令以 `INVALID_PARAM` 拒绝。现在示例为 `60-120` 并写明默认值与告警线；`config set request_delay` / `batch_greet_delay` 同时接受逗号写法与数组写法（即 `config get` / `config list` 展示的形式），读到的值可以原样写回；解析失败时的示例改取该配置项自己的默认值（`'30,60' 或 '[30, 60]'`），不再给出低于告警线的 `1.5,3.0`（Issue #2757）。
 
 ## [3.4.207] - 2026-11-25
 

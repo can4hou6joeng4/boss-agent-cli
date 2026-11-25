@@ -6,6 +6,7 @@ Pipe mode (Agent): JSON envelope to stdout.
 """
 
 import datetime
+import json
 import re
 import sqlite3
 import sys
@@ -28,6 +29,7 @@ from boss_agent_cli.api._base_client import (
 	RequestTextEncodingError,
 	parameter_status_code,
 )
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.cache.store import (
 	CacheBusyError,
 	CacheDatabaseInvalid,
@@ -105,6 +107,40 @@ def label_items(value: Any) -> list[Any]:
 	if isinstance(value, (list, tuple)):
 		return list(value)
 	return []
+
+
+def _is_plain_scalar(value: Any) -> bool:
+	"""字符串或数值（不含布尔）：能直接拼进「a, b, c」的列表元素。"""
+	return isinstance(value, str) or (isinstance(value, (int, float)) and not isinstance(value, bool))
+
+
+def cell_text(value: Any) -> str:
+	"""把表格单元格的值转成给真人看的文本；未做 markup 转义，交给 ``escape_markup``。
+
+	``item.get(key, "-")`` 的默认值只在键缺失时生效：键存在而值是 ``None`` /
+	列表 / 对象时，``str()`` 会把 ``None``、``[]``、``['远程', '双休']`` 这类
+	Python repr 打进终端表格（Issue #2755）。
+
+	- ``None`` 与空容器显示 ``-``，与键缺失同一写法；
+	- 元素全是字符串 / 数值的列表用 ``, `` 连接（与职位详情的 skills 同写法）；
+	- 其余容器输出 JSON 文本，与 ``--json`` 看到的一致；
+	- 标量保持原样，空字符串仍是空单元格。
+	"""
+	if value is None:
+		return "-"
+	if isinstance(value, str):
+		return value
+	if isinstance(value, (list, tuple, dict)):
+		if not value:
+			return "-"
+		if not isinstance(value, dict) and all(_is_plain_scalar(element) for element in value):
+			return ", ".join(element if isinstance(element, str) else safe_text(element) for element in value)
+		try:
+			return json.dumps(value, ensure_ascii=False, default=str)
+		except (TypeError, ValueError, RecursionError):
+			# 循环引用、超长整数、深嵌套：都不是 JSON 数据能产生的形状，按原样兜底。
+			return safe_text(value) or "-"
+	return safe_text(value)
 
 
 def escape_markup(value: Any) -> str:
@@ -785,8 +821,16 @@ def render_job_table(
 
 
 def _snapshot_time_label(value: Any) -> str:
-	"""把索引快照的 Unix 秒渲染成本地时间；损坏缓存里的非数值按 "-" 处理。"""
+	"""把索引快照的 Unix 秒渲染成本地时间；未知或损坏的时间按 "-" 处理。
+
+	``index_cache._saved_at`` 用 ``0`` 表示「保存时间未知」（旧版本写入的缓存、
+	被改坏的 ``saved_at``）。把这个哨兵交给 ``fromtimestamp`` 会显示成
+	``1970-01-01``，真人据此误判编号快照的新旧（Issue #2756）；非正数与 NaN
+	一律按未知处理。
+	"""
 	if isinstance(value, bool) or not isinstance(value, (int, float)):
+		return "-"
+	if not value > 0:
 		return "-"
 	try:
 		return datetime.datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
@@ -860,10 +904,17 @@ def render_status(
 	``clean_action`` 由命令层传入带 ``--data-dir`` / ``--platform`` 的真实解锁
 	命令：风险锁写在 ``<data_dir>/.cdp_risk_lock``，裸命令会去默认目录空转
 	（Issue #1087）。
+
+	只有 ``user_name`` 是非空白字符串时才拼 ``as <name>``：没做在线验证的
+	``boss status`` 按契约写 ``user_name: null``，``data.get("user_name", "unknown")``
+	的默认值在键存在时不生效，终端每次都显示 ``logged in as None``（Issue #2754）。
 	"""
 	if data.get("logged_in"):
-		name = escape_markup(data.get("user_name", "unknown"))
-		console.print(f"[green]logged in[/green] as [bold]{name}[/bold]")
+		user_name = data.get("user_name")
+		if isinstance(user_name, str) and user_name.strip():
+			console.print(f"[green]logged in[/green] as [bold]{escape_markup(user_name.strip())}[/bold]")
+		else:
+			console.print("[green]logged in[/green]")
 	else:
 		# 登录命令可能带自定义 --data-dir：方括号目录名不能被当作样式吞掉。
 		console.print(f"[yellow]not logged in[/yellow] - run: {escape_markup(login_action)}")
@@ -901,7 +952,8 @@ def render_simple_list(
 	for i, item in enumerate(items, 1):
 		row = [str(i)]
 		for _, key, _ in columns:
-			row.append(escape_markup(item.get(key, "-")))
+			# 键存在而值为 None / 列表 / 对象时不能把 Python repr 打给用户（Issue #2755）。
+			row.append(escape_markup(cell_text(item.get(key))))
 		table.add_row(*row)
 
 	console.print(table)

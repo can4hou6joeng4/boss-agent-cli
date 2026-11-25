@@ -101,9 +101,9 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		None if python_ok else "升级 Python 到 3.11+",
 	)
 
-	# 1b) 请求节奏：默认 1.5-3.0 秒远低于实测可持续节奏（见
-	# docs/research/zhipin-cdp-free-read-path-2026-10-29.md 第七节）。这里只提示，
-	# 不改用户配置、不发任何请求。
+	# 1b) 请求节奏：间隔下限低于实测可持续节奏（见
+	# docs/research/zhipin-cdp-free-read-path-2026-10-29.md 第七节）时给出提示；
+	# 默认的 30-60 秒不触发。这里只提示，不改用户配置、不发任何请求。
 	delay = ctx.obj.get("delay") or DEFAULT_REQUEST_DELAY
 	low_delay = float(delay[0])
 	if low_delay < _RISK_FREE_DELAY_FLOOR:
