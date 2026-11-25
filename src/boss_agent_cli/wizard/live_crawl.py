@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -86,21 +87,45 @@ def _output_paths(output_dir: str | None) -> dict[str, str]:
 	return paths
 
 
+def _payload_text(payload: Mapping[str, Any], *keys: str) -> str:
+	"""采集载荷的展示标量：容器 / 布尔 / 非有限数 / 超大整数按缺失处理（Issue #2831）。
+
+	载荷来自本地 SQLite 的 jobs payload，平台字段漂移时可能是对象 / 数组；
+	裸 ``str()`` 会把 Python repr 打给真人，超大整数还会在转换上限处抛
+	``ValueError`` 中断整条 TTY 渲染。``keys`` 按优先级回退，空串视为未提供。
+	"""
+	for key in keys:
+		value = payload.get(key)
+		if isinstance(value, str):
+			if value:
+				return value
+			continue
+		if isinstance(value, bool) or value is None:
+			continue
+		if isinstance(value, (int, float)):
+			if isinstance(value, float) and not math.isfinite(value):
+				continue
+			text = safe_text(value)
+			if text:
+				return text
+	return ""
+
+
 def _job_row(item: Mapping[str, Any], *, include_description: bool = True) -> dict[str, Any]:
 	payload = item.get("payload") if isinstance(item.get("payload"), Mapping) else {}
 	if not isinstance(payload, Mapping):
 		payload = {}
 	row: dict[str, Any] = {
-		"title": str(payload.get("title") or ""),
-		"company": str(payload.get("company") or ""),
-		"city": str(payload.get("city") or ""),
-		"salary": str(payload.get("salary") or ""),
-		"experience": str(payload.get("experience") or ""),
-		"education": str(payload.get("education") or ""),
-		"security_id": str(payload.get("security_id") or ""),
-		"job_id": str(payload.get("job_id") or ""),
-		"boss_name": str(payload.get("boss_name") or ""),
-		"boss_title": str(payload.get("boss_title") or ""),
+		"title": _payload_text(payload, "title"),
+		"company": _payload_text(payload, "company"),
+		"city": _payload_text(payload, "city"),
+		"salary": _payload_text(payload, "salary"),
+		"experience": _payload_text(payload, "experience"),
+		"education": _payload_text(payload, "education"),
+		"security_id": _payload_text(payload, "security_id"),
+		"job_id": _payload_text(payload, "job_id"),
+		"boss_name": _payload_text(payload, "boss_name"),
+		"boss_title": _payload_text(payload, "boss_title"),
 		"labels": payload.get("labels") or payload.get("benefits") or [],
 		"selector": item.get("selector"),
 		"crawl_page": item.get("page_no"),
@@ -108,7 +133,7 @@ def _job_row(item: Mapping[str, Any], *, include_description: bool = True) -> di
 		"source": "crawl",
 	}
 	if include_description:
-		desc = str(payload.get("post_description") or payload.get("description") or "")
+		desc = _payload_text(payload, "post_description", "description")
 		if len(desc) > LOCAL_DESC_LIMIT:
 			desc = desc[:LOCAL_DESC_LIMIT] + "…"
 		row["description"] = desc
