@@ -224,10 +224,28 @@ def test_last_messages_does_not_cross_two_contacts(rendered: io.StringIO) -> Non
 	}
 	renderer.render_run(_run("last_messages", data))
 
+	rows = rendered.getvalue().splitlines()
+	assert any("联系人甲" in row and "正文甲" in row for row in rows)
+	assert any("联系人乙" in row and "正文乙" in row for row in rows)
+
+
+def test_last_messages_keeps_each_body_when_contact_id_repeats(rendered: io.StringIO) -> None:
+	data = {
+		"friend_ids": [9],
+		"items": [
+			{"friendId": 9, "name": "同一联系人", "lastMsg": "第一条正文"},
+			{"friendId": 9, "name": "同一联系人", "lastMsg": "第二条正文"},
+		],
+		"messages": [
+			{"friendId": 9, "last_msg": "第一条正文"},
+			{"friendId": 9, "last_msg": "第二条正文"},
+		],
+	}
+	renderer.render_run(_run("last_messages", data))
+
 	text = rendered.getvalue()
-	assert "联系人甲" in text and "正文甲" in text
-	assert "联系人乙" in text and "正文乙" in text
-	assert text.index("正文甲") < text.index("正文乙")
+	assert text.count("第一条正文") == 1
+	assert text.count("第二条正文") == 1
 
 
 def test_last_messages_accepts_signed_string_id(rendered: io.StringIO) -> None:

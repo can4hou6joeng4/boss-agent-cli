@@ -17,6 +17,8 @@ from rich.table import Table
 from boss_agent_cli import display
 from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.services.chat_utils import message_text_value
+from boss_agent_cli.services.recruiter_chat_summary import message_text as last_message_text
+from boss_agent_cli.services.recruiter_last_messages import as_friend_int, friend_id_for
 from boss_agent_cli.wizard.catalog import GOALS
 from boss_agent_cli.wizard.models import count_or_none
 from boss_agent_cli.wizard.prompts import STATUS_LABELS
@@ -817,49 +819,19 @@ def _chat_content_text(item: Mapping[str, Any]) -> str:
 	return body_text or "—"
 
 
-def _last_message_summaries(data: Any) -> dict[int, Mapping[str, Any]]:
-	"""最近消息的归一化摘要按 friendId 建索引，供裸原始消息回退使用。"""
-	result: dict[int, Mapping[str, Any]] = {}
-	if not isinstance(data, Mapping):
-		return result
+def _last_message_friend_ids(data: Mapping[str, Any]) -> set[int]:
+	friend_ids = data.get("friend_ids")
+	if isinstance(friend_ids, list):
+		return {parsed for value in friend_ids if (parsed := as_friend_int(value)) is not None}
+	# 旧断点可能只有消息列表。摘要中的 ID 可用于识别原始记录的 from/to。
 	messages = data.get("messages")
 	if not isinstance(messages, list):
-		return result
-	for message in messages:
-		if isinstance(message, Mapping) and type(message.get("friendId")) is int:
-			result[message["friendId"]] = message
-	return result
-
-
-def _as_friend_int(value: Any) -> int | None:
-	if type(value) is int:
-		return value
-	if isinstance(value, str):
-		text = value.strip()
-		if text.lstrip("+-").isdigit():
-			try:
-				return int(text)
-			except ValueError:
-				return None
-	return None
-
-
-def _friend_id_for_raw(item: Mapping[str, Any], summaries: Mapping[int, Mapping[str, Any]]) -> int | None:
-	candidates = [
-		friend_id
-		for key in ("friendId", "friend_id", "uid", "gid")
-		if (friend_id := _as_friend_int(item.get(key))) is not None
-	]
-	# 与 CLI 的 known_ids 同口径：能命中本次归一化摘要的 ID 优先于其他 ID。
-	for friend_id in candidates:
-		if friend_id in summaries:
-			return friend_id
-	for side in ("from", "to"):
-		party = item.get(side)
-		uid = _as_friend_int(party.get("uid")) if isinstance(party, Mapping) else None
-		if uid is not None and uid in summaries:
-			return uid
-	return candidates[0] if candidates else None
+		return set()
+	return {
+		parsed
+		for message in messages
+		if isinstance(message, Mapping) and (parsed := as_friend_int(message.get("friendId"))) is not None
+	}
 
 
 def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> None:
@@ -871,7 +843,7 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 	goal = str(run.get("goal") or "")
 	last = _as_mapping(run.get("last_result")) or {}
 	data = _as_mapping(last.get("data")) or last
-	summaries = _last_message_summaries(data) if goal == "last_messages" else {}
+	known_friend_ids = _last_message_friend_ids(data) if goal == "last_messages" else set()
 	# 聊天记录的 messages 已与 CLI 同口径；裸 items 可能含 dict.from / dict.body。
 	items = _list_items_from_run(run, preferred_keys=("messages",) if goal == "chat_history" else ())
 	if not items:
@@ -940,25 +912,13 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("公司/职位", style="dim", overflow="ellipsis", max_width=20, no_wrap=True)
 		table.add_column("最近消息", style="dim", overflow="ellipsis", max_width=28, no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
+			name = _first_safe_text(item, ("name", "friendName", "geekName"))
+			last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "content"))
 			if goal == "last_messages":
-				friend_id = _friend_id_for_raw(item, summaries)
-				summary = summaries.get(friend_id) if friend_id is not None else None
-				name = _first_safe_text(summary or {}, ("name", "friendName", "geekName"))
-				if not name:
-					name = _first_safe_text(item, ("name", "friendName", "geekName"))
-				if not name and friend_id is not None:
-					name = _safe_text(friend_id, "未命名")
-				last_msg = _first_safe_text(summary or {}, ("last_msg", "lastMsg", "message"))
-				if not last_msg:
-					last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "message", "text", "content"))
-				if not last_msg:
-					body = item.get("body")
-					last_msg = (
-						_first_safe_text(body, ("text", "content")) if isinstance(body, Mapping) else _safe_text(body)
-					)
-			else:
-				name = _first_safe_text(item, ("name", "friendName", "geekName"))
-				last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "content"))
+				# 逐条使用与 CLI 一致的识别规则。同一联系人可返回多条消息。
+				raw = dict(item)
+				name = name or _safe_text(friend_id_for(raw, known_friend_ids))
+				last_msg = _safe_text(last_message_text(raw)) or last_msg or _chat_content_text(item)
 			table.add_row(
 				str(index),
 				_clip_text(name or "未命名", 16),
