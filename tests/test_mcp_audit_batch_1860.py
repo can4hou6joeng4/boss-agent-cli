@@ -41,9 +41,18 @@ def test_filter_read_timeout_recovery_does_not_name_missing_options() -> None:
 		assert "limit/count" not in recovery
 		assert "active=online" in recovery
 
-	# 其它只读命令仍保留 limit/count 提示。
-	result = mcp_server._interrupted_failure(("export", "golang"), "WORKFLOW_TIMEOUT", b"", may_write=False)
-	assert "limit/count" in result["error"]["recovery_action"]
+
+@pytest.mark.parametrize("code", ["WORKFLOW_TIMEOUT", "WORKFLOW_STOPPED"])
+@pytest.mark.parametrize("argv", [("status",), ("crawl", "status", "demo-run")])
+def test_generic_read_interrupt_recovery_uses_existing_arguments(argv: tuple[str, ...], code: str) -> None:
+	result = mcp_server._interrupted_failure(argv, code, b"", may_write=False)
+	error = result["error"]
+	assert error["code"] == code
+	assert error["details"]["replay_safe"] is True
+	assert error["details"]["outcome_unknown"] is False
+	recovery = error["recovery_action"]
+	assert "按原参数重新调用" in recovery
+	assert all(option not in recovery for option in ("limit", "count", "active="))
 
 
 @patch("boss_agent_cli.mcp_server.subprocess.run")

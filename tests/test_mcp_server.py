@@ -1346,10 +1346,12 @@ def test_read_interrupt_recovery_export_detail_filters(argv, filter_recovery):
 
 	recovery = mcp_server._read_interrupt_recovery(argv)
 
-	expected = (
-		mcp_server._FILTER_READ_INTERRUPT_RECOVERY if filter_recovery else mcp_server._READ_INTERRUPT_RECOVERY
-	)
-	assert recovery == expected
+	if filter_recovery:
+		assert "active=online" in recovery
+	else:
+		assert "减少 count" in recovery
+		assert "active=" not in recovery
+	assert "limit" not in recovery
 
 
 @pytest.mark.parametrize(
@@ -1391,8 +1393,9 @@ def test_run_boss_read_only_timeout_is_replay_safe(mock_run):
 	assert result["error"]["recoverable"] is True
 	assert result["error"]["details"]["outcome_unknown"] is False
 	assert result["error"]["details"]["replay_safe"] is True
-	assert "降低 limit/count" in result["error"]["recovery_action"]
-	assert "可直接重新调用" not in result["error"]["recovery_action"]
+	recovery = result["error"]["recovery_action"]
+	assert "按原参数重新调用" in recovery
+	assert all(option not in recovery for option in ("limit", "count", "active="))
 
 
 @patch("server.subprocess.run")
