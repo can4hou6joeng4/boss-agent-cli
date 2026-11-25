@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.226 (2026-11-26): MCP `batch-greet` read-only interrupt guidance now keeps the original preview mode or zero limit and retries with the same arguments; candidate-side `exchange` / `mark` `ACTION_UNCONFIRMED` now verifies via `boss chat` in the same data directory instead of the recruiter-only `boss hr chatmsg <friend_id>` (Issues #2847, #2849).
+
 v3.4.225 (2026-11-26): interrupted MCP reads suggest only applicable options. Plain searches, online-only filters, and local watch lists no longer claim to fetch job details; preset searches and exports get recovery guidance based on their filters (Issues #2842 and #2844).
 
 v3.4.224 (2026-11-26): wizard crawl browsing rows and result menus, plus `boss agent crawl` job mapping, now use safe scalars (containers, booleans, non-finite numbers and huge integers treated as missing), so Python repr no longer reaches the TTY or AI prompts; generic table cells render `NaN` / `Infinity` as `-`; MCP entry treats batch-greet `limit=0` as read-only, covers the remaining case-insensitive filter enums, and declares a `boss_show` index lower bound (Issues #2831, #2833, #2835, #2837, #2839).
