@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.218 (2026-11-26): wizard panels now match CLI / menu field precedence and render table text through safe scalar normalization; containers, booleans, non-finite numbers and huge integers no longer leak Python reprs or break the panel (Issue #2807).
+
 v3.4.217 (2026-11-25): wizard `chat_history` TTY previews now prefer normalized `messages`; object-valued fields in raw `items` no longer crash rendering or leak dict reprs, while older checkpoints still render safely (Issue #2804).
 
 v3.4.216 (2026-11-25): wizard `recruiter_last_messages` / `candidate_chat_history` now reuse the CLI message normalization so `messages` matches the top-level commands, while raw `items` / `result` stay intact (Issue #2801).

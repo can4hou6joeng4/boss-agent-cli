@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.218（2026-11-26）：向导面板补齐 CLI / 菜单字段口径，表格文本统一按安全标量渲染，容器 / 布尔 / 非有限数 / 超大整数不再显示为 Python repr 或中断面板（Issue #2807）。
+
 v3.4.217（2026-11-25）：向导 `chat_history` 的 TTY 预览优先使用归一化 `messages`，裸 `items` 的对象字段不再触发渲染失败或字典 repr；旧 checkpoint 仍可安全显示（Issue #2804）。
 
 v3.4.216（2026-11-25）：向导 `recruiter_last_messages` / `candidate_chat_history` 复用 CLI 的消息归一化，`messages` 与顶层命令同口径；裸 `items` / `result` 保持不变（Issue #2801）。
