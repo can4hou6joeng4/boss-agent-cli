@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- `boss status` 的本地风控锁与通用键值面板按安全标量渲染：`locked_at` / `reason` 是对象、布尔、`NaN` / `Infinity` 或超大整数时回退 `unknown` / `ENVIRONMENT_RISK`，不再显示 repr 或中断；通用面板的 `NaN` / `Infinity` 显示 `-`，布尔沿用既有 `True` / `False` 写法（Issue #2817）。
 - `boss detail` 的终端详情面板按安全标量渲染：描述 / 技能 / 编号快照的 `count` / `page` / `source` / `index` 与 `security_id` / `job_id` 是对象、布尔、`NaN` / `Infinity` 或超大整数时按缺失处理，不再抛 `ValueError` 或显示 Python repr，`index` 也不再原样拼进 Rich 输出；正常值、`count=0` 与描述省略提示保持不变（Issue #2815）。
 - 向导职位详情面板、本地采集简报与聊天方向统一按安全标量渲染：标题 / 薪资 / 公司 / 城市 / 经验 / 学历 / 招聘者 / 标签 / 描述 / 地址 / 采集页码是对象、布尔、`NaN` / `Infinity` 或超大整数时按缺失处理，不再显示 Python repr 或让整个面板中断；聊天方向只认布尔自标识，超大整型 `uid` 回退「对方」（Issue #2812）。
 

@@ -975,6 +975,23 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 		console.print(f"  [dim]next: {escape_markup(greet_command)}[/dim]", soft_wrap=True)
 
 
+def _status_lock_text(value: Any, default: str) -> str:
+	"""风控锁字段的安全文本：容器 / 布尔 / 非有限浮点 / 超大整数回退默认值。
+
+	``lock.get(key) or default`` 只挡假值：对象会显示 repr，超大整数在
+	``escape_markup`` 内 ``str()`` 时抛 ``ValueError``（Issue #2817）。
+	"""
+	if isinstance(value, str):
+		text = value.strip()
+	elif isinstance(value, (int, float)) and not isinstance(value, bool):
+		if isinstance(value, float) and not math.isfinite(value):
+			return default
+		text = safe_text(value)
+	else:
+		return default
+	return escape_markup(text) if text else default
+
+
 def render_status(
 	data: dict[str, Any],
 	*,
@@ -1002,8 +1019,8 @@ def render_status(
 		console.print(f"[yellow]not logged in[/yellow] - run: {escape_markup(login_action)}", soft_wrap=True)
 	lock = data.get("cdp_risk_lock")
 	if isinstance(lock, dict) and lock.get("locked"):
-		since = escape_markup(lock.get("locked_at") or "unknown")
-		reason = escape_markup(lock.get("reason") or "ENVIRONMENT_RISK")
+		since = _status_lock_text(lock.get("locked_at"), "unknown")
+		reason = _status_lock_text(lock.get("reason"), "ENVIRONMENT_RISK")
 		console.print(
 			f"[yellow]BOSS 本地风控锁定中[/yellow]（{since} 起，{reason}）：确认官方目标业务页已恢复后，"
 			f"由用户执行 {escape_markup(clean_action)} 再显式恢复任务；令牌变化不会自动解锁"
@@ -1052,7 +1069,17 @@ _PANEL_NESTED_TEXT_LIMIT = 200
 
 
 def _panel_scalar_text(value: Any) -> str:
-	return (safe_text(value) or "-") if value is not None else "-"
+	"""通用键值面板的安全标量：非有限浮点按缺失处理。
+
+	``safe_text`` 会把 ``nan`` / ``inf`` 原样打给真人，既不是 JSON 口径也不是
+	可用值（Issue #2817）。布尔仍按既有 TTY 契约显示 ``True`` / ``False``，
+	大量既有命令的输出与测试依赖该写法。
+	"""
+	if value is None:
+		return "-"
+	if isinstance(value, float) and not math.isfinite(value):
+		return "-"
+	return safe_text(value) or "-"
 
 
 def _panel_inline_text(value: Any, depth: int) -> str | None:
