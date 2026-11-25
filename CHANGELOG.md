@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `boss ai config` 回显的 `resolved_base_url` 与执行路径同口径：手工写进配置的非法地址（缺 scheme、非 http(s)、带 query / fragment）现在报 `CONFIG_INVALID` 并给出修复命令，不再把一个执行时必然失败的地址标成生效端点（Issue #2858）。
+- `boss ai fit` / `suggest-keywords` / `cover-letter` 校验模型输出已知字段的类型：`results` 等列表字段与 `greeting_opener` 等字符串字段漂移时按 `AI_PARSE_ERROR` 返回可重试信封，不再以 `ok=true` 把错误形状交给下游 Agent（Issue #2859）。
+
 ## [3.4.227] - 2026-11-26
 
 ### Fixed
