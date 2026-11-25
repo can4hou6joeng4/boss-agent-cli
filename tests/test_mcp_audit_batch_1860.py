@@ -33,17 +33,31 @@ def test_plain_search_and_other_watch_subcommands_keep_default() -> None:
 	assert mcp_server._cli_timeout(("watch", "list")) == 120.0
 
 
-def test_filter_read_timeout_recovery_does_not_name_missing_options() -> None:
-	"""search / watch 没有 limit / count，恢复文案不能提示不存在的参数。"""
-	for argv in (("search", "golang", "--preset", "p1"), ("watch", "run", "w1")):
-		result = mcp_server._interrupted_failure(argv, "WORKFLOW_TIMEOUT", b"", may_write=False)
-		recovery = result["error"]["recovery_action"]
-		assert "limit/count" not in recovery
-		assert "active=online" in recovery
+@pytest.mark.parametrize(
+	"argv",
+	[("search", "golang", "--welfare", "双休"), ("search", "golang", "--active=3day")],
+)
+def test_filter_read_timeout_recovery_does_not_name_missing_options(argv: tuple[str, ...]) -> None:
+	result = mcp_server._interrupted_failure(argv, "WORKFLOW_TIMEOUT", b"", may_write=False)
+	recovery = result["error"]["recovery_action"]
+	assert "逐条查详情" in recovery
+	assert "limit" not in recovery and "count" not in recovery
+	assert "active=online" in recovery
 
 
 @pytest.mark.parametrize("code", ["WORKFLOW_TIMEOUT", "WORKFLOW_STOPPED"])
-@pytest.mark.parametrize("argv", [("status",), ("crawl", "status", "demo-run")])
+@pytest.mark.parametrize(
+	"argv",
+	[
+		("status",),
+		("crawl", "status", "demo-run"),
+		("watch", "list"),
+		("search", "golang"),
+		("search", "golang", "--active", "在线"),
+		("search", "golang", "--welfare", " , "),
+		("search", "golang", "--", "--preset=demo"),
+	],
+)
 def test_generic_read_interrupt_recovery_uses_existing_arguments(argv: tuple[str, ...], code: str) -> None:
 	result = mcp_server._interrupted_failure(argv, code, b"", may_write=False)
 	error = result["error"]
@@ -62,8 +76,10 @@ def test_sync_run_boss_filter_timeout_uses_filter_recovery(mock_run) -> None:
 	result = mcp_server._run_boss("search", "golang", "--preset", "p1", may_write=False)
 
 	assert result["error"]["code"] == "WORKFLOW_TIMEOUT"
-	assert "limit/count" not in result["error"]["recovery_action"]
-	assert "active=online" in result["error"]["recovery_action"]
+	recovery = result["error"]["recovery_action"]
+	assert "若预设包含" in recovery
+	assert "limit" not in recovery and "count" not in recovery
+	assert "active=online" in recovery
 
 
 # ── Issue #1861：hr_jobs / hr_jobs_detail 的合规命令映射 ─────────────

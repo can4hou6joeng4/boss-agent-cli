@@ -1337,6 +1337,8 @@ def test_cli_timeout_estimates_from_arguments(argv, minimum, maximum):
 		(("export", "golang", "--welfare", "双休"), True),
 		(("export", "golang", "--active", "3day"), True),
 		(("export", "golang", "--active", "online"), False),
+		(("export", "golang", "--active", "在线"), False),
+		(("export", "golang", "--welfare", " , "), False),
 		(("export", "golang"), False),
 	],
 )
