@@ -918,7 +918,11 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 				# 逐条使用与 CLI 一致的识别规则。同一联系人可返回多条消息。
 				raw = dict(item)
 				name = name or _safe_text(friend_id_for(raw, known_friend_ids))
-				last_msg = _safe_text(last_message_text(raw)) or last_msg or _chat_content_text(item)
+				last_msg = (
+					_safe_text(last_message_text(raw, skip_blank=True))
+					or last_msg
+					or _safe_text(_chat_content_text(item))
+				)
 			table.add_row(
 				str(index),
 				_clip_text(name or "未命名", 16),

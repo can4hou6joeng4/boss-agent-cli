@@ -266,3 +266,17 @@ def test_last_messages_legacy_top_level_text(rendered: io.StringIO) -> None:
 	renderer.render_run(_run("last_messages", {"items": [row], "messages": [row]}))
 
 	assert "正文甲" in rendered.getvalue()
+
+
+@pytest.mark.parametrize(
+	"row",
+	[
+		{"friend_id": 9, "last_msg": " ", "message": "可用正文"},
+		{"friend_id": 9, "body": {"text": " ", "content": "可用正文"}},
+		{"friend_id": 9, "lastMsgInfo": {"showText": " ", "text": "可用正文"}},
+	],
+)
+def test_legacy_last_messages_skip_blank_text(rendered: io.StringIO, row: dict[str, Any]) -> None:
+	renderer.render_run(_run("last_messages", {"items": [row], "messages": [row]}))
+
+	assert "可用正文" in rendered.getvalue()
