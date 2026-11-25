@@ -31,7 +31,7 @@ from boss_agent_cli.commands.config_cmd import _parse_value
 from boss_agent_cli.commands.doctor import _RISK_FREE_DELAY_FLOOR, _risk_lock_check_payload
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, DEFAULTS
 from boss_agent_cli.display import (
-	_snapshot_time_label,
+	unix_time_label,
 	cell_text,
 	render_job_detail,
 	render_list_result,
@@ -436,22 +436,6 @@ def test_shortlist_list_envelope_keeps_tags_as_arrays(tmp_path: Path) -> None:
 	assert {row["title"]: row["tags"] for row in envelope["data"]} == {"甲职位": ["远程", "双休"], "乙职位": []}
 
 
-@pytest.mark.parametrize("group", ["preset", "watch"])
-def test_saved_search_list_shows_params_as_json(group: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-	"""``preset list`` / ``watch list`` 的条件列与 ``--json`` 同写法，不是 Python repr。"""
-	exit_code, envelope = _json(tmp_path, group, "add", "daily", "golang")
-	assert exit_code == 0, envelope
-	stream = _tty(monkeypatch)
-
-	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), group, "list"])
-
-	assert result.exit_code == 0, result.output
-	output = stream.getvalue()
-	assert '"query": "golang"' in output
-	assert "'query'" not in output
-	assert "None" not in output
-
-
 def test_config_list_terminal_marks_unset_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 	stream = _tty(monkeypatch)
 
@@ -519,15 +503,15 @@ def test_config_set_null_envelope_still_reports_null(tmp_path: Path) -> None:
 	[0, 0.0, -1, -0.5, float("nan"), float("inf"), float("-inf"), 10**400, True, False, None, "1780000000", [1]],
 	ids=["zero", "zero-float", "negative", "negative-float", "nan", "inf", "neg-inf", "huge", "true", "false", "none", "str", "list"],
 )
-def test_snapshot_time_label_treats_unknown_time_as_dash(value: Any) -> None:
-	assert _snapshot_time_label(value) == "-"
+def testunix_time_label_treats_unknown_time_as_dash(value: Any) -> None:
+	assert unix_time_label(value) == "-"
 
 
-def test_snapshot_time_label_formats_real_timestamp() -> None:
+def testunix_time_label_formats_real_timestamp() -> None:
 	expected = datetime.datetime.fromtimestamp(_KNOWN_TS).strftime("%Y-%m-%d %H:%M")
 
-	assert _snapshot_time_label(_KNOWN_TS) == expected
-	assert _snapshot_time_label(float(_KNOWN_TS)) == expected
+	assert unix_time_label(_KNOWN_TS) == expected
+	assert unix_time_label(float(_KNOWN_TS)) == expected
 
 
 def test_job_detail_does_not_date_legacy_index_snapshot_to_1970(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

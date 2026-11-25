@@ -8,7 +8,7 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.cache.store import CacheStore, saved_search_name_error
-from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_action_result, render_list_result, shell_argument
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_action_result, render_saved_search_list, shell_argument
 from boss_agent_cli.search_filters import (
 	ACTIVE_LEVELS,
 	build_search_params,
@@ -18,7 +18,7 @@ from boss_agent_cli.search_filters import (
 	resolve_search_code_params,
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
-from boss_agent_cli.services.saved_searches import validate_stored_search_params
+from boss_agent_cli.services.saved_searches import configured_search_params, validate_stored_search_params
 
 
 def _build_params(
@@ -150,7 +150,9 @@ def preset_add_cmd(
 		ctx,
 		"preset",
 		{"action": "add", "name": name, "params": params},
-		render=lambda d: render_action_result(d, title="preset", next_steps=next_actions),
+		render=lambda d: render_action_result(
+			{**d, "params": configured_search_params(d["params"])}, title="preset", next_steps=next_actions
+		),
 		hints={"next_actions": next_actions},
 	)
 
@@ -178,10 +180,9 @@ def preset_list_cmd(ctx: click.Context) -> None:
 		ctx,
 		"preset",
 		items,
-		render=lambda d: render_list_result(
+		render=lambda d: render_saved_search_list(
 			d,
 			"presets",
-			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
 			next_steps=[add_cmd] if not d else [search_cmd, remove_cmd],
 		),
 		hints=hints,

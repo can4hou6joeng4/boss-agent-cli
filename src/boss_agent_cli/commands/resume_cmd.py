@@ -13,9 +13,11 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	open_file_command,
+	iso_time_label,
 	render_action_result,
 	render_list_result,
 	render_record_result,
+	unix_time_label,
 	positional_hint,
 	shell_argument,
 )
@@ -336,7 +338,7 @@ def resume_list_cmd(ctx: click.Context) -> None:
 	handle_output(
 		ctx, "resume", items,
 		render=lambda d: render_list_result(
-			d,
+			[{**item, "updated_at": iso_time_label(item.get("updated_at"))} for item in d],
 			"resumes",
 			[("名称", "name", "bold cyan"), ("标题", "title", "green"), ("更新时间", "updated_at", "dim")],
 			next_steps=[_hint_command(ctx, "resume init --template default")]
@@ -858,7 +860,7 @@ def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 		ctx, "resume",
 		items,
 		render=lambda d: render_list_result(
-			d,
+			[{**item, "updated_at": unix_time_label(item.get("updated_at"))} for item in d],
 			f"{name} 关联职位",
 			[("职位", "job_title", "bold cyan"), ("公司", "company", "green"), ("状态", "status", "yellow"), ("更新", "updated_at", "dim")],
 			next_steps=[_hint_command(ctx, f"resume link {_args_hint('', name, tail='<security_id> <job_id>')}")] if not d else [_hint_command(ctx, f"resume show {positional_hint(name)}")],

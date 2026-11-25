@@ -213,6 +213,8 @@ boss crawl stop <run_id>
 | `boss favorites list/sync` | 读取 BOSS 职位收藏并呈现有效状态；sync 只导入明确有效职位（按职位去重、刷新动态访问 ID，保留首次收藏时间） |
 | `boss preset add/list/remove` | 搜索预设 |
 
+`preset` 与 `watch` 共用当前数据目录下的搜索记录。同名的 `add` 会更新同一条记录，任一命令的 `remove` 都会删除该记录及其监控历史。终端列表和新增确认只显示已设置的筛选条件，列表中的创建时间按本地时区显示到分钟。`boss watch run --all` 在终端逐项展示统计、失败原因和新增职位。
+
 `boss pipeline` / `boss follow-up` / `boss digest` 都会翻完沟通列表，最多 50 页。达到该上限而平台仍声称有下一页时，结果只是前缀：`pipeline` / `follow-up` 在信封 `pagination` 给出 `pages_scanned` 与 `truncated`（`total` 仍按本次返回条数计，`total_kind=returned_page_count`）；`digest` 与 `wizard` 的 `pipeline` / `digest` 在 `data` 里给出 `chat_pages_scanned` 与 `truncated`。`truncated=true` 时计数只覆盖前 50 页，不能当作全量。
 
 `pipeline` / `follow-up` / `digest` 与 `watch` 的 `hints.next_actions`、TTY `next_steps` 以及嵌入命令的 `operator_actions` 都保留本次调用的 `--data-dir` 与平台。使用自定义数据目录时，`boss watch run <名称>`、`boss watch remove <名称>`、`boss follow-up` 等提示会命中同一份本地记录，而不是默认目录中的同名任务或空列表。

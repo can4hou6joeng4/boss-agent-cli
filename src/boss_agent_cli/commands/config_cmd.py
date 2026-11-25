@@ -102,8 +102,8 @@ def config_group(ctx: click.Context) -> None:
 def _render_config_list(data: dict[str, Any]) -> None:
 	"""TTY 下的配置列表：结构化配置在表格里占位，完整 JSON 放到表格下方。
 
-	``automation`` 的字典 repr 有二十多行，塞进 ``max_width=25`` 的单元格后既挤满
-	表格，又会把两条话术截成省略号——用户反而看不到自己配的内容。
+	``automation`` 的字典 repr 有二十多行，展开在单元格里会挤满整张表格——用户
+	反而看不到自己配的内容。
 	"""
 	items: list[dict[str, Any]] = data["items"]
 	structured = {item["key"]: item["value"] for item in items if isinstance(item["value"], dict)}

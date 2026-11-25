@@ -215,6 +215,8 @@ Follow-up hints from chat commands keep the current `--data-dir`. The `hints.nex
 | `boss favorites list/sync` | Read BOSS job favorites with validity status; sync imports only explicitly active jobs (deduplicates jobs, refreshes dynamic access IDs, preserves first-saved time) |
 | `boss preset add/list/remove` | Search presets |
 
+`preset` and `watch` share saved searches in the current data directory. Either `add` command updates the same record if the name matches, and either `remove` command deletes the record and its watch history. Terminal lists and add confirmations show the filters you set, and lists show creation times in local time to the minute. In the terminal, `boss watch run --all` shows counts, failure reasons, and new jobs for each watch.
+
 `boss pipeline` / `boss follow-up` / `boss digest` page through the whole conversation list, up to 50 pages. When that cap is reached while the platform still reports another page, the result is only a prefix: `pipeline` / `follow-up` report `pages_scanned` and `truncated` in the envelope `pagination` (`total` still counts returned rows, `total_kind=returned_page_count`); `digest` and the wizard `pipeline` / `digest` steps report `chat_pages_scanned` and `truncated` in `data`. A `truncated=true` result covers only the first 50 pages and is not a full count.
 
 Follow-up commands in `hints.next_actions`, TTY `next_steps`, and command-bearing `operator_actions` of `pipeline` / `follow-up` / `digest` and `watch` retain the current `--data-dir` and platform. With a custom data directory, prompts such as `boss watch run <name>`, `boss watch remove <name>`, and `boss follow-up` target the same local records instead of a same-named task or an empty list in the default directory.
