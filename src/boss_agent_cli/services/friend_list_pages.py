@@ -51,6 +51,21 @@ def friend_list_page_has_content(platform_data: dict[str, Any]) -> bool:
 	return False
 
 
+def _row_identity(item: dict[str, Any]) -> tuple[str, str] | None:
+	"""多页聚合的去重键：uid + 职位 ID；uid 不可用时返回 ``None``，不参与去重。
+
+	uid 是联系人主键（见 ``chat_utils.contact_identity``），同一条目被重复返回时
+	职位 ID 也必然相同。键里带上职位 ID 是因为去重会丢行：「同一联系人、不同职位
+	各占一行」无法离线证伪，宁可少并也不误并。securityId 每次请求轮换，不能
+	参与判定；两份都没有可用职位 ID 时退回只按 uid 判定。
+	"""
+	uid = stable_uid(item.get("uid"))
+	if not uid:
+		return None
+	job_id = item.get("encryptJobId")
+	return uid, job_id.strip() if isinstance(job_id, str) else ""
+
+
 def collect_friend_list_items(
 	platform: Any,
 	*,
@@ -85,10 +100,13 @@ def collect_friend_list_page(
 	- 翻满 ``max_pages`` 且平台仍声称有下一页：``truncated=True``，items 只是前
 	  ``max_pages`` 页。调用方必须把这一点告诉 Agent / 用户，不能当成完整统计
 	  （Issue #885）。
+
+	同一条目（同一 uid 且同一职位）重复出现时只保留首条（Issue #2753）。
 	"""
 	items: list[dict[str, Any]] = []
 	page = start_page
 	seen_signatures: set[tuple[str, ...]] = set()
+	seen_rows: set[tuple[str, str]] = set()
 	pages_scanned = 0
 	truncated = False
 
@@ -125,7 +143,18 @@ def collect_friend_list_page(
 			if signature in seen_signatures:
 				break
 			seen_signatures.add(signature)
-		items.extend(page_items)
+		# 整页签名只挡「整页重复」。沟通列表按最近消息排序、按页码取数：翻页期间
+		# 有新消息把某个会话顶到最前，上一页末尾的条目就会在下一页开头再出现
+		# 一次，两页只重叠一部分。pipeline 行不带 uid，securityId 又每次请求轮换，
+		# 下游无法自行去重，所以在这里保留首条（与职位侧的
+		# job_identity.deduplicate_job_result 同口径，Issue #2753）。
+		for item in page_items:
+			row_key = _row_identity(item)
+			if row_key is not None:
+				if row_key in seen_rows:
+					continue
+				seen_rows.add(row_key)
+			items.append(item)
 
 		if platform_data.get("hasMore") is False:
 			break
