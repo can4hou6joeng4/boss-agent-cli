@@ -429,7 +429,9 @@ def test_favorites_sync_notnull_field_fallback(mock_auth_cls, mock_platform_cls,
 @patch("boss_agent_cli.commands.favorites.AuthManager")
 def test_favorites_sync_duplicate_in_batch(mock_auth_cls, mock_platform_cls, tmp_path):
 	platform = _ctx_mock(mock_platform_cls)
-	# cardList 内两张相同 (sid, jid)：INSERT OR IGNORE 防第二条 PK 冲突
+	# cardList 内两张相同 (sid, jid)：聚合阶段按职位 ID 只保留首条，候选池里本来
+	# 没有这条职位，所以不能把第二张卡片计成 existing（Issue #2753）。入库层的
+	# INSERT OR IGNORE 防护另有 store 级测试覆盖。
 	platform.job_favorites.return_value = {
 		"code": 0,
 		"zpData": {"cardList": [_make_card(sid="sec_a", jid="job_a"), _make_card(sid="sec_a", jid="job_a")], "hasMore": False},
@@ -439,7 +441,8 @@ def test_favorites_sync_duplicate_in_batch(mock_auth_cls, mock_platform_cls, tmp
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["imported_count"] == 1
-	assert parsed["data"]["existing_count"] == 1
+	assert parsed["data"]["existing_count"] == 0
+	assert parsed["data"]["active_count"] == 1
 	assert len(_shortlist_items(tmp_path)) == 1
 
 

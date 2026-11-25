@@ -14,6 +14,7 @@ from boss_agent_cli.display import (
 	handle_platform_error_output,
 	render_simple_list,
 )
+from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 MAX_FAVORITES_PAGES = 50
 FAVORITES_TAG = 4
@@ -121,10 +122,12 @@ def collect_favorites_items(
 
 	v1 固定 isActive=true；平台仍可能返回 jobValidStatus=2 的失效职位，调用方必须按字段判断。
 	encryptJobId 做 seen_signature（比 securityId 稳定，避免 securityId 跨请求变化导致重复页检测失效）。
+	同一职位（按职位 ID）跨页重复出现时只保留首条（Issue #2753）。
 	"""
 	items: list[dict[str, Any]] = []
 	page = 1
 	seen_signatures: set[tuple[str, ...]] = set()
+	seen_job_ids: set[str] = set()
 
 	for _ in range(max_pages):
 		resp = platform.job_favorites(page=page, tag=FAVORITES_TAG, is_active=True)
@@ -159,7 +162,11 @@ def collect_favorites_items(
 			if signature in seen_signatures:
 				break
 			seen_signatures.add(signature)
-		items.extend(dict_items)
+		# 整页签名只挡「整页重复」：翻页期间收藏列表前移时，上一页末尾的卡片会在
+		# 下一页开头再出现一次，sync 的 existing_count / active_count 随之虚高。
+		# 按职位 ID 跨页保留首条，与 search / export 的聚合同口径；没有可用职位
+		# ID 的卡片照旧保留（Issue #2753）。
+		items.extend(deduplicate_job_result(dict_items, seen_job_ids=seen_job_ids))
 
 		if platform_data.get("hasMore") is False:
 			break
