@@ -140,7 +140,9 @@ def test_ai_jd_tools_declare_mutual_exclusion():
 def test_hr_jobs_requires_job_id_for_online_offline():
 	schema = _tools()["boss_hr_jobs"].input_schema
 	assert schema["if"] == {"properties": {"action": {"enum": ["online", "offline"]}}, "required": ["action"]}
-	assert schema["then"] == {"required": ["job_id"]}
+	# page 只属于 list；page=1 是默认值，映射层按 #2339 容忍（Issue #2795）。
+	assert schema["then"] == {"required": ["job_id"], "properties": {"page": {"const": 1}}}
+	assert schema["else"] == {"not": {"required": ["job_id"]}}
 
 
 def test_config_requires_key_for_keyed_actions():
@@ -148,12 +150,20 @@ def test_config_requires_key_for_keyed_actions():
 	assert schema["if"]["properties"]["action"]["enum"] == ["get", "set", "reset"]
 	assert schema["then"] == {"required": ["key"]}
 	assert schema["allOf"][0]["then"] == {"required": ["key", "value"]}
+	# value 只属于 set（Issue #2795）。
+	assert schema["allOf"][1]["if"]["properties"]["action"]["enum"] == ["list", "get", "reset"]
+	assert schema["allOf"][1]["then"] == {"not": {"required": ["value"]}}
 
 
 def test_wizard_requires_run_id_for_control_actions():
 	schema = _tools()["boss_wizard"].input_schema
 	assert schema["if"]["properties"]["action"]["enum"] == ["resume", "status", "stop"]
-	assert schema["then"] == {"required": ["run_id"]}
+	assert schema["then"]["required"] == ["run_id"]
+	# run 专属参数不得出现在 resume/status/stop（Issue #2795）。
+	assert set(schema["then"]["not"]["anyOf"][0]["required"]) == {"role"}
+	assert {name for branch in schema["then"]["not"]["anyOf"] for name in branch["required"]} == {
+		"role", "platform", "goal", "inputs", "requested_steps",
+	}
 
 
 def test_ai_jd_mutual_exclusion_rejects_both_sources(tmp_path):

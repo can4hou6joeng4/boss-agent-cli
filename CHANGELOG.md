@@ -8,6 +8,7 @@
 
 - `boss_watch_run` 的 MCP schema 编码「name 与 all 必须且只能提供一个」：新增 `anyOf` / `not` 约束，`name` 进入条件必填后自动补 `minLength`，与 `search` 等工具的既有口径一致；CLI 行为不变（Issue #2792）。
 - `boss_watch_run` / `boss_crawl_shortlist` 的 `not` 约束改为同时要求两个互斥键：此前只要求其中一个键，导致 name-only（或 selectors-only）这一主要合法用法被任何按 JSON Schema 校验的宿主误拒；修复后 `all=false` 与显式选择同时出现仍保持合法（Issue #2794）。
+- `boss_hr_jobs` / `boss_config` / `boss_wizard` 的 MCP schema 编码 action→参数矩阵：`list` 拒绝 `job_id`、`online` / `offline` 只容忍默认 `page=1`，非 `set` 拒绝 `value`，非 `run` 拒绝 `role` / `platform` / `goal` / `inputs` / `requested_steps`。此前这些组合在 schema 层合法，但映射层必然拒绝为 `INVALID_PARAM`（Issue #2795）。
 
 ## [3.4.213] - 2026-11-25
 

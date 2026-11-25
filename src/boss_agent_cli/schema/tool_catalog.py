@@ -149,7 +149,20 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				# resume/status/stop 需要 run_id：缺参时映射层抛 KeyError 并返回
 				# INVALID_PARAM（Issue #1532）；不带 action 时映射层也拒绝（#1493）。
 				"if": {"properties": {"action": {"enum": ["resume", "status", "stop"]}}, "required": ["action"]},
-				"then": {"required": ["run_id"]},
+				"then": {
+					"required": ["run_id"],
+					# role/platform/goal/inputs/requested_steps 只属于 run（Issue #2795）；
+					# timeout / max_retries 对四种 action 都可用，不加限制。
+					"not": {
+						"anyOf": [
+							{"required": ["role"]},
+							{"required": ["platform"]},
+							{"required": ["goal"]},
+							{"required": ["inputs"]},
+							{"required": ["requested_steps"]},
+						]
+					},
+				},
 				# run（含省略 action）必须给出 role / platform / goal：否则调用方要连吃
 				# 三次各报一个缺失字段的 INVALID_PARAM 才能拼出合法调用（Issue #1775）。
 				# run_id 只属于 resume/status/stop：在 run 分支显式禁止，schema 与
@@ -524,6 +537,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					{
 						"if": {"properties": {"action": {"const": "set"}}, "required": ["action"]},
 						"then": {"required": ["key", "value"]},
+					},
+					# value 只属于 set（Issue #2795）：其它 action 下映射层必然拒绝。
+					{
+						"if": {"properties": {"action": {"enum": ["list", "get", "reset"]}}, "required": ["action"]},
+						"then": {"not": {"required": ["value"]}},
 					},
 				],
 			},
@@ -1209,8 +1227,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				},
 				"required": [],
 				# online/offline 需要 job_id：缺参时映射层返回 INVALID_PARAM（Issue #1532）。
+				# page 只属于 list，但显式 page=1 是默认值，映射层按 #2339 容忍；
+				# list 分支禁止 job_id，否则「schema 合法但命令必失败」（Issue #2795）。
 				"if": {"properties": {"action": {"enum": ["online", "offline"]}}, "required": ["action"]},
-				"then": {"required": ["job_id"]},
+				"then": {"required": ["job_id"], "properties": {"page": {"const": 1}}},
+				"else": {"not": {"required": ["job_id"]}},
 			},
 		),
 		ToolDefinition(
