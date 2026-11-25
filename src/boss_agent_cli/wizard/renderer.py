@@ -14,6 +14,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from boss_agent_cli import display
+from boss_agent_cli.services.chat_utils import message_text_value
 from boss_agent_cli.wizard.catalog import GOALS
 from boss_agent_cli.wizard.models import count_or_none
 from boss_agent_cli.wizard.prompts import STATUS_LABELS
@@ -806,12 +807,12 @@ def _chat_content_text(item: Mapping[str, Any]) -> str:
 		sources.append(body)
 	for source in sources:
 		for key in ("text", "content"):
-			value = source.get(key)
-			if isinstance(value, str) and value.strip():
-				return value
-			if type(value) is int:
-				return str(value)
-	return "—"
+			text = message_text_value(source.get(key))
+			if text:
+				return text
+	# 旧 checkpoint 可能把正文直接放在 body 字符串里；容器值仍不进 repr。
+	body_text = message_text_value(body)
+	return body_text or "—"
 
 
 def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> None:

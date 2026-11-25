@@ -58,3 +58,15 @@ def test_last_messages_preview_keeps_contact_items(rendered: io.StringIO) -> Non
 	text = rendered.getvalue()
 	assert "甲" in text
 	assert "收到，明天聊" in text
+
+
+@pytest.mark.parametrize("item, expected", [
+	({"from": 7, "text": 3.5}, "3.5"),
+	({"body": "您好"}, "您好"),
+])
+def test_legacy_chat_history_keeps_scalar_text(rendered: io.StringIO, item: dict[str, Any], expected: str) -> None:
+	renderer.render_run(_run({"items": [item], "total": 1}))
+
+	text = rendered.getvalue()
+	assert expected in text
+	assert "{'" not in text
