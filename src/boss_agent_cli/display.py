@@ -7,6 +7,7 @@ Pipe mode (Agent): JSON envelope to stdout.
 
 import datetime
 import json
+import math
 import re
 import sqlite3
 import sys
@@ -784,6 +785,23 @@ def handle_platform_error_output(
 # ── Table builders ──────────────────────────────────────────────────
 
 
+def _detail_scalar(value: Any) -> str:
+	"""职位详情展示用安全标量：容器 / 布尔 / 非有限浮点 / 超大整数按缺失处理。
+
+	与向导职位详情同口径（Issue #2812 / #2815）：``str()`` 遇超大整数抛
+	``ValueError``，容器与布尔会把 Python repr / ``True`` 打进面板。
+	"""
+	if value is None or isinstance(value, bool):
+		return ""
+	if isinstance(value, str):
+		return value.strip()
+	if isinstance(value, (int, float)):
+		if isinstance(value, float) and not math.isfinite(value):
+			return ""
+		return safe_text(value)
+	return ""
+
+
 def job_field_text(data: dict[str, Any], *keys: str) -> str:
 	"""职位字段的终端文本：缺失 / 空串 / 纯空白都显示 ``-``（Issue #2767）。
 
@@ -791,6 +809,9 @@ def job_field_text(data: dict[str, Any], *keys: str) -> str:
 	用 ``field_text`` 把缺失归一成空串，于是详情里出现 ``exp:  | edu:  |``、
 	``boss:  ()``，表格里空单元格与其它列的 ``-`` 不一致。容器字段按
 	``cell_text`` 的口径转文本，不把 Python repr 打给用户。
+
+	布尔与非有限浮点按缺失处理：``cell_text`` 会原样给出 ``True`` / ``nan``，
+	那不是职位字段的可展示值（Issue #2815）。
 	"""
 	for key in keys:
 		if key not in data:
@@ -799,6 +820,8 @@ def job_field_text(data: dict[str, Any], *keys: str) -> str:
 		if isinstance(value, str):
 			if value.strip():
 				return escape_markup(value)
+			continue
+		if isinstance(value, bool) or (isinstance(value, float) and not math.isfinite(value)):
 			continue
 		text = cell_text(value)
 		if text and text != "-":
@@ -898,7 +921,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	company = job_field_text(data, "company")
 	boss = job_field_text(data, "boss_name")
 	boss_title = job_field_text(data, "boss_title")
-	desc = str(data.get("description", ""))
+	desc = _detail_scalar(data.get("description"))
 	if boss == "-":
 		boss_line = boss_title if boss_title != "-" else "-"
 	elif boss_title == "-":
@@ -906,7 +929,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	else:
 		boss_line = f"{boss} ({boss_title})"
 
-	skills = label_items(data.get("skills"))
+	skills = [text for item in label_items(data.get("skills")) if (text := _detail_scalar(item))]
 	skill_str = ", ".join(escape_markup(skill) for skill in skills) if skills else "-"
 
 	text = (
@@ -936,18 +959,17 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	# 重搜之后一眼就能看出这条编号是不是已经指向另一次搜索。
 	snapshot = data.get("index_snapshot")
 	if isinstance(snapshot, dict):
-		source = escape_markup(snapshot.get("source") or "-")
-		count = snapshot.get("count")
-		count_label = str(count) if isinstance(count, int) and not isinstance(count, bool) else "-"
-		page = snapshot.get("page")
-		page_label = f"第 {page} 页 · " if isinstance(page, int) and not isinstance(page, bool) else ""
-		index = data.get("index", "-")
+		source = escape_markup(_detail_scalar(snapshot.get("source")) or "-")
+		count_label = escape_markup(_detail_scalar(snapshot.get("count")) or "-")
+		page_text = _detail_scalar(snapshot.get("page"))
+		page_label = f"第 {escape_markup(page_text)} 页 · " if page_text else ""
+		index = escape_markup(_detail_scalar(data.get("index")) or "-")
 		console.print(
 			f"  [dim]#{index} · {page_label}{source} · 共 {count_label} 条 · 保存于 {unix_time_label(snapshot.get('saved_at'))}[/dim]"
 		)
 
-	sid = data.get("security_id", "")
-	jid = data.get("job_id", "")
+	sid = _detail_scalar(data.get("security_id"))
+	jid = _detail_scalar(data.get("job_id"))
 	if sid and jid:
 		greet_command = greet_command or "boss greet <security_id> <job_id>"
 		console.print(f"  [dim]next: {escape_markup(greet_command)}[/dim]", soft_wrap=True)
