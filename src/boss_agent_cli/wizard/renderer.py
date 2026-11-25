@@ -486,18 +486,20 @@ def _count_list_items(last_result: Any) -> int | None:
 def render_job_card_zh(job: Mapping[str, Any]) -> None:
 	"""Human-facing Chinese job detail panel for TTY wizard."""
 	esc = display.escape_markup
-	title = esc(job.get("title") or "未命名职位")
-	salary = esc(job.get("salary") or "-")
-	company = esc(job.get("company") or "-")
-	city = esc(job.get("city") or "-")
-	experience = esc(job.get("experience") or "-")
-	education = esc(job.get("education") or "-")
-	boss = esc(job.get("boss_name") or "-")
-	boss_title = esc(job.get("boss_title") or "")
-	# 与 display.render_job_detail 同口径：字符串按单条、其余非列表按空（Issue #2252）。
+	title = esc(_first_safe_text(job, ("title",), "未命名职位"))
+	salary = esc(_first_safe_text(job, ("salary",), "-"))
+	company = esc(_company_text(job) or "-")
+	city = esc(_first_safe_text(job, ("city",), "-"))
+	experience = esc(_first_safe_text(job, ("experience",), "-"))
+	education = esc(_first_safe_text(job, ("education",), "-"))
+	boss = esc(_first_safe_text(job, ("boss_name",), "-"))
+	boss_title = esc(_first_safe_text(job, ("boss_title",)))
+	# 与 display.render_job_detail 同口径：字符串按单条、其余非列表按空（Issue #2252）；
+	# 列表元素同样过安全标量，容器 / 超大整数不显示 repr 或中断面板（Issue #2812）。
 	skills = display.label_items(job.get("skills")) or display.label_items(job.get("labels"))
-	skill_str = "、".join(esc(item) for item in skills[:12]) if skills else "-"
-	desc = str(job.get("description") or "")
+	skill_texts = [text for item in skills[:12] if (text := _safe_text(item))]
+	skill_str = "、".join(esc(item) for item in skill_texts) if skill_texts else "-"
+	desc = _safe_text(job.get("description"))
 	if len(desc) > 420:
 		desc = desc[:420] + "…"
 	desc = esc(desc)
@@ -509,8 +511,9 @@ def render_job_card_zh(job: Mapping[str, Any]) -> None:
 		f"技能 {skill_str}",
 		f"招聘者 {boss}" + (f"（{boss_title}）" if boss_title else ""),
 	]
-	if job.get("address"):
-		lines.append(f"地址 {esc(job.get('address'))}")
+	address_text = _safe_text(job.get("address"))
+	if address_text:
+		lines.append(f"地址 {esc(address_text)}")
 	if desc:
 		lines.append("")
 		lines.append(f"[bold]职位描述[/bold]\n{desc}")
@@ -520,29 +523,31 @@ def render_job_card_zh(job: Mapping[str, Any]) -> None:
 def render_crawl_job_brief(job: Mapping[str, Any], *, with_description: bool = False) -> None:
 	"""On-demand local crawl row: compact by default, optional short description."""
 	esc = display.escape_markup
-	title = esc(job.get("title") or "未命名职位")
-	salary = esc(job.get("salary") or "-")
-	company = esc(job.get("company") or "-")
-	city = esc(job.get("city") or "-")
-	experience = esc(job.get("experience") or "-")
-	education = esc(job.get("education") or "-")
-	boss = esc(job.get("boss_name") or "")
+	title = esc(_first_safe_text(job, ("title",), "未命名职位"))
+	salary = esc(_first_safe_text(job, ("salary",), "-"))
+	company = esc(_company_text(job) or "-")
+	city = esc(_first_safe_text(job, ("city",), "-"))
+	experience = esc(_first_safe_text(job, ("experience",), "-"))
+	education = esc(_first_safe_text(job, ("education",), "-"))
+	boss = esc(_first_safe_text(job, ("boss_name",)))
 	lines = [
 		f"[bold cyan]{title}[/bold cyan]  [yellow]{salary}[/yellow]",
 		f"公司 {company}  ·  城市 {city}",
 		f"经验 {experience}  ·  学历 {education}",
 	]
 	if boss:
-		boss_title = esc(job.get("boss_title") or "")
+		boss_title = esc(_first_safe_text(job, ("boss_title",)))
 		lines.append(f"招聘者 {boss}" + (f"（{boss_title}）" if boss_title else ""))
 	labels = display.label_items(job.get("labels"))
-	if labels:
-		lines.append("标签 " + "、".join(esc(item) for item in labels[:8]))
-	if job.get("crawl_page") is not None:
+	label_texts = [text for item in labels[:8] if (text := _safe_text(item))]
+	if label_texts:
+		lines.append("标签 " + "、".join(esc(item) for item in label_texts))
+	page_text = _safe_text(job.get("crawl_page"))
+	if page_text:
 		# 断点里的计数可能漂移成任意字符串：按外部值转义（Issue #2252）。
-		lines.append(f"采集页 第 {esc(job.get('crawl_page'))} 页")
+		lines.append(f"采集页 第 {esc(page_text)} 页")
 	if with_description:
-		desc = esc(job.get("description") or "").strip()
+		desc = esc(_safe_text(job.get("description"))).strip()
 		if desc:
 			lines.append("")
 			lines.append(f"[bold]本地描述[/bold]\n{desc}")
@@ -801,15 +806,15 @@ def _chat_direction_text(item: Mapping[str, Any]) -> str:
 		if isinstance(uid, str) and uid.strip():
 			return uid.strip()
 		if type(uid) is int:
-			return str(uid)
+			return _safe_text(uid) or "对方"
 		return "对方"
 	if direction is None or direction == "":
 		direction = item.get("role") or item.get("side")
 	if direction is None or direction == "":
-		return "我" if item.get("isSelf") or item.get("self") else "对方"
+		return "我" if item.get("isSelf") is True or item.get("self") is True else "对方"
 	if isinstance(direction, str):
 		return direction.strip() or "对方"
-	return str(direction) if type(direction) is int else "对方"
+	return (_safe_text(direction) if type(direction) is int else "") or "对方"
 
 
 def _chat_content_text(item: Mapping[str, Any]) -> str:
