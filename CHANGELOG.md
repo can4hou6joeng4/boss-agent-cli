@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `boss_agent_run` 的 MCP schema 编码「resume 必须显式 `dry_run=false`」：缺省 `dry_run=true` 时映射层与 CLI 都会拒绝 `--dry-run --resume`，此前 schema 却放行该组合，调用必然在映射层失败为 `INVALID_PARAM`；`{"resume": true, "dry_run": false}` 等合法恢复调用不受影响（Issue #2798）。
+
 ## [3.4.214] - 2026-11-25
 
 ### Fixed
