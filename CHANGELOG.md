@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.217] - 2026-11-25
+
 ### Fixed
 
 - 向导 `chat_history` 的 TTY 预览优先使用归一化 `messages`，不再读裸平台 `items`：`from` 是对象时不会以 `TypeError: unhashable type: 'dict'` 中断整个面板，`body.text` 不再显示 Python 字典 repr；旧 checkpoint 无 `messages` 时仍可安全渲染（Issue #2804）。
