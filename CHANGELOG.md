@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `boss ai local status` 的终端输出按安全标量渲染：`provider` / `model` / `base_url` 与推荐模型字段是对象、布尔、`NaN` / `Infinity` 或超大整数时显示 `-`，不再抛 `ValueError` 或显示 Python repr；正常字符串、整数与既有 markup 转义保持不变（Issue #2820）。
+
 ## [3.4.220] - 2026-11-26
 
 ### Fixed
