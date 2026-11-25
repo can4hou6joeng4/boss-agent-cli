@@ -285,5 +285,5 @@ def test_hr_resume_renders_sections(
 	assert result.exit_code == 0, result.output or repr(result.exception)
 	assert not result.stdout
 	out = stream.getvalue()
-	for text in ("basic", "张三", "expectation", "后端工程师", "work_experience", "后端开发"):
+	for text in ("hr resume", "basic", "张三", "expectation", "后端工程师", "work_experience", "后端开发"):
 		assert text in out

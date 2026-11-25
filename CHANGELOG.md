@@ -13,6 +13,7 @@
 - 招聘者读取类命令（`hr whoami`、`hr chat`、`hr applications`、`hr candidates`、`hr recommendations`、`hr jobs list`、`hr chatmsg`、`hr last-messages`、`hr resume`）在终端渲染结果表格 / 面板与后继命令，不再只打一行 JSON 信封；字段缺失或类型漂移显示 `-`，JSON 信封不变（Issue #2774）。
 - 招聘者写操作命令（`hr reply`、`hr request-resume`、`hr accept-resume`、`hr download-resume`、`hr location`、`hr greet` 的成功与 dry-run 路径）在终端渲染确认面板与后继命令，不再只打一行 JSON 信封；`hr reply` 仍不回显消息正文，JSON 信封不变（Issue #2774）。
 - `hr jobs detail` 在终端按字段面板展示职位信息（含完整 JD）与上下线 / 列表后继命令，JSON 信封不变（Issue #2774）。
+- `hr resume` 的终端分段面板补上 `hr resume` 标识：`render_sectioned_record` 不使用传入的 `title`，此前真人只看到 `basic` / `expectation` 等分段名（Issue #2778）。
 
 ## [3.4.209] - 2026-11-25
 
