@@ -130,6 +130,12 @@ _BATCH_GREET_MAX_COUNT = 10
 _EXPORT_DEFAULT_COUNT = 50
 #: 招聘者聊天摘要与最近消息的 CLI 默认条数。
 _HR_DEFAULT_LIMIT = 100
+#: 招聘自动化一轮先扫描的 tab 数上界（新招呼 / 未读）。
+_AUTOMATION_SCAN_REQUESTS = 2
+#: 自动化每个会话最多一次历史读取 + 一次动作派发；``--limit`` 是本轮全局
+#: 会话上限，缺省时扫描量由本地 automation 配置决定，MCP 层无法预知
+#: （Issue #2854）。
+_AUTOMATION_REQUESTS_PER_CONVERSATION = 2
 
 
 def _default_boss_bin(*, executable: str | None = None, windows: bool | None = None) -> str:
@@ -494,6 +500,25 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 		# 缺省 120s 只够一次请求加一次节流，四段全量会被宿主提前掐断
 		# （Issue #2852）。
 		return 1 if _option_value(args, "--section") is not None else _ME_FULL_SECTION_REQUESTS
+	if command == "agent" and len(args) > 1 and args[1] in {"run", "train"}:
+		# 一轮自动化先扫描 tab，再逐会话读取历史并在需要时派发一次动作；
+		# --limit 是本轮全局会话上限。缺省时扫描范围由本地 automation 配置
+		# 决定，MCP 层无法预知，按估算封顶值给满，避免默认 120s 杀掉一次正常
+		# 演练（Issue #2854）。
+		raw_limit = _option_value(args, "--limit")
+		if raw_limit is None:
+			return _MAX_ESTIMATED_REQUESTS
+		try:
+			limit = int(raw_limit)
+		except (TypeError, ValueError):
+			# 显式非法取值：CLI 会在发出任何请求前以 INVALID_PARAM 拒绝。
+			return None
+		if limit < 1:
+			return None
+		return min(
+			_AUTOMATION_SCAN_REQUESTS + _AUTOMATION_REQUESTS_PER_CONVERSATION * limit,
+			_MAX_ESTIMATED_REQUESTS,
+		)
 	if command in {"pipeline", "follow-up", "digest"}:
 		# 好友列表逐页聚合，再追加一次面试数据请求（Issue #2024）。
 		return _FRIEND_LIST_ESTIMATE_PAGES + 1

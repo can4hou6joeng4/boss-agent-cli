@@ -7,6 +7,7 @@
 ### Fixed
 
 - MCP `boss_me` 不再被宿主的 120s 默认超时提前掐断：未指定 `section` 时按四段请求（用户信息、简历、求职期望、投递记录）估算 290s，指定 `section` 的调用仍保持 120s（Issue #2852）。
+- MCP `boss_agent_run` / `boss_agent_train` 不再被宿主的 120s 默认超时提前掐断：显式 `limit` 按「两次 tab 扫描 + 每会话读取与至多一次动作」估算，缺省 `limit` 时按估算封顶值给到 900s（Issue #2854）。
 
 ## [3.4.226] - 2026-11-26
 
