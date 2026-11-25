@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.213（2026-11-25）：`hr greet` 允许空的 `--lid`（访问上下文而非目标标识，平台可能给空值），空白校验只覆盖 `geek-id` / `job-id` / `expect-id` / `security-id`；MCP schema 与 CLI dry-run 口径一致（Issue #2789）。
+
 v3.4.212（2026-11-25）：`BossCliGroup.main` 的启动期错误在终端渲染错误码与恢复指引，不再把 JSON 信封打到 stdout；`--json` / 管道信封与退出码不变（Issue #2786）。
 
 v3.4.211（2026-11-25）：`config get/set/reset` 的错误路径在终端渲染错误码与恢复指引，不再把 JSON 信封打到 stdout；分段记录面板统一显示命令标题并转义外部值，JSON 信封保持不变（Issue #2781、#2783）。

@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.213 (2026-11-25): `hr greet` now accepts an empty `--lid` (an access-context value that the platform may leave blank) and only rejects blank `geek-id` / `job-id` / `expect-id` / `security-id`, aligning the MCP schema with the CLI dry-run behavior (Issue #2789).
+
 v3.4.212 (2026-11-25): startup errors from `BossCliGroup.main` render error codes and recovery guidance in the terminal instead of a raw JSON envelope, while `--json` / piped envelopes and exit codes stay unchanged (Issue #2786).
 
 v3.4.211 (2026-11-25): `config get/set/reset` error paths render error codes and recovery guidance in the terminal instead of printing a raw JSON envelope, and sectioned record panels consistently show an escaped command title while JSON envelopes stay unchanged (Issues #2781, #2783).

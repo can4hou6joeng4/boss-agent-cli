@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.213] - 2026-11-25
+
 ### Fixed
 
 - `hr greet` 允许空的 `--lid`：lid 是访问上下文而非目标标识，平台可能给空值，MCP schema 也已按此声明；此前 CLI 的空白校验必然拒绝该合法调用，dry-run 也会失败。空白校验现在只覆盖 `geek-id` / `job-id` / `expect-id` / `security-id`（Issue #2789）。
