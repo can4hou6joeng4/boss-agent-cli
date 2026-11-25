@@ -38,6 +38,17 @@ SEARCH_PARAM_KEYS = (
 )
 
 
+def configured_search_params(params: Mapping[str, Any]) -> dict[str, Any]:
+	"""按筛选项顺序提取已设置的值，用于展示已保存的搜索条件。"""
+	configured: dict[str, Any] = {}
+	for key in SEARCH_PARAM_KEYS:
+		value = params.get(key)
+		if value is None or (isinstance(value, str) and not value.strip()):
+			continue
+		configured[key] = value
+	return configured
+
+
 def validate_stored_search_params(params: Mapping[str, Any]) -> None:
 	"""校验一份已保存的搜索参数；不可运行时抛 ``ValueError``（消息可直接展示）。
 

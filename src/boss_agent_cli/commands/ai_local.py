@@ -62,7 +62,8 @@ def _render_local_status(ctx: click.Context, data: dict[str, Any]) -> None:
 		table.add_column("模型", style="bold cyan")
 		table.add_column("runtime", style="green")
 		table.add_column("最低内存", justify="right", style="yellow")
-		table.add_column("说明", style="dim", max_width=40)
+		# 说明是不含空格的中文长句：默认的 ellipsis 会把后半句截掉（Issue #2761）。
+		table.add_column("说明", style="dim", max_width=40, overflow="fold")
 		for row in rows:
 			mark = " ★" if row.get("recommended") else ""
 			table.add_row(

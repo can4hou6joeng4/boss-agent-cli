@@ -11,11 +11,13 @@ import re
 import sqlite3
 import sys
 import threading
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from itertools import islice
 from pathlib import Path
 from typing import Any, Callable
 
 import click
+from rich.cells import cell_len
 from rich.console import Console, ConsoleOptions, RenderableType
 from rich.errors import MarkupError
 from rich.panel import Panel
@@ -37,13 +39,20 @@ from boss_agent_cli.cache.store import (
 	CacheWriteRejected,
 	is_cache_busy_error,
 )
-from boss_agent_cli.output import emit_success, exit_code_for_error, is_local_io_error, redact_sensitive_text
+from boss_agent_cli.output import (
+	emit_success,
+	exit_code_for_error,
+	is_local_io_error,
+	redact_sensitive,
+	redact_sensitive_text,
+)
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.browser_runtime import (
 	is_browser_kernel_missing,
 	patchright_headless_shell_command,
 	patchright_install_command,
 )
+from boss_agent_cli.services.saved_searches import configured_search_params
 from boss_agent_cli.services.text_files import sanitize_surrogates
 
 #: C0（保留 ``\t`` / ``\n``）与 C1 控制字符。Rich 只处理 markup，不会剥离原始
@@ -556,7 +565,8 @@ def handle_output(
 	if is_json_mode(ctx):
 		emit_success(command, data, pagination=pagination, hints=hints)
 	elif render:
-		render(data)
+		# 与信封共用脱敏规则。TTY 输出也会出现在日志和截图里（Issue #2765）。
+		render(redact_sensitive(data))
 		render_operator_actions(hints)
 	else:
 		# Fallback: no render function, emit JSON even in TTY
@@ -793,13 +803,14 @@ def render_job_table(
 	# title 可能含外部输入（搜索词等）：整个标题按字面渲染，后缀是代码自己的文本。
 	table = Table(title=f"{escape_markup(title)} ({len(items)} results)", show_lines=True)
 	table.add_column("#", style="dim", width=3)
-	table.add_column("title", style="bold cyan", max_width=30)
-	table.add_column("company", style="green", max_width=20)
-	table.add_column("salary", style="yellow", max_width=12)
-	table.add_column("type", max_width=8)
-	table.add_column("exp", max_width=10)
-	table.add_column("edu", max_width=8)
-	table.add_column("city", style="blue", max_width=12)
+	# 列宽上限保持表格紧凑；超宽内容按字符折行而不是截成「…」（Issue #2761）。
+	table.add_column("title", style="bold cyan", max_width=30, overflow="fold")
+	table.add_column("company", style="green", max_width=20, overflow="fold")
+	table.add_column("salary", style="yellow", max_width=12, overflow="fold")
+	table.add_column("type", max_width=8, overflow="fold")
+	table.add_column("exp", max_width=10, overflow="fold")
+	table.add_column("edu", max_width=8, overflow="fold")
+	table.add_column("city", style="blue", max_width=12, overflow="fold")
 
 	for i, job in enumerate(items, 1):
 		table.add_row(
@@ -820,8 +831,8 @@ def render_job_table(
 		console.print(f"  [dim]{escape_markup(hint_next)}[/dim]")
 
 
-def _snapshot_time_label(value: Any) -> str:
-	"""把索引快照的 Unix 秒渲染成本地时间；未知或损坏的时间按 "-" 处理。
+def unix_time_label(value: Any) -> str:
+	"""把 Unix 秒渲染成本地时间；未知或损坏的时间显示为 "-"。
 
 	``index_cache._saved_at`` 用 ``0`` 表示「保存时间未知」（旧版本写入的缓存、
 	被改坏的 ``saved_at``）。把这个哨兵交给 ``fromtimestamp`` 会显示成
@@ -834,6 +845,19 @@ def _snapshot_time_label(value: Any) -> str:
 		return "-"
 	try:
 		return datetime.datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
+	except (OverflowError, OSError, ValueError):
+		return "-"
+
+
+def iso_time_label(value: Any) -> str:
+	"""简历的 ISO 时间按本地时区显示到分钟。"""
+	if not isinstance(value, str):
+		return "-"
+	try:
+		stamp = datetime.datetime.fromisoformat(value)
+		if stamp.tzinfo is not None:
+			stamp = stamp.astimezone()
+		return stamp.strftime("%Y-%m-%d %H:%M")
 	except (OverflowError, OSError, ValueError):
 		return "-"
 
@@ -883,7 +907,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 		page_label = f"第 {page} 页 · " if isinstance(page, int) and not isinstance(page, bool) else ""
 		index = data.get("index", "-")
 		console.print(
-			f"  [dim]#{index} · {page_label}{source} · 共 {count_label} 条 · 保存于 {_snapshot_time_label(snapshot.get('saved_at'))}[/dim]"
+			f"  [dim]#{index} · {page_label}{source} · 共 {count_label} 条 · 保存于 {unix_time_label(snapshot.get('saved_at'))}[/dim]"
 		)
 
 	sid = data.get("security_id", "")
@@ -947,7 +971,8 @@ def render_simple_list(
 	table = Table(title=f"{escape_markup(title)} ({len(items)})", show_lines=True)
 	table.add_column("#", style="dim", width=3)
 	for header, _, style in columns:
-		table.add_column(header, style=style, max_width=25)
+		# 不设列宽上限：Rich 按终端宽度分配，超宽内容按字符折行（Issue #2761）。
+		table.add_column(escape_markup(header), style=style, overflow="fold")
 
 	for i, item in enumerate(items, 1):
 		row = [str(i)]
@@ -962,11 +987,79 @@ def render_simple_list(
 # ── Additional renderers ────────────────────────────────────────────
 
 
+_PANEL_INLINE_LIST_WIDTH = 60
+_PANEL_MAX_DEPTH = 4
+_PANEL_FIELD_MAX_LINES = 12
+_PANEL_NESTED_TEXT_LIMIT = 200
+
+
+def _panel_scalar_text(value: Any) -> str:
+	return (safe_text(value) or "-") if value is not None else "-"
+
+
+def _panel_inline_text(value: Any, depth: int) -> str | None:
+	"""返回能在字段名后直接显示的值；需要逐项展开时返回 ``None``。"""
+	if not isinstance(value, (list, tuple, dict)):
+		return _panel_scalar_text(value)
+	if not value:
+		return "-"
+	if depth >= _PANEL_MAX_DEPTH:
+		return cell_text(value)
+	if isinstance(value, dict) or len(value) > _PANEL_INLINE_LIST_WIDTH:
+		return None
+	if all(isinstance(item, (str, int, float)) or item is None for item in value):
+		parts = [_panel_scalar_text(item) for item in value]
+		if all("," not in part and "\n" not in part for part in parts):
+			text = ", ".join(parts)
+			if cell_len(text) <= _PANEL_INLINE_LIST_WIDTH:
+				return text
+	return None
+
+
+def _panel_field_lines(key: Any, value: Any, *, bounded: bool = False) -> list[str]:
+	"""保留标量，逐项展开容器。分段面板对嵌套字段保留有界预览（#2762）。"""
+	label = f"[bold]{escape_markup(safe_text(key))}:[/bold]"
+	inline = _panel_inline_text(value, 0)
+	if inline is not None:
+		return [f"{label} {escape_markup(inline)}"]
+	clipped = False
+
+	def block(container: Any, depth: int) -> Iterator[str]:
+		nonlocal clipped
+		pad = "  " * depth
+		entries = container.items() if isinstance(container, dict) else ((None, item) for item in container)
+		for child_key, child in entries:
+			if isinstance(container, dict):
+				prefix = f"{pad}[bold]{escape_markup(safe_text(child_key))}:[/bold]"
+			else:
+				prefix = f"{pad}·"
+			text = _panel_inline_text(child, depth)
+			if text is None:
+				yield prefix
+				yield from block(child, depth + 1)
+				continue
+			if bounded and len(text) > _PANEL_NESTED_TEXT_LIMIT:
+				text = f"{text[:_PANEL_NESTED_TEXT_LIMIT]}…"
+				clipped = True
+			yield f"{prefix} {escape_markup(text)}"
+
+	body = block(value, 1)
+	if not bounded:
+		return [label, *body]
+	preview = list(islice(body, _PANEL_FIELD_MAX_LINES + 1))
+	if len(preview) > _PANEL_FIELD_MAX_LINES:
+		preview.pop()
+		clipped = True
+	if clipped:
+		preview.append("  [dim]… 完整内容用 --json 查看[/dim]")
+	return [label, *preview]
+
+
 def render_message_panel(data: dict[str, Any], *, title: str = "result") -> None:
 	"""Render a simple key-value result as a panel."""
-	lines = []
+	lines: list[str] = []
 	for k, v in data.items():
-		lines.append(f"[bold]{escape_markup(k)}:[/bold] {escape_markup(v)}")
+		lines.extend(_panel_field_lines(k, v))
 	panel = Panel("\n".join(lines), title=title, border_style="green")
 	console.print(panel)
 
@@ -987,8 +1080,8 @@ def render_batch_operation_summary(data: dict[str, Any], *, title: str = "batch 
 	console.print(f"[green]success: {len(greeted)}[/green]  [red]failed: {len(failed)}[/red]")
 	if greeted:
 		table = Table(title="greeted", show_lines=True)
-		table.add_column("title", style="cyan", max_width=25)
-		table.add_column("company", style="green", max_width=20)
+		table.add_column("title", style="cyan", max_width=25, overflow="fold")
+		table.add_column("company", style="green", max_width=20, overflow="fold")
 		for item in greeted:
 			table.add_row(escape_markup(item.get("title", "-")), escape_markup(item.get("company", "-")))
 		console.print(table)
@@ -1000,15 +1093,16 @@ def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> Non
 	"""Render multi-section record (e.g., me command) as panels."""
 	for section, content in data.items():
 		if isinstance(content, dict):
-			lines = []
+			lines: list[str] = []
 			for k, v in content.items():
-				if isinstance(v, (list, dict)):
-					v = str(v)[:200]
-				lines.append(f"[bold]{escape_markup(k)}:[/bold] {escape_markup(v or '-')}")
+				# 嵌套的列表 / 对象有界展开，避免一条记录刷屏；0 / False 不再被当成缺失。
+				lines.extend(_panel_field_lines(k, v, bounded=True))
 			panel = Panel("\n".join(lines) if lines else "[dim]empty[/dim]", title=section, border_style="cyan")
 			console.print(panel)
 		else:
-			console.print(f"[bold]{escape_markup(section)}:[/bold] {escape_markup(content)}")
+			# 顶层段落（resume show 的 modules 等）本身就是这条记录的正文，完整展开。
+			for line in _panel_field_lines(section, content):
+				console.print(line)
 
 
 def render_string_grid(items: list[str], title: str, *, columns: int = 4) -> None:
@@ -1020,7 +1114,7 @@ def render_string_grid(items: list[str], title: str, *, columns: int = 4) -> Non
 	# title 可能含外部输入：整个标题按字面渲染。
 	table = Table(title=f"{escape_markup(title)} ({len(items)})", show_header=False)
 	for _ in range(columns):
-		table.add_column(max_width=20)
+		table.add_column(max_width=20, overflow="fold")
 
 	for i in range(0, len(items), columns):
 		row = items[i : i + columns]
@@ -1089,6 +1183,31 @@ def render_list_result(
 	"""列表类命令的统一渲染：表格 + 下一步；空列表也会给出下一步（AC4）。"""
 	render_simple_list(items, title, columns)
 	render_next_steps(next_steps)
+
+
+def render_saved_search_list(
+	items: list[dict[str, Any]],
+	title: str,
+	*,
+	next_steps: Sequence[str],
+) -> None:
+	"""在终端列表中展示已保存的筛选条件与本地创建时间。"""
+	rows = [
+		{
+			"name": item["name"],
+			"params": "\n".join(
+				f"{key}: {cell_text(value)}" for key, value in configured_search_params(item["params"]).items()
+			) or "-",
+			"created_at": unix_time_label(item.get("created_at")),
+		}
+		for item in items
+	]
+	render_list_result(
+		rows,
+		title,
+		[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
+		next_steps=next_steps,
+	)
 
 
 def render_record_result(

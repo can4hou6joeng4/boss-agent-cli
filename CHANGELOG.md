@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 终端表格按宽度折行，保留 `chatmsg` 的长消息和 `doctor` 修复命令中的完整路径（Issue #2761）。
+- 终端面板展开列表和对象，缺失值显示为 `-`，保留 `0` 与 `False`。分段面板的嵌套字段超出预览范围时会提示用 `--json` 查看完整内容（Issue #2762）。
+- `preset` 与 `watch` 的终端列表和新增确认只展示已设置的搜索条件。`preset list`、`watch list`、`resume list` 与 `resume applications` 的时间列显示本地时间（Issue #2763）。
+- `watch run --all` 在终端显示各监控的结果、失败原因和新增职位（Issue #2764）。
+- 终端成功结果在交给渲染函数前应用 JSON 信封的脱敏规则，包括 AI 配置 URL 中的口令（Issue #2765）。
+
 ## [3.4.208] - 2026-11-25
 
 ### Fixed

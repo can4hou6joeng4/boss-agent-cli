@@ -29,6 +29,8 @@ from boss_agent_cli.display import (
 	render_job_table,
 	render_list_result,
 	render_message_panel,
+	render_next_steps,
+	render_saved_search_list,
 	positional_hint,
 )
 from boss_agent_cli.crawler.service import CrawlBudget
@@ -46,7 +48,7 @@ from boss_agent_cli.search_filters import (
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
-from boss_agent_cli.services.saved_searches import validate_stored_search_params
+from boss_agent_cli.services.saved_searches import configured_search_params, validate_stored_search_params
 from boss_agent_cli.commands._filter_errors import emit_filter_error
 
 
@@ -181,7 +183,7 @@ def watch_add_cmd(
 		ctx, "watch",
 		{"action": "add", "name": name, "params": params},
 		render=lambda d: render_action_result(
-			d, title="watch", next_steps=[run_cmd, list_cmd]
+			{**d, "params": configured_search_params(d["params"])}, title="watch", next_steps=[run_cmd, list_cmd]
 		),
 		hints={"next_actions": [run_cmd, list_cmd]},
 	)
@@ -209,10 +211,9 @@ def watch_list_cmd(ctx: click.Context) -> None:
 		ctx,
 		"watch",
 		items,
-		render=lambda d: render_list_result(
+		render=lambda d: render_saved_search_list(
 			d,
 			"watches",
-			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
 			next_steps=[add_cmd] if not d else [run_cmd, remove_cmd],
 		),
 		hints=hints,
@@ -353,6 +354,34 @@ def _render_watch_run(data: dict[str, Any]) -> None:
 		render_job_table(items, "新增职位")
 
 
+def _render_watch_batch(ctx: click.Context, data: dict[str, Any]) -> None:
+	"""展示每项监控的结果，以及实际新增的职位。"""
+	watches = data["watches"]
+	rows = [{**watch, "status": watch.get("error", "完成")} for watch in watches]
+	render_list_result(
+		rows,
+		"监控结果",
+		[
+			("监控", "name", "bold cyan"),
+			("新增", "new_count", "green"),
+			("已见", "seen_count", "dim"),
+			("总数", "total_count", "dim"),
+			("状态", "status", "yellow"),
+			("说明", "message", ""),
+		],
+	)
+	steps = [_hint_command(ctx, "watch list")] if watches else [_hint_command(ctx, "watch add <name> <关键词>")]
+	has_new_items = False
+	for watch in watches:
+		items = watch.get("new_items")
+		if isinstance(items, list) and items:
+			render_job_table(items, f"新增职位（{watch['name']}）")
+			has_new_items = True
+	if has_new_items:
+		steps.append(_hint_command(ctx, "detail <security_id>"))
+	render_next_steps(steps)
+
+
 @watch_group.command("run")
 @click.argument("name", required=False)
 @click.option("--all", "run_all", is_flag=True, help="跑所有已保存 watch")
@@ -488,9 +517,7 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			handle_output(
 				ctx, "watch",
 				{"mode": "all", "watches": watches, "total": len(watches), "skipped": corrupt, "invalid": invalid},
-				render=lambda d: render_message_panel(
-					{"模式": "全部", "监控数": d.get("total", 0)}, title="watch run"
-				),
+				render=lambda d: _render_watch_batch(ctx, d),
 				hints=all_hints,
 			)
 			return
