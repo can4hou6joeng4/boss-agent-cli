@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
-from boss_agent_cli.commands.chatmsg import _message_type_label
+from boss_agent_cli.services.chat_utils import message_type_label as _message_type_label
 from boss_agent_cli.main import cli
 
 

@@ -43,6 +43,7 @@ from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS,
 	chat_cutoff_ts,
 	matches_chat_filters,
+	normalize_chat_message,
 	relation_text,
 )
 from boss_agent_cli.services.contact_lookup import (
@@ -88,7 +89,7 @@ from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_craw
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
 from boss_agent_cli.services.recommend_items import build_recommend_items
-from boss_agent_cli.services.recruiter_chat_summary import enrich_friend_summaries
+from boss_agent_cli.services.recruiter_chat_summary import enrich_friend_summaries, normalize_last_message
 from boss_agent_cli.services.recruiter_last_messages import (
 	DEFAULT_SUMMARY_LIMIT,
 	MAX_SUMMARY_LIMIT,
@@ -1676,6 +1677,8 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 		)
 		data = _unwrap(platform, response, "聊天记录获取失败", context=context)
 	items = _extract_list_items(data, ("messageList", "messages", "list", "items", "result"))
+	# 与 CLI `chatmsg` 同一份归一化；items 仍保留平台原值供后续步骤使用（Issue #2801）。
+	messages = [normalize_chat_message(item, gid=gid, friend_name=friend_display_name(friend)) for item in items]
 	return StepResult(
 		_with_items(
 			{
@@ -1683,6 +1686,7 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 				"gid": gid,
 				"uid": gid,
 				"security_id": security_id,
+				"messages": messages,
 				# 与 CLI `chatmsg` 同词汇的分页证据（Issue #2672）。
 				"pagination": _pagination_evidence(data, page, items),
 			},
@@ -3128,7 +3132,14 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 				doctor_command=risk_commands.get("doctor_command"),
 			)
 			raise WorkflowActionError(code, stats["error"], recoverable=recoverable, recovery_action=recovery)
-	payload: dict[str, Any] = {"friend_ids": friend_ids, "messages": items, "requests": stats["requests"]}
+	# 与 CLI `hr last-messages` 同一份归一化：items 保留平台原值供翻页 /
+	# 后续步骤使用，messages 给 Agent 可读的摘要（Issue #2801）。
+	messages = [normalize_last_message(item, set(friend_ids)) for item in items]
+	payload: dict[str, Any] = {
+		"friend_ids": friend_ids,
+		"messages": messages,
+		"requests": stats["requests"],
+	}
 	if skipped:
 		payload["skipped"] = skipped
 	if "error" in stats:

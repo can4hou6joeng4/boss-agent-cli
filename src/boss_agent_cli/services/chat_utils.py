@@ -2,6 +2,7 @@
 
 import datetime
 import math
+import re
 from typing import Any
 
 from boss_agent_cli.api.models import dict_items, safe_text
@@ -137,6 +138,123 @@ def message_text_value(value: Any) -> str | None:
 	if isinstance(value, float):
 		return str(value) if math.isfinite(value) else None
 	return None
+
+
+# 聊天历史的展示标签；CLI `chatmsg` 与向导 `candidate_chat_history` 共用。
+_MSG_TYPE_MAP = {
+	1: "文本", 2: "图片", 3: "招呼", 4: "简历", 5: "系统",
+	6: "名片", 7: "语音", 8: "视频", 9: "表情",
+}
+
+
+def message_type_label(msg_type: Any) -> str:
+	"""平台消息类型编码的可读标签；布尔不是类型编码（Issue #915）。"""
+	code = int_code(msg_type)
+	if code is not None:
+		return _MSG_TYPE_MAP.get(code, f"其他({code})")
+	return f"其他({msg_type})"
+
+
+def _message_body(msg: dict[str, Any]) -> dict[str, Any]:
+	body = msg.get("body")
+	return body if isinstance(body, dict) else {}
+
+
+def _message_text(msg: dict[str, Any], body: dict[str, Any]) -> str:
+	"""消息正文：按顶层 ``text`` → ``body.text`` 取第一个可用文本，恒为字符串。
+
+	真值但不是文本的顶层 ``text``（对象 / 数组 / ``true``）不能吞掉合法的
+	``body.text``；坏值也不应原样进信封（Issue #2749）。
+	"""
+	values = (msg.get("text"), body.get("text"))
+	for value in values:
+		if isinstance(value, str) and value:
+			return value
+	for value in values:
+		text = message_text_value(value)
+		if text is not None:
+			return text
+	return ""
+
+
+def _first_present(primary: dict[str, Any], secondary: dict[str, Any], keys: tuple[str, ...]) -> Any:
+	for source in (primary, secondary):
+		for key in keys:
+			value = source.get(key)
+			if value not in (None, ""):
+				return value
+	return None
+
+
+def _extract_links(msg: dict[str, Any], *, body: dict[str, Any]) -> list[str]:
+	links: list[str] = []
+	for value in list(msg.values()) + list(body.values()):
+		if isinstance(value, str):
+			links.extend(re.findall(r"https?://[^\s\"'<>]+", value))
+		elif isinstance(value, dict):
+			links.extend(_extract_links(value, body={}))
+		elif isinstance(value, list):
+			for item in value:
+				if isinstance(item, str):
+					links.extend(re.findall(r"https?://[^\s\"'<>]+", item))
+				elif isinstance(item, dict):
+					links.extend(_extract_links(item, body={}))
+	return list(dict.fromkeys(links))
+
+
+def normalize_chat_message(
+	msg: dict[str, Any],
+	*,
+	gid: str,
+	friend_name: str,
+	include_raw: bool = False,
+) -> dict[str, Any]:
+	"""把平台聊天消息归一成 CLI `chatmsg` 的输出形状（Issue #2801）。
+
+	向导 `candidate_chat_history` 与 CLI 共用这一份，避免同一条消息在两条
+	入口给出不同字段。``from`` 只凭稳定的非空 uid 判定，缺失按「未知」；
+	时间只接受真正的时间戳，坏值按「无时间」处理。
+	"""
+	from_obj = msg.get("from", {})
+	sender_uid = ""
+	sender_name = ""
+	if isinstance(from_obj, dict):
+		sender_uid = stable_uid(from_obj.get("uid"))
+		raw_sender_name = from_obj.get("name")
+		if isinstance(raw_sender_name, str):
+			sender_name = raw_sender_name.strip()
+	if not sender_uid:
+		from_name = "未知"
+	elif sender_uid == gid:
+		from_name = sender_name or friend_name
+	else:
+		from_name = "我"
+
+	msg_time = ""
+	ts = msg.get("time")
+	if isinstance(ts, (int, float)) and not isinstance(ts, bool) and ts:
+		msg_dt = safe_local_time(ts)
+		msg_time = msg_dt.strftime("%m-%d %H:%M") if msg_dt is not None else ""
+
+	body = _message_body(msg)
+	normalized: dict[str, Any] = {
+		"from": from_name,
+		"type": message_type_label(msg.get("type")),
+		"text": _message_text(msg, body),
+		"time": msg_time,
+	}
+	if include_raw:
+		normalized.update({
+			"message_id": msg.get("id") or msg.get("msgId") or msg.get("messageId"),
+			"type_code": msg.get("type"),
+			"timestamp": msg.get("time"),
+			"body": body,
+			"links": _extract_links(msg, body=body),
+			"security_id": _first_present(msg, body, ("securityId", "security_id")),
+			"job_id": _first_present(msg, body, ("jobId", "job_id", "encryptJobId")),
+			"raw": msg,
+		})
+	return normalized
 
 
 def contact_identity(item: dict[str, Any]) -> str:
