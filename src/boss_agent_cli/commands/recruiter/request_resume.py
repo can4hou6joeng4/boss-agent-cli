@@ -18,6 +18,7 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	handle_platform_error_output,
+	render_action_result,
 )
 from boss_agent_cli.services.candidate_actions import was_provably_unsent
 
@@ -111,11 +112,11 @@ def request_resume_cmd(ctx: click.Context, friend_id: int) -> None:
 			"requested": True,
 			"message": "附件简历请求已发送",
 		}
+		next_actions = [hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>")]
 		handle_output(
 			ctx,
 			"recruiter-request-resume",
 			data,
-			hints={"next_actions": [
-				hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
-			]},
+			render=lambda d: render_action_result(d, title="hr request-resume", next_steps=next_actions),
+			hints={"next_actions": next_actions},
 		)

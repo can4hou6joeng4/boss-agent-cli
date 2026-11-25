@@ -25,6 +25,7 @@ from boss_agent_cli.display import (
 	login_action_for_ctx,
 	platform_error_contract,
 	risk_error_message,
+	render_action_result,
 )
 
 
@@ -208,13 +209,15 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 				hints=risk_hints,
 			)
 			return
+		next_actions = [hint_command(ctx, f"hr chatmsg {friend_id}")]
 		handle_output(
 			ctx,
 			command,
 			{"friend_id": friend_id, "message_id": message_id, "downloaded": True, **platform_data_dict(platform.unwrap_data(result))},
+			render=lambda d: render_action_result(d, title="hr download-resume", next_steps=next_actions),
 			# 附件落盘后没有下一步：Agent 只能自己猜文件在哪、也不会回到会话继续沟通。
 			hints={
-				"next_actions": [hint_command(ctx, f"hr chatmsg {friend_id}")],
+				"next_actions": next_actions,
 				"operator_actions": [f"附件已保存到 {output.resolve()}"],
 			},
 		)
