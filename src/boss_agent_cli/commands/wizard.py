@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import sys
-from typing import Any, Callable, Mapping, NoReturn
+from typing import Any, Callable, Mapping, NoReturn, Sequence
 
 import click
 
@@ -15,6 +15,7 @@ from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
 	boss_command_for_ctx,
 	console,
+	escape_markup,
 	handle_error_output,
 	handle_output,
 	shell_argument,
@@ -43,8 +44,18 @@ from boss_agent_cli.wizard.renderer import (
 	render_run,
 	wizard_screen,
 )
+
 from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner, has_blocked_step
 from boss_agent_cli.wizard.store import WorkflowStore
+
+
+def _corrupt_run_notice(run_ids: Sequence[str]) -> str:
+	"""损坏断点提示：run_id 来自数据库，按外部值转义后再交给 Rich（Issue #2823）。"""
+	names = escape_markup(", ".join(run_ids))
+	return (
+		f"[yellow]跳过 {len(run_ids)} 条损坏的任务记录"
+		f"（{names}）：断点无法恢复，需重新创建任务[/yellow]"
+	)
 
 
 def _validate_timeout(ctx: click.Context, param: click.Parameter, value: float | None) -> float | None:
@@ -534,10 +545,7 @@ def _run_interactive_session(
 			available_runs = store.list_recent()
 			if store.corrupt_run_ids:
 				# 坏记录会被列表跳过；不说明会让用户以为任务凭空消失。
-				console.print(
-					f"[yellow]跳过 {len(store.corrupt_run_ids)} 条损坏的任务记录"
-					f"（{', '.join(store.corrupt_run_ids)}）：断点无法恢复，需重新创建任务[/yellow]"
-				)
+				console.print(_corrupt_run_notice(store.corrupt_run_ids))
 			selection = collect_wizard_input(
 				default_role=ctx.obj.get("role") or "candidate",
 				default_platform=ctx.obj.get("platform") or "zhipin",
