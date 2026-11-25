@@ -14,6 +14,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from boss_agent_cli import display
+from boss_agent_cli.services.chat_utils import message_text_value
 from boss_agent_cli.wizard.catalog import GOALS
 from boss_agent_cli.wizard.models import count_or_none
 from boss_agent_cli.wizard.prompts import STATUS_LABELS
@@ -734,11 +735,13 @@ def _render_empty_result(
 	)
 
 
-def _list_items_from_run(run: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def _list_items_from_run(
+	run: Mapping[str, Any], *, preferred_keys: tuple[str, ...] = ()
+) -> list[Mapping[str, Any]]:
 	last = _as_mapping(run.get("last_result")) or {}
 	data = _as_mapping(last.get("data")) or last
-	for key in (
-		"items",
+	keys = tuple(dict.fromkeys((*preferred_keys, "items")))
+	for key in keys + (
 		"jobs",
 		"jobList",
 		"recommendList",
@@ -774,16 +777,55 @@ def _list_items_from_run(run: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 	return []
 
 
+def _chat_direction_text(item: Mapping[str, Any]) -> str:
+	"""聊天记录「方向」列：平台 `from` 可能是对象，不能直接当集合键判断。"""
+	direction = item.get("from")
+	if isinstance(direction, Mapping):
+		name = direction.get("name")
+		if isinstance(name, str) and name.strip():
+			return name.strip()
+		uid = direction.get("uid") if direction.get("uid") is not None else direction.get("id")
+		if isinstance(uid, str) and uid.strip():
+			return uid.strip()
+		if type(uid) is int:
+			return str(uid)
+		return "对方"
+	if direction is None or direction == "":
+		direction = item.get("role") or item.get("side")
+	if direction is None or direction == "":
+		return "我" if item.get("isSelf") or item.get("self") else "对方"
+	if isinstance(direction, str):
+		return direction.strip() or "对方"
+	return str(direction) if type(direction) is int else "对方"
+
+
+def _chat_content_text(item: Mapping[str, Any]) -> str:
+	"""聊天记录「内容」列：优先正文字符串，body 是对象时读 body.text，不显示 repr。"""
+	sources = [item]
+	body = item.get("body")
+	if isinstance(body, Mapping):
+		sources.append(body)
+	for source in sources:
+		for key in ("text", "content"):
+			text = message_text_value(source.get(key))
+			if text:
+				return text
+	# 旧 checkpoint 可能把正文直接放在 body 字符串里；容器值仍不进 repr。
+	body_text = message_text_value(body)
+	return body_text or "—"
+
+
 def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> None:
 	"""Markdown-style preview for generic list goals (search / shortlist / pipeline…)."""
 	from rich import box
 	from rich.console import Group
 	from rich.text import Text
 
-	items = _list_items_from_run(run)
+	goal = str(run.get("goal") or "")
+	# 聊天记录的 messages 已与 CLI 同口径；裸 items 可能含 dict.from / dict.body。
+	items = _list_items_from_run(run, preferred_keys=("messages",) if goal == "chat_history" else ())
 	if not items:
 		return
-	goal = str(run.get("goal") or "")
 	table = Table(
 		show_header=True,
 		header_style="bold",
@@ -846,13 +888,10 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("方向", style="cyan", no_wrap=True)
 		table.add_column("内容", overflow="ellipsis", max_width=48, no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
-			direction = item.get("from") or item.get("role") or item.get("side") or ""
-			if direction in {"", None}:
-				direction = "我" if item.get("isSelf") or item.get("self") else "对方"
 			table.add_row(
 				str(index),
-				_clip_text(direction, 6),
-				_clip_text(item.get("content") or item.get("text") or item.get("body") or "—", 48),
+				_clip_text(_chat_direction_text(item), 6),
+				_clip_text(_chat_content_text(item), 48),
 			)
 	elif goal in {"candidates", "applications"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -1029,7 +1068,7 @@ def _render_management_result(
 		"jobs_list",
 	}
 	if goal in list_goals:
-		items = _list_items_from_run(run)
+		items = _list_items_from_run(run, preferred_keys=("messages",) if goal == "chat_history" else ())
 		# export may only have path/count
 		if goal == "export" and data.get("path"):
 			table = Table(show_header=False, box=None, pad_edge=False)
