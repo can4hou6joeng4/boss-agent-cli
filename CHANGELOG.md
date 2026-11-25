@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.214] - 2026-11-25
+
 ### Fixed
 
 - `boss_watch_run` 的 MCP schema 编码「name 与 all 必须且只能提供一个」：新增 `anyOf` / `not` 约束，`name` 进入条件必填后自动补 `minLength`，与 `search` 等工具的既有口径一致；CLI 行为不变（Issue #2792）。
