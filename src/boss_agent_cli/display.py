@@ -584,11 +584,14 @@ def handle_error_output(
 	details: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
 	data: Any = None,
+	json_mode: bool | None = None,
 ) -> None:
 	"""Smart error output: TTY -> rich error, pipe -> JSON error envelope.
 
 	``data`` 只用于「部分完成」的失败：批量删除等操作需要把已完成项和失败项
 	带回给调用方，而不是只留 ``data=null``（Issue #1497）。默认仍是 None。
+	``json_mode`` 供入口层显式传入：启动期错误没有完整 ctx，但可能带了
+	``--json``，不能仅凭 stdout 是否 TTY 决定通道（Issue #2786）。
 	"""
 	from boss_agent_cli.output import emit_error
 
@@ -620,7 +623,8 @@ def handle_error_output(
 	# api/ 与 crawler/ 层没有 ctx，只能在出口按本次运行改写（Issue #1097）。
 	message = registry_recovery_for_ctx(ctx, message)
 
-	if is_json_mode(ctx):
+	use_json = is_json_mode(ctx) if json_mode is None else json_mode
+	if use_json:
 		emit_error(
 			command,
 			code=code,
