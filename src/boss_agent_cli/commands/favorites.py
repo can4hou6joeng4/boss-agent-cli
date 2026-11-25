@@ -12,6 +12,7 @@ from boss_agent_cli.display import (
 	handle_not_supported,
 	handle_output,
 	handle_platform_error_output,
+	render_action_result,
 	render_simple_list,
 )
 from boss_agent_cli.services.job_identity import deduplicate_job_result
@@ -361,6 +362,14 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 			"inactive_count": status_counts[JOB_STATUS_INACTIVE],
 			"unknown_count": status_counts[JOB_STATUS_UNKNOWN],
 		},
+		render=lambda d: render_action_result(
+			d,
+			title="favorites sync",
+			next_steps=[
+				_hint_command(ctx, "shortlist list"),
+				_hint_command(ctx, "shortlist compare"),
+			],
+		),
 		hints={
 			"next_actions": [
 				_hint_command(ctx, "shortlist list"),

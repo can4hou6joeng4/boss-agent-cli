@@ -9,6 +9,7 @@
 - 职位详情与职位表的空字段显示 `-`：缺失 / 空串 / 纯空白统一走 `job_field_text`，不再出现 `exp:  | edu:  |` 与 `boss:  ()`，`boss_name` 为空时只显示 `boss: -` 或名字（Issue #2767）。
 - 职位描述超过 500 字时写明「已省略 N 字，完整描述用 --json 查看」，不再只留一个 `...` 让人误以为看到全文（Issue #2768）。
 - 「下一步」、错误恢复命令、`show` / `detail` 的后续命令与 `operator_actions` 按整行输出，Rich 不再把长命令在路径中间硬折行（Issue #2770）。
+- `login` / `logout` / `shortlist add|annotate|remove` / `favorites sync` / `digest --format md -o` 在终端渲染结果面板与后继命令，不再只打一行 JSON；`login` 失败时错误、恢复动作与 `operator_actions`（扫码 / 检查网络等真人指引）同样输出到终端。`logout` 失败的恢复文案按本次运行的数据目录改写，与其它命令同口径（Issue #2769）。
 
 ## [3.4.209] - 2026-11-25
 

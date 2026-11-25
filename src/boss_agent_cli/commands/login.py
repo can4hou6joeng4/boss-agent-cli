@@ -9,8 +9,15 @@ from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.auth.manager import MAX_LOGIN_TIMEOUT_SECONDS, AuthManager
 from boss_agent_cli.commands._login_errors import classify_login_error
-from boss_agent_cli.display import INTERNAL_ERROR_TYPES, boss_command_for_ctx, error_contract_for_code
-from boss_agent_cli.output import emit_error, emit_success, is_local_io_error
+from boss_agent_cli.display import (
+	INTERNAL_ERROR_TYPES,
+	boss_command_for_ctx,
+	error_contract_for_code,
+	handle_error_output,
+	handle_output,
+	render_action_result,
+)
+from boss_agent_cli.output import is_local_io_error
 
 #: ``--curl-file`` 的读取上限（字符数）：粘贴的 cURL 文本远小于此值；``/dev/zero``、
 #: FIFO 或不结束的 stdin 不能把登录命令拖成无界读取（Issue #2310）。
@@ -57,7 +64,8 @@ def _reject_conflicting_options(
 	]
 	if curl_file is not None and curl_conflicts:
 		joined = "、".join(curl_conflicts)
-		emit_error(
+		handle_error_output(
+			ctx,
 			"login",
 			code="INVALID_PARAM",
 			message=f"--curl-file 不能与 {joined} 同时使用",
@@ -66,7 +74,8 @@ def _reject_conflicting_options(
 			hints={"next_actions": [f"{login_path} --help"]},
 		)
 	if force and cookie_source is not None:
-		emit_error(
+		handle_error_output(
+			ctx,
 			"login",
 			code="INVALID_PARAM",
 			message="--force 会跳过本地 Cookie 提取，不能与 --cookie-source 同时使用",
@@ -119,25 +128,27 @@ def login_cmd(
 		status_cmd = boss_command_for_ctx(ctx, "status", include_data_dir=True)
 		search_cmd = boss_command_for_ctx(ctx, "search <query>", include_data_dir=True)
 		recommend_cmd = boss_command_for_ctx(ctx, "recommend", include_data_dir=True)
-		emit_success(
+		next_actions = [status_cmd, search_cmd, recommend_cmd]
+		handle_output(
+			ctx,
 			"login",
 			{"message": f"登录成功（{method}）"},
-			hints={
-				"next_actions": [status_cmd, search_cmd, recommend_cmd],
-			},
+			render=lambda data: render_action_result(data, title="login", next_steps=next_actions),
+			hints={"next_actions": next_actions},
 		)
 	except Exception as e:
 		if isinstance(e, PlatformRiskError):
-			emit_error("login", **classify_login_error(e, ctx))
+			handle_error_output(ctx, "login", **classify_login_error(e, ctx))
 		elif isinstance(e, (PlatformRateLimitError, ProxyConfigurationError)):
 			# 限流 / 代理配置错误带专用契约；curl 分支不能把它们兜成通用的
 			# 「导入失败、可重试」（Issue #2308）。
-			emit_error("login", **classify_login_error(e, ctx))
+			handle_error_output(ctx, "login", **classify_login_error(e, ctx))
 		elif isinstance(e, INTERNAL_ERROR_TYPES):
 			# 确定性内部错误不能落到文本启发式被报成可重试网络故障。登录输入
 			# 可能夹带凭据，message 只放类型名，不回显异常文本（Issue #2307）。
 			recoverable, recovery_action = error_contract_for_code("INTERNAL_ERROR")
-			emit_error(
+			handle_error_output(
+				ctx,
 				"login",
 				code="INTERNAL_ERROR",
 				message=f"登录流程内部错误: {type(e).__name__}",
@@ -146,7 +157,7 @@ def login_cmd(
 			)
 		elif is_local_io_error(e):
 			# 本地目录 / 磁盘错误不是网络问题，也不该被 curl 分支的通用文案吞掉。
-			emit_error("login", **classify_login_error(e, ctx))
+			handle_error_output(ctx, "login", **classify_login_error(e, ctx))
 		elif curl_file is not None:
 			operator_actions = [
 				"仅支持 BOSS 直聘 Copy as cURL (bash) 原始文本，不能与 --cdp 或 --cookie-source 混用",
@@ -156,7 +167,8 @@ def login_cmd(
 				# 解析器 / 有界读取的 ValueError 文案是固定文本，不含输入内容；回显
 				# 它能定位 BOM、大小上限等具体原因（Issue #2310）。非 ValueError
 				# （网络库 / 未知异常）仍可能与凭据有关，完全透传原文被禁止。
-				emit_error(
+				handle_error_output(
+					ctx,
 					"login",
 					code="INVALID_PARAM",
 					message=f"cURL 登录态导入失败: {e}",
@@ -166,7 +178,8 @@ def login_cmd(
 					hints={"operator_actions": operator_actions},
 				)
 			else:
-				emit_error(
+				handle_error_output(
+					ctx,
 					"login",
 					code="LOGIN_CREDENTIAL_EXTRACTION_FAILED",
 					message="cURL 登录态导入失败，未完成会话更新",
@@ -175,4 +188,4 @@ def login_cmd(
 					hints={"operator_actions": operator_actions},
 				)
 		else:
-			emit_error("login", **classify_login_error(e, ctx))
+			handle_error_output(ctx, "login", **classify_login_error(e, ctx))
