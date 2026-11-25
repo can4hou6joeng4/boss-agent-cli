@@ -210,22 +210,22 @@ _SILENT_STEPS = {"auth_status"}
 
 
 def goal_label(role: Any, goal: Any) -> str:
-	definition = GOALS.get(str(role), {}).get(str(goal))
+	definition = GOALS.get(_safe_text(role), {}).get(_safe_text(goal))
 	return definition.description if definition else "自定义事项"
 
 
 def step_label(value: Any) -> str:
-	return STEP_LABELS.get(str(value), "处理任务步骤")
+	return STEP_LABELS.get(_safe_text(value), "处理任务步骤")
 
 
 def status_label(value: Any) -> str:
-	return STATUS_LABELS.get(str(value), "状态未知")
+	return STATUS_LABELS.get(_safe_text(value), "状态未知")
 
 
 def error_message(code: str, message: str | None = None) -> str:
 	"""Prefer platform Chinese text; fall back to localized code labels."""
 	if message:
-		text = str(message).strip()
+		text = _safe_text(message)
 		if text and any("\u4e00" <= char <= "\u9fff" for char in text):
 			# Avoid showing opaque "NETWORK_ERROR" wrappers when platform explained it.
 			if code == "NETWORK_ERROR" and text not in {"网络请求失败", "NETWORK_ERROR"}:
@@ -234,7 +234,7 @@ def error_message(code: str, message: str | None = None) -> str:
 				return text
 			if text not in ERROR_LABELS.values():
 				return text
-	return ERROR_LABELS.get(code) or (str(message).strip() if message else "任务执行时遇到问题")
+	return ERROR_LABELS.get(code) or (_safe_text(message) if message else "") or "任务执行时遇到问题"
 
 
 def recovery_message(
@@ -244,17 +244,17 @@ def recovery_message(
 	command_for: Callable[[str], str] | None = None,
 ) -> str | None:
 	localized = RECOVERY_LABELS.get(code)
-	if localized and code in _DYNAMIC_RECOVERY_CODES and recovery_action:
+	action_text = _safe_text(recovery_action)
+	if localized and code in _DYNAMIC_RECOVERY_CODES and action_text:
 		# actions 层已给出带数据目录的完整指引，直接采用；静态文案的命令家族
 		# 可能与实际失败对象不同（Issue #1090）。
-		action_text = str(recovery_action)
 		if _CONTEXT_AWARE_COMMAND.search(action_text):
 			return action_text
-	if localized and code in _RISK_CODES and recovery_action:
+	if localized and code in _RISK_CODES and action_text:
 		# runner / actions 已把解锁命令换成带 --data-dir 的真实命令；静态文案
 		# 保留面向真人的措辞，命令部分必须用动态版本，否则自定义数据目录下
 		# 照抄提示会去默认目录空转（Issue #1087）。
-		match = _RISK_CLEAN_COMMAND.search(str(recovery_action))
+		match = _RISK_CLEAN_COMMAND.search(action_text)
 		if match:
 			return localized.replace("boss clean --risk-lock", match.group(0))
 	if code == "BROWSER_KERNEL_MISSING":
@@ -262,7 +262,7 @@ def recovery_message(
 		# 放进 PATH，Issue #1060）：有动态命令时用它替换静态说法。
 		from boss_agent_cli.services.browser_runtime import patchright_install_command
 
-		command = str(recovery_action) if recovery_action and "patchright" in str(recovery_action) else None
+		command = action_text if "patchright" in action_text else None
 		return (
 			"这不是网络问题，重试不会有帮助。请退出向导，运行 "
 			f"{command or patchright_install_command()} 安装浏览器内核后重新执行命令。"
@@ -270,7 +270,6 @@ def recovery_message(
 	if code == "CRAWL_UNAVAILABLE":
 		# 浏览器启动失败与依赖缺失共用该码：动作层给出的动态指引（Chrome /
 		# chrome_path / 调试端口）比静态安装文案更准确（Issue #1553）。
-		action_text = str(recovery_action or "")
 		if any(keyword in action_text for keyword in ("chrome_path", "Chrome", "调试端口")):
 			return action_text
 		# 安装命令要带上已经可用的依赖组：uv tool install 会重建环境（Issue #1068）。
@@ -279,8 +278,8 @@ def recovery_message(
 		return f"这不是网络问题，重试不会有帮助。请退出向导，用 {extras_install_hint('crawl')} 补上采集依赖后重新执行。"
 	if localized:
 		return _rewrite_recovery_commands(localized, command_for)
-	if recovery_action and any("\u4e00" <= char <= "\u9fff" for char in str(recovery_action)):
-		return str(recovery_action)
+	if action_text and any("\u4e00" <= char <= "\u9fff" for char in action_text):
+		return action_text
 	return "请返回主菜单后重试。" if recovery_action else None
 
 
@@ -298,7 +297,9 @@ def render_event(kind: str, step: str, data: Mapping[str, Any] | None) -> None:
 		display.console.print(f"[cyan]…[/cyan] {label}")
 	elif kind == "step_retrying":
 		attempt = data.get("attempt") if data else "?"
-		display.console.print(f"[yellow]正在重试[/yellow] {label}（第 {display.escape_markup(attempt)} 次）")
+		display.console.print(
+			f"[yellow]正在重试[/yellow] {label}（第 {display.escape_markup(_safe_text(attempt, '?'))} 次）"
+		)
 
 
 def _screen_control_unavailable() -> bool:
@@ -563,19 +564,21 @@ def render_run(
 	框里再列一遍职位既冗余、页码也跟菜单对不上。``command_for`` 让失败面板
 	的恢复命令带上本次运行的数据目录（Issue #1090）。
 	"""
-	status = str(run.get("status") or "")
+	status = _safe_text(run.get("status"))
 	if status == "failed":
-		error = run.get("error") or {}
+		raw_error = run.get("error")
+		error = _as_mapping(raw_error) or {}
+		raw_text = "" if raw_error is None or isinstance(raw_error, Mapping) else _safe_text(raw_error)
 		render_error(
-			code=str(error.get("code") or "NETWORK_ERROR"),
-			message=str(error.get("message") or ""),
-			recovery_action=error.get("recovery_action"),
+			code=_safe_text(error.get("code")) or raw_text or "NETWORK_ERROR",
+			message=_safe_text(error.get("message")) or raw_text,
+			recovery_action=_safe_text(error.get("recovery_action")) or None,
 			command_for=command_for,
 		)
 		return
 
 	# Stale waiting_input after a later successful crawl: show results, not a yellow wait card.
-	if status == "waiting_input" and run.get("effective_completed"):
+	if status == "waiting_input" and run.get("effective_completed") is True:
 		if _render_crawl_summary(run, with_preview=with_preview):
 			return
 
@@ -583,15 +586,16 @@ def render_run(
 		last = _as_mapping(run.get("last_result")) or {}
 		data = _as_mapping(last.get("data")) or {}
 		# Live crawl already finished with jobs — prefer crawl result panel.
-		live = str(data.get("live_crawl_status") or data.get("status") or "")
-		jobs_seen = count_or_none(data.get("jobs_seen"))
+		live = _safe_text(data.get("live_crawl_status")) or _safe_text(data.get("status"))
+		jobs_seen = _safe_count(data.get("jobs_seen"))
 		if live == "completed" and (jobs_seen or 0) > 0:
 			if _render_crawl_summary(run, with_preview=with_preview):
 				return
 		reason = display.escape_markup(
-			data.get("error") or last.get("next_action") or "需要补充信息或人工处理后才能继续"
+			_safe_text(data.get("error")) or _safe_text(last.get("next_action")) or "需要补充信息或人工处理后才能继续"
 		)
-		inner = display.escape_markup(data.get("run_id")) if data.get("run_id") else None
+		inner_text = _safe_text(data.get("run_id"))
+		inner = display.escape_markup(inner_text) if inner_text else None
 		lines = [
 			f"[bold]{goal_label(run.get('role'), run.get('goal'))}[/bold] 需要你处理后再继续。",
 			"",
@@ -600,20 +604,21 @@ def render_run(
 		if inner:
 			lines.append(f"内部采集编号：{inner}")
 		if (jobs_seen or 0) > 0:
-			lines.append(f"本地已有职位：{jobs_seen} 条（可在「查看采集进度与产物」中浏览）")
+			lines.append(f"本地已有职位：{_count_text(jobs_seen, '0')} 条（可在「查看采集进度与产物」中浏览）")
 		operator_actions = last.get("operator_actions")
 		if not isinstance(operator_actions, (list, tuple)):
 			# 值级类型漂移（旧 run / 手工编辑）按缺失处理：字符串会被逐字符
 			# 迭代成多条假指引，非序列类型直接中断状态面板（Issue #2369）。
 			operator_actions = []
-		if operator_actions:
+		action_lines = [text for item in operator_actions if (text := _safe_text(item))]
+		if action_lines:
 			# 数据驱动：step 自己声明「人该做什么」，renderer 不再猜。
 			lines.append("")
-			lines.extend(display.escape_markup(item) for item in operator_actions)
+			lines.extend(display.escape_markup(item) for item in action_lines)
 		elif data.get("status") == "risk_stopped" or "非 JSON" in reason or "未登录" in reason or "环境" in reason:
 			# 兜底：SQLite 里的历史 run 没有 operator_actions 字段，仍走旧的子串启发式。
 			lines.append("")
-			if data.get("browser_kept_open"):
+			if data.get("browser_kept_open") is True:
 				lines.extend(
 					[
 						"[green]采集用 Chrome 已保持打开[/green]。",
@@ -629,7 +634,7 @@ def render_run(
 						"若提示环境异常，多半是采集专用浏览器指纹问题，不是主账号登录失效。",
 					]
 				)
-		next_action = last.get("next_action")
+		next_action = _safe_text(last.get("next_action"))
 		if next_action:
 			lines.append(f"命令行恢复：{display.escape_markup(next_action)}")
 		display.console.print(Panel("\n".join(lines), title="等待继续", border_style="yellow"))
@@ -665,29 +670,33 @@ def render_run(
 	table.add_column("内容")
 	table.add_row("事项", f"[bold]{goal}[/bold]")
 	table.add_row("状态", f"[bold]{status_label(status)}[/bold]")
-	if run.get("run_id"):
-		table.add_row("任务编号", f"[dim]{display.escape_markup(run.get('run_id'))}[/dim]")
+	run_id_text = _safe_text(run.get("run_id"))
+	if run_id_text:
+		table.add_row("任务编号", f"[dim]{display.escape_markup(run_id_text)}[/dim]")
 	params = run.get("params") if isinstance(run.get("params"), Mapping) else {}
 	inputs = params.get("inputs") if isinstance(params, Mapping) else {}
 	if isinstance(inputs, Mapping) and inputs:
-		hint = " · ".join(
-			f"{key}={value}"
-			for key, value in inputs.items()
-			if value not in (None, "") and key in {"query", "city", "run_id", "resume", "prompt", "name"}
-		)
+		pairs = []
+		for key in ("query", "city", "run_id", "resume", "prompt", "name"):
+			value_text = _safe_text(inputs.get(key))
+			if value_text:
+				pairs.append(f"{key}={value_text}")
+		hint = " · ".join(pairs)
 		if hint:
 			table.add_row("参数", f"[bold]{display.escape_markup(hint)}[/bold]")
 	last = _as_mapping(run.get("last_result")) or {}
 	data = _as_mapping(last.get("data")) or {}
-	if data.get("result"):
-		text = str(data.get("result"))
-		if len(text) > 600:
-			text = text[:600] + "…"
-		table.add_row("结果", display.escape_markup(text))
-	if data.get("summary"):
-		table.add_row("摘要", f"[bold]{display.escape_markup(data.get('summary'))}[/bold]")
-	if data.get("path"):
-		table.add_row("文件", f"[bold]{display.escape_markup(data.get('path'))}[/bold]")
+	result_text = _safe_text(data.get("result"))
+	if result_text:
+		if len(result_text) > 600:
+			result_text = result_text[:600] + "…"
+		table.add_row("结果", display.escape_markup(result_text))
+	summary_text = _safe_text(data.get("summary"))
+	if summary_text:
+		table.add_row("摘要", f"[bold]{display.escape_markup(summary_text)}[/bold]")
+	path_text = _safe_text(data.get("path"))
+	if path_text:
+		table.add_row("文件", f"[bold]{display.escape_markup(path_text)}[/bold]")
 	artifacts = last.get("artifacts")
 	if not isinstance(artifacts, (Mapping, list, tuple)):
 		# 类型漂移的产物字段按缺失处理：字符串会被逐字符迭代成假产物、
@@ -708,7 +717,7 @@ def _render_empty_result(
 	command_for: Callable[[str], str] | None = None,
 ) -> None:
 	"""Friendly empty-state panel for management goals with zero items."""
-	goal = str(run.get("goal") or "")
+	goal = _safe_text(run.get("goal"))
 	title = goal_label(run.get("role"), goal)
 	hints: dict[str, str] = {
 		"resumes": "当前还没有本地简历。可用命令导入：boss resume import <文件>",
@@ -840,7 +849,7 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 	from rich.console import Group
 	from rich.text import Text
 
-	goal = str(run.get("goal") or "")
+	goal = _safe_text(run.get("goal"))
 	last = _as_mapping(run.get("last_result")) or {}
 	data = _as_mapping(last.get("data")) or last
 	known_friend_ids = _last_message_friend_ids(data) if goal == "last_messages" else set()
@@ -992,7 +1001,7 @@ def _render_management_result(
 	from rich.console import Group
 	from rich.text import Text
 
-	goal = str(run.get("goal") or "")
+	goal = _safe_text(run.get("goal"))
 	last = _as_mapping(run.get("last_result")) or {}
 	data = _as_mapping(last.get("data")) or {}
 	if not data:
@@ -1002,7 +1011,7 @@ def _render_management_result(
 		headline = Text()
 		headline.append("● ", style="bold green")
 		headline.append("求职日报", style="bold")
-		summary = str(data.get("summary") or "")
+		summary = _safe_text(data.get("summary"))
 		meta = Table(show_header=False, box=None, pad_edge=False)
 		meta.add_column("k", style="dim", width=10)
 		meta.add_column("v", style="bold")
@@ -1034,8 +1043,8 @@ def _render_management_result(
 		return True
 
 	if goal == "ai_assist":
-		result = str(data.get("result") or "").strip()
-		resume = str(data.get("resume") or "")
+		result = _safe_text(data.get("result"))
+		resume = _safe_text(data.get("resume"))
 		if not result:
 			return False
 		body = Text()
@@ -1068,19 +1077,20 @@ def _render_management_result(
 				if not isinstance(entry, Mapping):
 					continue
 				failed = entry.get("error")
+				failed_text = _safe_text(failed)
 				batch.add_row(
-					display.escape_markup(entry.get("name") or "—"),
+					display.escape_markup(_safe_text(entry.get("name")) or "—"),
 					"—" if failed else display.escape_markup(_count_text(entry.get("new_count"))),
-					display.escape_markup(failed) if failed else "完成",
+					display.escape_markup(failed_text) if failed_text else ("失败" if failed else "完成"),
 				)
 			display.console.print(Panel(batch, title=f"批量监控结果（{len(data['watches'])} 条）", border_style="cyan"))
 			skipped = data.get("skipped")
 			if isinstance(skipped, list) and skipped:
-				names = "、".join(display.escape_markup(item) for item in skipped)
+				names = "、".join(display.escape_markup(_safe_text(item) or "未命名") for item in skipped)
 				display.console.print(f"[yellow]以下监控的参数已损坏、本次未执行：[/yellow]{names}")
 			return True
-		action = str(data.get("action") or "")
-		name = str(data.get("name") or "")
+		action = _safe_text(data.get("action"))
+		name = _safe_text(data.get("name"))
 		if action or name:
 			table = Table(show_header=False, box=None, pad_edge=False)
 			table.add_column("k", style="dim", width=10)
@@ -1090,12 +1100,13 @@ def _render_management_result(
 				table.add_row("操作", display.escape_markup(action))
 			if name:
 				table.add_row("名称", display.escape_markup(name))
-			if data.get("removed") is not None:
-				table.add_row("已删除", "是" if data.get("removed") else "否")
+			removed = data.get("removed")
+			if isinstance(removed, bool):
+				table.add_row("已删除", "是" if removed else "否")
 			if data.get("new_count") is not None:
-				table.add_row("新发现", display.escape_markup(data.get("new_count")))
+				table.add_row("新发现", display.escape_markup(_count_text(data.get("new_count"))))
 			if data.get("total") is not None:
-				table.add_row("命中", display.escape_markup(data.get("total")))
+				table.add_row("命中", display.escape_markup(_count_text(data.get("total"))))
 			display.console.print(Panel(table, title="监控结果", border_style="cyan"))
 			return True
 
@@ -1121,12 +1132,9 @@ def _render_management_result(
 			table.add_column("k", style="dim", width=10)
 			table.add_column("v", style="bold")
 			table.add_row("事项", goal_label(run.get("role"), goal))
-			table.add_row("格式", display.escape_markup(data.get("format") or "—"))
-			table.add_row(
-				"条数",
-				display.escape_markup(data.get("count") if data.get("count") is not None else len(items)),
-			)
-			table.add_row("文件", display.escape_markup(data.get("path")))
+			table.add_row("格式", display.escape_markup(_safe_text(data.get("format")) or "—"))
+			table.add_row("条数", display.escape_markup(_count_text(data.get("count"), str(len(items)))))
+			table.add_row("文件", display.escape_markup(_safe_text(data.get("path")) or "—"))
 			display.console.print(Panel(table, title="导出完成", border_style="green"))
 			return True
 		count = len(items)
@@ -1165,13 +1173,14 @@ def _render_management_result(
 			("label", "标签"),
 			("run_id", "采集编号"),
 		):
-			if data.get(key) not in (None, ""):
-				value = str(data.get(key))
+			value = _safe_text(data.get(key))
+			if value:
 				if key in {"security_id"} and len(value) > 18:
 					value = value[:12] + "…"
 				table.add_row(label, f"[bold]{display.escape_markup(value)}[/bold]")
-		if data.get("status"):
-			table.add_row("详情", f"[dim]{display.escape_markup(data.get('status'))}[/dim]")
+		status_text = _safe_text(data.get("status"))
+		if status_text:
+			table.add_row("详情", f"[dim]{display.escape_markup(status_text)}[/dim]")
 		display.console.print(Panel(table, title="操作成功", border_style="green"))
 		return True
 
@@ -1211,7 +1220,7 @@ def _render_management_result(
 
 def _city_display(city_code: Any) -> str:
 	"""Map BOSS city codes to Chinese names when possible."""
-	code = str(city_code or "").strip()
+	code = _safe_text(city_code)
 	if not code:
 		return ""
 	try:
@@ -1230,15 +1239,27 @@ def _short_artifact_lines(paths: Mapping[str, Any] | Sequence[Any]) -> tuple[str
 	entries: list[tuple[str, Path]] = []
 	if isinstance(paths, Mapping):
 		for kind, raw in paths.items():
-			path = Path(str(raw))
-			entries.append((str(kind), path))
+			text = _safe_text(raw)
+			if not text or any(ord(char) < 32 for char in text):
+				continue
+			try:
+				path = Path(text)
+			except (OSError, ValueError):
+				continue
+			entries.append((_safe_text(kind), path))
 	elif isinstance(paths, (str, bytes)):
 		# 单个路径不是产物列表：旧 run 的字段漂移不能让字符串被逐字符拆开
 		# 显示成十几条假产物（Issue #2370）。
 		return "", ""
 	else:
 		for raw in paths:
-			path = Path(str(raw))
+			text = _safe_text(raw)
+			if not text or any(ord(char) < 32 for char in text):
+				continue
+			try:
+				path = Path(text)
+			except (OSError, ValueError):
+				continue
 			entries.append((path.suffix.lstrip(".") or "file", path))
 	if not entries:
 		return "", ""
@@ -1277,6 +1298,12 @@ def _count_text(value: Any, default: str = "—") -> str:
 	return _safe_text(value, default)
 
 
+def _safe_count(value: Any) -> int | None:
+	"""展示层计数：漂移 / 超大整数（``str()`` 抛 ``ValueError``）按缺失处理。"""
+	count = count_or_none(value)
+	return count if count is not None and _count_text(count) != "—" else None
+
+
 def _company_text(item: Mapping[str, Any]) -> str:
 	"""公司名按既有优先级取：company 再 brandName；对象取 name / brandName。"""
 	for key in ("company", "brandName"):
@@ -1308,10 +1335,10 @@ def _preview_jobs_from_data(data: Mapping[str, Any], *, limit: int = 5) -> list[
 		for job in jobs:
 			if not isinstance(job, Mapping):
 				continue
-			title = _clip_text(job.get("title") or job.get("jobName") or "未命名职位", 28)
-			company = _clip_text(job.get("company") or job.get("brandName") or "-", 14)
-			city = _clip_text(job.get("city") or job.get("cityName") or "", 8)
-			salary = _clip_text(job.get("salary") or job.get("salaryDesc") or "", 12)
+			title = _clip_text(_first_safe_text(job, ("title", "jobName"), "未命名职位"), 28)
+			company = _clip_text(_company_text(job) or "-", 14)
+			city = _clip_text(_first_safe_text(job, ("city", "cityName")), 8)
+			salary = _clip_text(_first_safe_text(job, ("salary", "salaryDesc")), 12)
 			rows.append({"title": title, "company": company, "city": city, "salary": salary})
 			if len(rows) >= limit:
 				return rows
@@ -1321,7 +1348,7 @@ def _preview_jobs_from_data(data: Mapping[str, Any], *, limit: int = 5) -> list[
 	samples = data.get("sample_titles")
 	if isinstance(samples, list):
 		for raw in samples[:limit]:
-			text = str(raw or "").strip()
+			text = _safe_text(raw)
 			if not text:
 				continue
 			if " · " in text:
@@ -1374,13 +1401,15 @@ def _render_job_preview_table(
 			str(row.get("salary") or "—"),
 		)
 	if total is not None and total > len(rows):
-		table.add_row(
-			"…",
-			f"[dim]另有 {total - len(rows)} 条，选下方「浏览职位列表」查看[/dim]",
-			"",
-			"",
-			"",
-		)
+		remaining = _count_text(total - len(rows))
+		if remaining != "—":
+			table.add_row(
+				"…",
+				f"[dim]另有 {remaining} 条，选下方「浏览职位列表」查看[/dim]",
+				"",
+				"",
+				"",
+			)
 	return table
 
 
@@ -1390,7 +1419,7 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	from rich.rule import Rule
 	from rich.text import Text
 
-	goal = str(run.get("goal") or "")
+	goal = _safe_text(run.get("goal"))
 	if goal not in {"crawl_start", "crawl_resume", "crawl_status", "crawl_stop"}:
 		return False
 	last = _as_mapping(run.get("last_result")) or {}
@@ -1398,21 +1427,23 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	if not data and not last:
 		return False
 
-	crawl_status = data.get("live_crawl_status") or data.get("status") or last.get("status")
-	jobs_seen = count_or_none(data.get("jobs_seen"))
+	crawl_status = (
+		_safe_text(data.get("live_crawl_status")) or _safe_text(data.get("status")) or _safe_text(last.get("status"))
+	)
+	jobs_seen = _safe_count(data.get("jobs_seen"))
 	completed_like = (
 		str(crawl_status) == "completed"
-		or bool(run.get("effective_completed"))
-		or str(run.get("status")) == "completed"
+		or run.get("effective_completed") is True
+		or _safe_text(run.get("status")) == "completed"
 	)
-	jobs_count = jobs_seen or 0
-	success = completed_like and jobs_count > 0
+	jobs_seen_text = _count_text(jobs_seen, "0")
+	success = completed_like and jobs_seen is not None and jobs_seen > 0
 
 	# ── Headline: strongest visual weight ───────────────────────────
 	headline = Text()
 	if success:
 		headline.append("● ", style="bold green")
-		headline.append(f"{jobs_count} 个职位", style="bold cyan")
+		headline.append(f"{jobs_seen_text} 个职位", style="bold cyan")
 	else:
 		status_text = "已完成" if str(crawl_status) == "completed" else status_label(crawl_status)
 		if str(crawl_status) == "risk_stopped":
@@ -1420,12 +1451,13 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		headline.append("● ", style="bold yellow")
 		headline.append(status_text, style="bold yellow")
 		if jobs_seen is not None:
-			headline.append(f"  ·  已有 {jobs_count} 个职位", style="bold")
+			headline.append(f"  ·  已有 {jobs_seen_text} 个职位", style="bold")
 
-	query = str(data.get("query") or "").strip()
+	query = _safe_text(data.get("query"))
 	city = _city_display(data.get("city_code"))
 	pages = data.get("pages_completed")
-	meta_bits = [bit for bit in (query, city, f"{pages} 页" if pages is not None else "") if bit]
+	pages_text = _safe_text(pages)
+	meta_bits = [bit for bit in (query, city, f"{pages_text} 页" if pages_text else "") if bit]
 	if meta_bits:
 		headline.append("\n")
 		headline.append("  " + "  ·  ".join(meta_bits), style="dim")
@@ -1439,8 +1471,8 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		meta.add_row(label, value)
 
 	row("事项", f"[bold]{goal_label(run.get('role'), goal)}[/bold]")
-	wf_status = str(run.get("display_status") or run.get("status") or "")
-	if run.get("effective_completed"):
+	wf_status = _safe_text(run.get("display_status")) or _safe_text(run.get("status"))
+	if run.get("effective_completed") is True:
 		wf_status = "completed"
 	status_display = status_label(wf_status)
 	if success:
@@ -1451,17 +1483,21 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		row("状态", f"[bold]{status_display}[/bold]")
 
 	if jobs_seen is not None and not success:
-		row("职位数", f"[bold cyan]{jobs_seen}[/bold cyan]")
+		row("职位数", f"[bold cyan]{jobs_seen_text}[/bold cyan]")
 	# 进度计数来自断点 / 命令结果，类型漂移成字符串时不能当 markup 解析（Issue #2252）。
 	esc = display.escape_markup
-	if pages is not None and not success:
-		row("已完成页", f"[bold]{esc(pages)}[/bold]")
-	if data.get("next_page") is not None and str(crawl_status) != "completed":
-		row("下一页", f"[bold]{esc(data.get('next_page'))}[/bold]")
+	if pages_text and not success:
+		row("已完成页", f"[bold]{esc(pages_text)}[/bold]")
+	next_page_text = _safe_text(data.get("next_page"))
+	if next_page_text and str(crawl_status) != "completed":
+		row("下一页", f"[bold]{esc(next_page_text)}[/bold]")
 	pending = data.get("details_pending")
 	done = data.get("details_completed")
 	if pending is not None or done is not None:
-		row("详情进度", f"完成 [bold]{esc(done or 0)}[/bold]  ·  待补 [bold]{esc(pending or 0)}[/bold]")
+		row(
+			"详情进度",
+			f"完成 [bold]{esc(_count_text(done, '0'))}[/bold]  ·  待补 [bold]{esc(_count_text(pending, '0'))}[/bold]",
+		)
 
 	# Artifacts: short names, not full absolute paths.
 	paths = data.get("output_paths") if isinstance(data.get("output_paths"), Mapping) else {}
@@ -1479,14 +1515,16 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	if artifact_dir:
 		row("目录", artifact_dir)
 
-	if data.get("error") and str(crawl_status) != "completed":
-		row("说明", f"[yellow]{display.escape_markup(data.get('error'))}[/yellow]")
+	error_text = _safe_text(data.get("error"))
+	if error_text and str(crawl_status) != "completed":
+		row("说明", f"[yellow]{display.escape_markup(error_text)}[/yellow]")
 
 	# Secondary ids, dim — debugging aids.
 	id_bits = []
-	if run.get("run_id"):
-		id_bits.append(f"向导 {display.escape_markup(run.get('run_id'))}")
-	inner = data.get("run_id") or last.get("run_id")
+	run_id_text = _safe_text(run.get("run_id"))
+	if run_id_text:
+		id_bits.append(f"向导 {display.escape_markup(run_id_text)}")
+	inner = _safe_text(data.get("run_id")) or _safe_text(last.get("run_id"))
 	if inner:
 		id_bits.append(f"采集 {display.escape_markup(inner)}")
 	if id_bits:
@@ -1495,11 +1533,10 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	footer_hint: Text | None = None
 	if success:
 		footer_hint = Text("选「浏览职位列表」分页查看  ·  单条可看本地摘要或在线详情", style="dim")
-	elif str(run.get("status")) == "waiting_input" and str(crawl_status) != "completed":
-		next_action = last.get("next_action") or (
-			(data.get("checkpoint") or {}).get("resume_command")
-			if isinstance(data.get("checkpoint"), Mapping)
-			else None
+	elif _safe_text(run.get("status")) == "waiting_input" and str(crawl_status) != "completed":
+		checkpoint = data.get("checkpoint")
+		next_action = _safe_text(last.get("next_action")) or _safe_text(
+			checkpoint.get("resume_command") if isinstance(checkpoint, Mapping) else None
 		)
 		if next_action:
 			row("下一步", f"[bold]{display.escape_markup(next_action)}[/bold]")
@@ -1510,10 +1547,10 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 
 	if preview_rows:
 		shown = len(preview_rows)
-		total = jobs_seen or shown
+		total_text = _count_text(jobs_seen, str(shown))
 		section = Text()
 		section.append("职位预览", style="bold")
-		section.append(f"  ·  前 {shown}/{total} 条", style="dim")
+		section.append(f"  ·  前 {shown}/{total_text} 条", style="dim")
 		parts.extend(
 			[
 				Text(""),
@@ -1534,7 +1571,7 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		if success
 		else (
 			"yellow"
-			if str(run.get("status")) == "waiting_input"
+			if _safe_text(run.get("status")) == "waiting_input"
 			or str(crawl_status) in {"risk_stopped", "budget_stopped", "throttle_stopped", "stopped"}
 			else "cyan"
 		)
