@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from dataclasses import dataclass, replace
@@ -11,6 +12,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence, cast
 import click
 
 from boss_agent_cli import display
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.wizard.catalog import GOALS, catalog_data
 from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError, count_or_none
 from boss_agent_cli.wizard.runner import has_blocked_step
@@ -630,8 +632,8 @@ def _collect_control(
 		last = run.get("last_result") or {}
 		if isinstance(last, Mapping):
 			data = last.get("data") if isinstance(last.get("data"), Mapping) else last
-			if isinstance(data, Mapping) and data.get("run_id"):
-				inner = data.get("run_id")
+			if isinstance(data, Mapping):
+				inner = _scalar_text(data.get("run_id")) or None
 		if inner:
 			description = f"{description} · 采集 {inner}"
 		if action == "status" and has_blocked_step(run):
@@ -860,6 +862,45 @@ def _first_value(item: Mapping[str, Any], names: Sequence[str]) -> Any:
 	return None
 
 
+def _scalar_text(value: Any) -> str:
+	"""菜单标签 / 回填输入的标量文本：容器、布尔、非有限数按缺失（Issue #2837）。
+
+	条目来自平台响应或本地采集载荷，字段漂移成对象 / 数组时裸 ``str()`` 会把
+	Python repr 显示进菜单；超过转换上限的整数还会抛 ``ValueError``，让整个
+	结果列表打不开。``safe_text`` 同时兜住超限整数与深嵌套。
+	"""
+	if value is None or isinstance(value, (dict, list, tuple, bool)):
+		return ""
+	if isinstance(value, float) and not math.isfinite(value):
+		return ""
+	return safe_text(value).strip()
+
+
+def _first_scalar_text(*values: Any) -> str:
+	"""按优先级取第一个可用文本；前值的容器 / 非有限数不吞掉后续回退。"""
+	for value in values:
+		text = _scalar_text(value)
+		if text:
+			return text
+	return ""
+
+
+def _friend_id_input(item: Mapping[str, Any], names: Sequence[str]) -> str | int | None:
+	"""后续动作的 friend_id：可用文本或 64 位内整数原样保留（Issue #2837）。
+
+	这条路径把值写进 ``inputs`` 再序列化成 JSON 交给 actions；容器 / 布尔 /
+	非有限数 / 超大整数都不能代表候选人，按缺失处理（后者的 ``str()`` /
+	``json.dumps`` 还会抛 ``ValueError``）。
+	"""
+	for name in names:
+		value = item.get(name)
+		if isinstance(value, str) and value.strip():
+			return value.strip()
+		if type(value) is int and value.bit_length() <= 64:
+			return value
+	return None
+
+
 def _find_result_items(value: Any, keys: Sequence[str]) -> list[Mapping[str, Any]]:
 	if not isinstance(value, Mapping):
 		return []
@@ -891,70 +932,76 @@ def _result_menu_options(
 	for index, item in enumerate(items):
 		absolute = index_offset + index
 		if kind in {"job", "shortlist"}:
-			title = str(_first_value(item, ("title", "jobName", "name")) or "")
+			title = _first_scalar_text(_first_value(item, ("title", "jobName", "name")))
 			if not title:
-				job_id = _first_value(item, ("job_id", "encryptJobId"))
-				title = f"职位 {str(job_id)[:10]}…" if job_id else "未命名职位"
-			owner = str(_first_value(item, ("company", "brandName", "companyName")) or "公司未注明")
+				job_id = _first_scalar_text(_first_value(item, ("job_id", "encryptJobId")))
+				title = f"职位 {job_id[:10]}…" if job_id else "未命名职位"
+			owner = _first_scalar_text(_first_value(item, ("company", "brandName", "companyName"))) or "公司未注明"
 			details = [
-				str(value)
+				text
 				for value in (
 					_first_value(item, ("city", "cityName", "areaDistrict")),
 					_first_value(item, ("salary", "salaryDesc")),
 				)
-				if value not in (None, "")
+				if (text := _scalar_text(value))
 			]
 		elif kind == "resume":
-			title = str(_first_value(item, ("name", "title")) or "未命名简历")
+			title = _first_scalar_text(_first_value(item, ("name", "title"))) or "未命名简历"
 			owner = "本地简历"
 			details = [
-				str(value) for value in (_first_value(item, ("updated_at", "created_at")),) if value not in (None, "")
+				text
+				for value in (_first_value(item, ("updated_at", "created_at")),)
+				if (text := _scalar_text(value))
 			]
 		elif kind == "watch":
-			title = str(_first_value(item, ("name",)) or "未命名监控")
+			title = _first_scalar_text(_first_value(item, ("name",))) or "未命名监控"
 			params = item.get("params") if isinstance(item.get("params"), Mapping) else {}
-			owner = str((params or {}).get("query") or item.get("query") or "无关键词")
+			owner = _first_scalar_text((params or {}).get("query"), item.get("query")) or "无关键词"
 			details = [
-				str(value)
+				text
 				for value in (
 					(params or {}).get("city") if isinstance(params, Mapping) else None,
 					item.get("updated_at"),
 				)
-				if value not in (None, "")
+				if (text := _scalar_text(value))
 			]
 		elif kind == "friend":
-			title = str(_first_value(item, ("name", "friendName", "geekName")) or "未命名联系人")
-			owner = str(_first_value(item, ("brandName", "company", "companyName", "title")) or "职位未注明")
+			title = _first_scalar_text(_first_value(item, ("name", "friendName", "geekName"))) or "未命名联系人"
+			owner = (
+				_first_scalar_text(_first_value(item, ("brandName", "company", "companyName", "title"))) or "职位未注明"
+			)
 			details = [
-				str(value)
+				text
 				for value in (
 					_first_value(item, ("lastMsg", "last_msg")),
 					_first_value(item, ("relationTypeName", "relation")),
 				)
-				if value not in (None, "")
+				if (text := _scalar_text(value))
 			]
 		elif kind == "pipeline":
-			title = str(_first_value(item, ("title", "jobName")) or "未命名事项")
-			owner = str(_first_value(item, ("company", "brandName")) or "公司未注明")
+			title = _first_scalar_text(_first_value(item, ("title", "jobName"))) or "未命名事项"
+			owner = _first_scalar_text(_first_value(item, ("company", "brandName"))) or "公司未注明"
 			details = [
-				str(value)
+				text
 				for value in (
 					_first_value(item, ("stage", "relation")),
 					_first_value(item, ("reason", "last_msg")),
 				)
-				if value not in (None, "")
+				if (text := _scalar_text(value))
 			]
 		else:
-			title = str(_first_value(item, ("name", "geekName", "candidateName")) or "未命名候选人")
-			owner = str(_first_value(item, ("expectPosition", "positionName", "jobName")) or "意向职位未注明")
+			title = _first_scalar_text(_first_value(item, ("name", "geekName", "candidateName"))) or "未命名候选人"
+			owner = (
+				_first_scalar_text(_first_value(item, ("expectPosition", "positionName", "jobName"))) or "意向职位未注明"
+			)
 			details = [
-				str(value)
+				text
 				for value in (
 					_first_value(item, ("city", "cityName")),
 					_first_value(item, ("degree", "degreeName")),
 					_first_value(item, ("experience", "workYearDesc")),
 				)
-				if value not in (None, "")
+				if (text := _scalar_text(value))
 			]
 		description = " · ".join([owner, *details])
 		# Number in label without trailing "." cluster so nav rows stay distinct.
@@ -970,39 +1017,36 @@ def _result_menu_options(
 
 
 def _is_crawl_local_job(item: Mapping[str, Any]) -> bool:
-	return str(item.get("source") or "") == "crawl" or item.get("crawl_page") is not None
+	return _scalar_text(item.get("source")) == "crawl" or item.get("crawl_page") is not None
 
 
 def _candidate_job_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	security_id = _first_value(item, ("security_id", "securityId"))
-	job_id = _first_value(item, ("job_id", "encryptJobId", "jobId"))
-	lid = _first_value(item, ("lid",))
-	inputs: dict[str, Any] = {
-		"security_id": str(security_id) if security_id not in (None, "") else "",
-		"job_id": str(job_id) if job_id not in (None, "") else "",
-	}
-	if lid not in (None, ""):
-		inputs["lid"] = str(lid)
+	security_id = _scalar_text(_first_value(item, ("security_id", "securityId")))
+	job_id = _scalar_text(_first_value(item, ("job_id", "encryptJobId", "jobId")))
+	lid = _scalar_text(_first_value(item, ("lid",)))
+	inputs: dict[str, Any] = {"security_id": security_id, "job_id": job_id}
+	if lid:
+		inputs["lid"] = lid
 
 	while True:
 		actions: list[MenuOption] = []
 		# Crawl rows: local content first; online detail is optional and explicit.
 		if _is_crawl_local_job(item):
 			actions.append(MenuOption("local_brief", "查看本地摘要", "仅展示采集到的字段，不请求网络"))
-			if str(item.get("description") or "").strip():
+			if _scalar_text(item.get("description")):
 				actions.append(MenuOption("local_detail", "查看本地描述", "展示采集到的职位描述片段"))
-			if security_id not in (None, ""):
+			if security_id:
 				actions.append(MenuOption("job_detail", "在线拉取职位详情", "请求平台接口获取完整详情"))
-		elif security_id not in (None, ""):
+		elif security_id:
 			actions.append(MenuOption("job_detail", "查看职位详情"))
-		if security_id not in (None, "") and job_id not in (None, ""):
+		if security_id and job_id:
 			actions.extend(
 				[
 					MenuOption("apply", "投递或立即沟通"),
 					MenuOption("greet", "向招聘者打招呼"),
 				]
 			)
-		if security_id not in (None, ""):
+		if security_id:
 			actions.append(MenuOption("exchange", "交换联系方式"))
 		actions.append(MenuOption("done", "结束并返回结果列表"))
 		if not actions:
@@ -1029,36 +1073,36 @@ def _candidate_job_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform
 
 
 def _candidate_friend_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	security_id = _first_value(item, ("security_id", "securityId"))
-	gid = _first_value(item, ("gid", "uid", "friendId", "friend_id"))
-	job_id = _first_value(item, ("job_id", "encryptJobId", "jobId"))
+	security_id = _scalar_text(_first_value(item, ("security_id", "securityId")))
+	gid = _scalar_text(_first_value(item, ("gid", "uid", "friendId", "friend_id")))
+	job_id = _scalar_text(_first_value(item, ("job_id", "encryptJobId", "jobId")))
 	actions: list[MenuOption] = []
-	if security_id not in (None, "") and gid not in (None, ""):
+	if security_id and gid:
 		actions.append(MenuOption("chat_history", "查看聊天记录"))
-	if security_id not in (None, ""):
+	if security_id:
 		actions.extend(
 			[
 				MenuOption("exchange", "交换联系方式"),
 				MenuOption("mark", "标记沟通联系人"),
 			]
 		)
-	if security_id not in (None, "") and job_id not in (None, ""):
+	if security_id and job_id:
 		actions.append(MenuOption("greet", "再次打招呼"))
 	actions.append(MenuOption("done", "结束并返回结果列表"))
 	action = menu.select("请选择下一步", actions, default=actions[0].value)
 	if action == "done":
 		return None
 	inputs: dict[str, Any] = {}
-	if action in {"exchange", "mark"} and gid not in (None, ""):
+	if action in {"exchange", "mark"} and gid:
 		# 这两条路径会重新读取 friend_list；持久化跨请求稳定的 uid，
 		# 不把本次页面返回、下一次请求可能已轮换的 securityId 带入 workflow。
-		inputs["security_id"] = str(gid)
-	elif action != "chat_history" and security_id not in (None, ""):
-		inputs["security_id"] = str(security_id)
-	if gid not in (None, ""):
-		inputs["gid"] = str(gid)
-	if job_id not in (None, ""):
-		inputs["job_id"] = str(job_id)
+		inputs["security_id"] = gid
+	elif action != "chat_history" and security_id:
+		inputs["security_id"] = security_id
+	if gid:
+		inputs["gid"] = gid
+	if job_id:
+		inputs["job_id"] = job_id
 	if action == "exchange":
 		inputs["type"] = menu.select(
 			"请选择联系方式",
@@ -1086,8 +1130,8 @@ def _candidate_friend_follow_up(menu: MenuDriver, item: Mapping[str, Any], platf
 
 
 def _candidate_resume_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	name = _first_value(item, ("name", "title"))
-	if name in (None, ""):
+	name = _scalar_text(_first_value(item, ("name", "title")))
+	if not name:
 		return None
 	action = menu.select(
 		f"请选择对简历「{name}」的操作",
@@ -1104,14 +1148,14 @@ def _candidate_resume_follow_up(menu: MenuDriver, item: Mapping[str, Any], platf
 		role="candidate",
 		platform=platform,
 		goal="ai_assist",
-		inputs={"resume": str(name), "prompt": prompt},
+		inputs={"resume": name, "prompt": prompt},
 		mode="tty",
 	)
 
 
 def _candidate_watch_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	name = _first_value(item, ("name",))
-	if name in (None, ""):
+	name = _scalar_text(_first_value(item, ("name",)))
+	if not name:
 		return None
 	action = menu.select(
 		f"请选择对监控「{name}」的操作",
@@ -1128,29 +1172,29 @@ def _candidate_watch_follow_up(menu: MenuDriver, item: Mapping[str, Any], platfo
 		role="candidate",
 		platform=platform,
 		goal="watch",
-		inputs={"action": action, "name": str(name)},
+		inputs={"action": action, "name": name},
 		mode="tty",
 	)
 
 
 def _candidate_pipeline_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	security_id = _first_value(item, ("security_id", "securityId"))
-	job_id = _first_value(item, ("job_id", "encryptJobId", "jobId"))
-	if security_id in (None, ""):
+	security_id = _scalar_text(_first_value(item, ("security_id", "securityId")))
+	job_id = _scalar_text(_first_value(item, ("job_id", "encryptJobId", "jobId")))
+	if not security_id:
 		return None
 	actions = [
 		MenuOption("exchange", "交换联系方式"),
 		MenuOption("mark", "标记沟通联系人"),
 	]
-	if job_id not in (None, ""):
+	if job_id:
 		actions.insert(0, MenuOption("job_detail", "查看关联职位详情"))
 	actions.append(MenuOption("done", "结束并返回结果列表"))
 	action = menu.select("请选择下一步", actions, default=actions[0].value)
 	if action == "done":
 		return None
-	inputs: dict[str, Any] = {"security_id": str(security_id)}
-	if job_id not in (None, ""):
-		inputs["job_id"] = str(job_id)
+	inputs: dict[str, Any] = {"security_id": security_id}
+	if job_id:
+		inputs["job_id"] = job_id
 	if action == "exchange":
 		inputs["type"] = menu.select(
 			"请选择联系方式",
@@ -1174,14 +1218,14 @@ def _candidate_pipeline_follow_up(menu: MenuDriver, item: Mapping[str, Any], pla
 
 
 def _recruiter_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	geek_id = _first_value(item, ("geek_id", "geekId", "encryptGeekId"))
-	job_id = _first_value(item, ("job_id", "jobId", "encryptJobId"))
-	security_id = _first_value(item, ("security_id", "securityId"))
-	friend_id = _first_value(item, ("friend_id", "friendId", "uid", "gid"))
+	geek_id = _scalar_text(_first_value(item, ("geek_id", "geekId", "encryptGeekId")))
+	job_id = _scalar_text(_first_value(item, ("job_id", "jobId", "encryptJobId")))
+	security_id = _scalar_text(_first_value(item, ("security_id", "securityId")))
+	friend_id = _friend_id_input(item, ("friend_id", "friendId", "uid", "gid"))
 	actions: list[MenuOption] = []
-	if geek_id not in (None, "") and job_id not in (None, ""):
+	if geek_id and job_id:
 		actions.append(MenuOption("candidate_resume", "查看候选人简历"))
-	if friend_id not in (None, ""):
+	if friend_id is not None:
 		actions.extend(
 			[
 				MenuOption("chat_history", "查看聊天记录"),
@@ -1195,13 +1239,13 @@ def _recruiter_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: st
 	if action == "done":
 		return None
 	inputs: dict[str, Any] = {}
-	if geek_id not in (None, ""):
-		inputs["geek_id"] = str(geek_id)
-	if job_id not in (None, ""):
-		inputs["job_id"] = str(job_id)
-	if security_id not in (None, ""):
-		inputs["security_id"] = str(security_id)
-	if friend_id not in (None, ""):
+	if geek_id:
+		inputs["geek_id"] = geek_id
+	if job_id:
+		inputs["job_id"] = job_id
+	if security_id:
+		inputs["security_id"] = security_id
+	if friend_id is not None:
 		inputs["friend_id"] = friend_id
 	if action == "reply":
 		inputs["message"] = menu.text("回复内容")
@@ -1215,8 +1259,8 @@ def _recruiter_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: st
 
 
 def _recruiter_job_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform: str) -> WizardInput | None:
-	job_id = _first_value(item, ("job_id", "jobId", "encryptJobId", "id"))
-	if job_id in (None, ""):
+	job_id = _scalar_text(_first_value(item, ("job_id", "jobId", "encryptJobId", "id")))
+	if not job_id:
 		return None
 	action = menu.select(
 		"请选择下一步",
@@ -1234,7 +1278,7 @@ def _recruiter_job_follow_up(menu: MenuDriver, item: Mapping[str, Any], platform
 		role="recruiter",
 		platform=platform,
 		goal=action,
-		inputs={"job_id": str(job_id)},
+		inputs={"job_id": job_id},
 		mode="tty",
 	)
 
@@ -1382,21 +1426,23 @@ def _job_inputs_from_run(run: Mapping[str, Any]) -> dict[str, Any] | None:
 		inputs = params.get("inputs") if isinstance(params, Mapping) else {}
 		if not isinstance(inputs, Mapping):
 			return None
-		security_id = inputs.get("security_id")
-		job_id = inputs.get("job_id")
+		security_id = _scalar_text(inputs.get("security_id"))
+		job_id = _scalar_text(inputs.get("job_id"))
 		if not security_id:
 			return None
-		result = {"security_id": str(security_id), "job_id": str(job_id or "")}
-		if inputs.get("lid"):
-			result["lid"] = str(inputs["lid"])
+		result = {"security_id": security_id, "job_id": job_id}
+		lid = _scalar_text(inputs.get("lid"))
+		if lid:
+			result["lid"] = lid
 		return result
-	security_id = job.get("security_id") or ""
-	job_id = job.get("job_id") or ""
+	security_id = _scalar_text(job.get("security_id"))
+	job_id = _scalar_text(job.get("job_id"))
 	if not security_id:
 		return None
-	result = {"security_id": str(security_id), "job_id": str(job_id)}
-	if job.get("lid"):
-		result["lid"] = str(job["lid"])
+	result = {"security_id": security_id, "job_id": job_id}
+	lid = _scalar_text(job.get("lid"))
+	if lid:
+		result["lid"] = lid
 	return result
 
 
@@ -1425,14 +1471,15 @@ def collect_entity_follow_up(
 	plan_inputs = params.get("inputs") if isinstance(params, Mapping) else {}
 	if isinstance(plan_inputs, Mapping):
 		for key in ("security_id", "job_id", "lid"):
-			if plan_inputs.get(key) and not inputs.get(key):
-				inputs[key] = str(plan_inputs[key])
+			plan_text = _scalar_text(plan_inputs.get(key))
+			if plan_text and not inputs.get(key):
+				inputs[key] = plan_text
 
 	from boss_agent_cli.wizard.renderer import _extract_job_payload
 
 	job = _extract_job_payload(run.get("last_result")) or {}
-	title = str(job.get("title") or "当前职位")
-	company = str(job.get("company") or "")
+	title = _scalar_text(job.get("title")) or "当前职位"
+	company = _scalar_text(job.get("company"))
 	context = f"{title}" + (f" · {company}" if company else "")
 
 	actions: list[MenuOption] = []
