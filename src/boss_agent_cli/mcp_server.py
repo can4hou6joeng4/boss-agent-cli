@@ -35,7 +35,7 @@ from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
 from boss_agent_cli.output import envelope_error, json_safe_value, serialization_failure_envelope
 from boss_agent_cli.services.friend_list_pages import MAX_FRIEND_LIST_PAGES
-from boss_agent_cli.search_filters import detail_filter_max_pages
+from boss_agent_cli.search_filters import detail_filter_max_pages, resolve_active_level
 
 # 向后兼容的再导出：这些符号在拆分前属于本模块，`mcp-server/server.py` wrapper
 # 与既有测试仍按 `boss_agent_cli.mcp_server.<name>` 取用。本模块自身不再使用它们，
@@ -277,10 +277,13 @@ _DRY_RUN_DEFAULT_TOOL_NAMES = frozenset({"boss_agent_run", "boss_agent_train"})
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；如仍需结果，可按原参数重新调用"
 _EXPORT_READ_INTERRUPT_RECOVERY = "导出已中断，不产生平台写入；可减少 count 或收窄筛选范围后重试"
-#: search / watch 没有 limit / count 参数，恢复文案不能提示不存在的选项（Issue #1860）。
 _FILTER_READ_INTERRUPT_RECOVERY = (
-	"只读命令已中断，不产生平台写入；该命令按福利 / 活跃度筛选逐条查详情，"
-	"改用 active=online 或缩小筛选范围后重试"
+	"只读命令已中断，不产生平台写入；福利 / 活跃度筛选可能逐条查详情，可缩小筛选范围后重试。"
+	"如需避免查详情，可停用福利筛选，并仅用 active=online 筛选在线职位"
+)
+_PRESET_READ_INTERRUPT_RECOVERY = (
+	"只读搜索已中断，不产生平台写入；若预设包含需查详情的福利 / 活跃度筛选，可缩小筛选范围；"
+	"如需避免查详情，可停用福利筛选，并仅用 active=online 筛选在线职位后重试"
 )
 #: agent train 的 MCP 映射固定演练，没有 active 等筛选参数（Issue #2454）。
 _DRY_RUN_INTERRUPT_RECOVERY = "演练命令已中断，不产生平台写入；可直接重试或降低 limit"
@@ -294,24 +297,37 @@ def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
 	return _WRITE_INTERRUPT_RECOVERY
 
 
+def _has_explicit_detail_filters(args: tuple[str, ...]) -> bool:
+	welfare = _option_value(args, "--welfare") or ""
+	if any(label.strip() for label in welfare.split(",")):
+		return True
+	try:
+		active = resolve_active_level(_option_value(args, "--active"))
+	except ValueError:
+		# 无效取值由 CLI 校验，不据此推断子进程已查详情。
+		return False
+	return active not in (None, "online")
+
+
 def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
 	if args and args[0] == "wizard" and _option_value(args, "--status") is not None:
 		return "状态查询已中断，未更改任务；可重新查询同一 run_id"
 	if args[:2] == ("agent", "train"):
 		return _DRY_RUN_INTERRUPT_RECOVERY
-	if args and args[0] in {"search", "watch"}:
-		return _FILTER_READ_INTERRUPT_RECOVERY
+	if args and args[0] == "search":
+		if _has_explicit_detail_filters(args):
+			return _FILTER_READ_INTERRUPT_RECOVERY
+		if _option_value(args, "--preset"):
+			# 恢复文案不读取本地预设，不把请求数估算的最坏情况当成已发生的事实。
+			return _PRESET_READ_INTERRUPT_RECOVERY
 	if args and args[0] == "batch-greet":
 		# 能走到只读分支的 batch-greet 只有 --dry-run 与 --count 0：候选在发出
 		# 招呼前被截断，没有写请求；通用文案里的 active=online 不是它的参数
 		# （Issue #2839）。
 		return _BATCH_GREET_READ_INTERRUPT_RECOVERY
 	if args and args[0] == "export":
-		welfare = _option_value(args, "--welfare") or ""
-		active = _option_value(args, "--active") or ""
-		# 带筛选的 export 与 search 一样逐条查详情：恢复文案要提示换
-		# active=online 或缩小范围，而不是让调用方直接重试同一段长扫描（Issue #2725）。
-		if welfare or active not in ("", "online"):
+		# 与 search 共用归一化口径，让「在线」等别名不再误入详情筛选分支。
+		if _has_explicit_detail_filters(args):
 			return _FILTER_READ_INTERRUPT_RECOVERY
 		return _EXPORT_READ_INTERRUPT_RECOVERY
 	return _READ_INTERRUPT_RECOVERY
