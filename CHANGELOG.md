@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.222] - 2026-11-26
+
 ### Fixed
 
 - 向导菜单的损坏断点提示按外部值转义 `run_id`：数据库损坏时含 `[/bold]` 等未配对标签的记录名不再让 `boss wizard` 的 TTY 抛 `MarkupError`，`[link=...]` 与 ESC / OSC 控制字符也不会被吞成样式或原样进终端（Issue #2823）。
