@@ -1096,8 +1096,15 @@ def render_message_panel(data: dict[str, Any], *, title: str = "result") -> None
 	console.print(panel)
 
 
+def _print_render_title(title: Any) -> None:
+	"""面板标题统一走安全文本与 markup 转义，外部值不能把 TTY 打崩。"""
+	text = escape_markup(safe_text(title)) or "info"
+	console.print(f"[bold cyan]{text}[/bold cyan]")
+
+
 def render_batch_operation_summary(data: dict[str, Any], *, title: str = "batch result") -> None:
 	"""Render batch operation summary (greeted/failed counts + items)."""
+	_print_render_title(title)
 	greeted = data.get("greeted", [])
 	failed = data.get("failed", [])
 	dry_run = data.get("dry_run", False)
@@ -1106,7 +1113,7 @@ def render_batch_operation_summary(data: dict[str, Any], *, title: str = "batch 
 		candidates = data.get("candidates", [])
 		console.print(f"[yellow]dry run[/yellow] — {len(candidates)} candidates")
 		if candidates:
-			render_job_table(candidates, f"{title} (dry run)")
+			render_job_table(candidates, "dry run candidates")
 		return
 
 	console.print(f"[green]success: {len(greeted)}[/green]  [red]failed: {len(failed)}[/red]")
@@ -1123,6 +1130,8 @@ def render_batch_operation_summary(data: dict[str, Any], *, title: str = "batch 
 
 def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> None:
 	"""Render multi-section record (e.g., me command) as panels."""
+	# 分段名只说明记录结构，标题才是命令标识；外部 title 必须转义后再交给 Rich。
+	_print_render_title(title)
 	for section, content in data.items():
 		if isinstance(content, dict):
 			lines: list[str] = []
