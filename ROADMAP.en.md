@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.225 (2026-11-26): interrupted MCP reads suggest only applicable options. Plain searches, online-only filters, and local watch lists no longer claim to fetch job details; preset searches and exports get recovery guidance based on their filters (Issues #2842 and #2844).
+
 v3.4.224 (2026-11-26): wizard crawl browsing rows and result menus, plus `boss agent crawl` job mapping, now use safe scalars (containers, booleans, non-finite numbers and huge integers treated as missing), so Python repr no longer reaches the TTY or AI prompts; generic table cells render `NaN` / `Infinity` as `-`; MCP entry treats batch-greet `limit=0` as read-only, covers the remaining case-insensitive filter enums, and declares a `boss_show` index lower bound (Issues #2831, #2833, #2835, #2837, #2839).
 
 v3.4.223 (2026-11-26): `escape_markup()` now follows the same contract as `safe_text()` for huge integers and deeply nested values, AI result object-list inline fields use safe text and cell normalization, and the panel titles of `render_message_panel()` / `render_sectioned_record()` / `render_ai_result()` are escaped as external values (Issues #2826, #2828).
