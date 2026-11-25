@@ -207,7 +207,8 @@ def test_crawl_shortlist_schema_encodes_exactly_one_selector_source():
 	assert schema["properties"]["selectors"]["minItems"] == 1
 	assert {"required": ["selectors"]} in schema["anyOf"]
 	# 互斥按值判断：只有 all=true 与 selectors 同时出现才算冲突（Issue #2340）。
-	assert schema["not"] == {"required": ["selectors"], "properties": {"all": {"const": True}}}
+	# not 的子 schema 必须同时要求两个键，否则 selectors-only 会被误拒（Issue #2794）。
+	assert schema["not"] == {"required": ["selectors", "all"], "properties": {"all": {"const": True}}}
 	# tool_catalog 暴露同一份定义。
 	compiled = next(tool for tool in build_tool_catalog(SCHEMA_DATA) if tool.name == "boss_crawl_shortlist")
 	assert compiled.input_schema["properties"]["selectors"]["minItems"] == 1

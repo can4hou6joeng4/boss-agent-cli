@@ -812,7 +812,10 @@ SCHEMA_DATA = {
 							{"properties": {"all": {"const": True}}, "required": ["all"]},
 						],
 						"not": {
-							"required": ["selectors"],
+							# not 的子 schema 必须同时要求两个键：只写 selectors 时，
+							# all 缺失会让子 schema 通过，连合法的 selectors 用法也被拒
+							# （Issue #2794）。
+							"required": ["selectors", "all"],
 							"properties": {"all": {"const": True}},
 						},
 					},

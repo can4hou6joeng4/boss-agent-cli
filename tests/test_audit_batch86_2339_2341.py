@@ -96,8 +96,10 @@ def test_shortlist_schema_not_is_value_based():
 	tools = {tool.name: tool for tool in _catalog()}
 	shortlist = tools["boss_crawl_shortlist"].input_schema
 
+	# not 的子 schema 必须同时要求两个键：只写 selectors 时 all 缺失会让子 schema
+	# 通过，selectors-only 这一主要合法用法会被误拒（Issue #2794）。
 	assert shortlist["not"] == {
-		"required": ["selectors"],
+		"required": ["selectors", "all"],
 		"properties": {"all": {"const": True}},
 	}
 
