@@ -287,8 +287,8 @@ _PRESET_READ_INTERRUPT_RECOVERY = (
 )
 #: agent train 的 MCP 映射固定演练，没有 active 等筛选参数（Issue #2454）。
 _DRY_RUN_INTERRUPT_RECOVERY = "演练命令已中断，不产生平台写入；可直接重试或降低 limit"
-#: batch-greet 的只读形态（--dry-run / --count 0）在发出招呼前就结束，没有写请求。
-_BATCH_GREET_READ_INTERRUPT_RECOVERY = "只读调用已中断，未发出任何招呼；可直接重试，或调整 --count / 筛选条件后重试"
+#: 只读保证只适用于原参数：未开启预览时，增大零上限会变成真实写入（Issue #2847）。
+_BATCH_GREET_READ_INTERRUPT_RECOVERY = "只读调用已中断，未发出任何招呼；如仍需结果，请保留原来的预览模式或零上限，按原参数重试"
 
 
 def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
