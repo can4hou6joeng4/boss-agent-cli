@@ -445,7 +445,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"number": {"type": "integer", "description": "职位编号（从搜索结果中获取）"},
+					"number": {"type": "integer", "minimum": 1, "description": "职位编号（从搜索结果中获取，从 1 开始）"},
 				},
 				"required": ["number"],
 			},
