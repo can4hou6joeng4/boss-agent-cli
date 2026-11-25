@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.215 (2026-11-25): the `boss_agent_run` MCP schema now encodes "resume requires an explicit `dry_run=false`", so the always-rejected `--dry-run --resume` combination is no longer schema-valid; legitimate resume calls are unaffected (Issue #2798).
+
 v3.4.214 (2026-11-25): MCP schemas now encode exclusivity constraints and fix `not` semantics — `boss_watch_run` requires exactly one of name / all; primary valid usages such as name-only and selectors-only are no longer rejected for `boss_crawl_shortlist`; `boss_hr_jobs` / `boss_config` / `boss_wizard` encode the action-to-parameter matrix so schema-valid calls no longer fail in the command layer (Issues #2792 / #2794 / #2795).
 
 v3.4.213 (2026-11-25): `hr greet` now accepts an empty `--lid` (an access-context value that the platform may leave blank) and only rejects blank `geek-id` / `job-id` / `expect-id` / `security-id`, aligning the MCP schema with the CLI dry-run behavior (Issue #2789).

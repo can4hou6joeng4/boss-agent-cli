@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.215（2026-11-25）：`boss_agent_run` 的 MCP schema 编码「resume 必须显式 `dry_run=false`」，不再放行必然被映射层拒绝的 `--dry-run --resume` 组合；合法恢复调用不受影响（Issue #2798）。
+
 v3.4.214（2026-11-25）：MCP schema 补齐互斥约束并修正 `not` 语义——`boss_watch_run` 编码 name / all 恰好一个；`boss_crawl_shortlist` 与 name-only / selectors-only 等主要合法用法不再被误拒；`boss_hr_jobs` / `boss_config` / `boss_wizard` 编码 action→参数矩阵，不再出现「schema 合法但命令必失败」（Issue #2792 / #2794 / #2795）。
 
 v3.4.213（2026-11-25）：`hr greet` 允许空的 `--lid`（访问上下文而非目标标识，平台可能给空值），空白校验只覆盖 `geek-id` / `job-id` / `expect-id` / `security-id`；MCP schema 与 CLI dry-run 口径一致（Issue #2789）。
