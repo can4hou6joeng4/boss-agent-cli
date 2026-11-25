@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- `escape_markup()` 与 `safe_text()` 同口径：超过 4300 位转换上限的整数或深嵌套容器按缺失处理为空串，AI 结果、批量问候结果等把原始值直接交给它的渲染入口不再让整条 TTY 输出抛 `ValueError` / `RecursionError`（Issue #2826）。
 - `render_message_panel()` / `render_sectioned_record()` / `render_ai_result()` 的 Panel 标题统一按外部值转义：分段名来自平台响应键、公共 helper 的标题参数不再让未配对 markup 打断整条 TTY，普通标题与正文渲染不变（Issue #2828）。
 
 ## [3.4.222] - 2026-11-26
