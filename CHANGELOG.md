@@ -10,6 +10,7 @@
 - `boss agent crawl` 的本地采集职位映射按安全标量取字段：`title` / `company` / `city` / `salary` / `post_description` / `job_id` 是对象、数组、非有限数或超大整数时按缺失处理，描述不再以 Python repr 进入 AI 匹配提示，污染行也回到「缺详情」提示补详情；正常字符串路径不变（Issue #2833）。
 - 通用表格单元格的非有限浮点显示 `-`：`cell_text()` 与纯标量列表拼接不再把 `NaN` / `Infinity` 原样打给真人，招聘者列表、配置列表等 `render_simple_list()` 路径与非有限值按缺失的统一口径一致（Issue #2835）。
 - 向导结果菜单的标签与回填输入按安全标量处理：职位 / 简历 / 监控 / 联系人等条目字段漂移成对象、数组、非有限数或超大整数时不再显示 Python repr 或让菜单抛 `ValueError`，按「第一个可用值」回退，容器值不再吞掉后续合法字段；后续动作的 `security_id` / `job_id` / `gid` / `name` 同口径归一（Issue #2837）。
+- MCP 参数接缝修正：`boss_batch_greet` 的 `limit=0` 按只读处理，超时 / 取消不再误报 `outcome_unknown`；筛选枚举的大小写不敏感白名单纳入 `boss_batch_greet`，与 CLI 的 `case_sensitive=False` 一致；`boss_show.number` 的 schema 补上 `minimum: 1`（Issue #2839）。
 
 ## [3.4.223] - 2026-11-26
 

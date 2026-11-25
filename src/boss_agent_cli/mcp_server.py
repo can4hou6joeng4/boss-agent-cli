@@ -283,6 +283,8 @@ _FILTER_READ_INTERRUPT_RECOVERY = (
 )
 #: agent train 的 MCP 映射固定演练，没有 active 等筛选参数（Issue #2454）。
 _DRY_RUN_INTERRUPT_RECOVERY = "演练命令已中断，不产生平台写入；可直接重试或降低 limit"
+#: batch-greet 的只读形态（--dry-run / --count 0）在发出招呼前就结束，没有写请求。
+_BATCH_GREET_READ_INTERRUPT_RECOVERY = "只读调用已中断，未发出任何招呼；可直接重试，或调整 --count / 筛选条件后重试"
 
 
 def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
@@ -298,6 +300,11 @@ def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
 		return _DRY_RUN_INTERRUPT_RECOVERY
 	if args and args[0] in {"search", "watch"}:
 		return _FILTER_READ_INTERRUPT_RECOVERY
+	if args and args[0] == "batch-greet":
+		# 能走到只读分支的 batch-greet 只有 --dry-run 与 --count 0：候选在发出
+		# 招呼前被截断，没有写请求；通用文案里的 active=online 不是它的参数
+		# （Issue #2839）。
+		return _BATCH_GREET_READ_INTERRUPT_RECOVERY
 	if args and args[0] == "export":
 		welfare = _option_value(args, "--welfare") or ""
 		active = _option_value(args, "--active") or ""
@@ -331,6 +338,13 @@ def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> 
 	if tool_name in _DRY_RUN_DEFAULT_TOOL_NAMES and "dry_run" not in arguments:
 		# schema 默认 dry_run=true：省略键与显式 true 的 argv 完全相同。
 		return False
+	if tool_name == "boss_batch_greet":
+		# limit=0：CLI 在收集候选之前判断上限，只做一次搜索、不发出任何招呼
+		# （commands/greet.py）。按 --dry-run 同口径归为只读，否则超时 / 取消会报
+		# outcome_unknown 并要求核对并不存在的平台写入（Issue #2839）。
+		limit = arguments.get("limit")
+		if isinstance(limit, int) and not isinstance(limit, bool) and limit <= 0:
+			return False
 	if tool_name not in _READ_ONLY_TOOL_NAMES:
 		return True
 	write_modes = _TOOL_WRITE_MODES.get(tool_name)
@@ -928,9 +942,11 @@ def _normalize_integral_numbers(tool_name: str, arguments: dict[str, Any]) -> No
 			]
 
 
-# 预设与订阅的四种筛选在 Click 中显式不区分大小写。schema 仍发布标准写法，
-# 入口不能因新增枚举检查而拒绝此前合法的大小写变体。
+# 预设 / 订阅 / 批量打招呼的四种筛选在 Click 中显式不区分大小写。schema 仍发布
+# 标准写法，入口不能因新增枚举检查而拒绝此前合法的大小写变体。工具名单必须与
+# CLI 的 click.Choice(..., case_sensitive=False) 对齐（Issue #1180、#2839）。
 _CASE_INSENSITIVE_FILTER_ENUMS = frozenset({"industry", "scale", "stage", "job_type"})
+_CASE_INSENSITIVE_ENUM_TOOLS = frozenset({"boss_preset_add", "boss_watch_add", "boss_batch_greet"})
 
 
 def _json_enum_allows(enum: list[Any], value: Any, *, case_insensitive: bool = False) -> bool:
@@ -1014,7 +1030,7 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			continue
 		enum_values = prop.get("enum")
 		if isinstance(enum_values, list) and enum_values:
-			case_insensitive = tool_name in {"boss_preset_add", "boss_watch_add"} and key in _CASE_INSENSITIVE_FILTER_ENUMS
+			case_insensitive = tool_name in _CASE_INSENSITIVE_ENUM_TOOLS and key in _CASE_INSENSITIVE_FILTER_ENUMS
 			if not _json_enum_allows(enum_values, value, case_insensitive=case_insensitive):
 				errors.append(_enum_error(key, value, enum_values))
 				continue

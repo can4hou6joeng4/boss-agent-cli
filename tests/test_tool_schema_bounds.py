@@ -111,6 +111,14 @@ _TOOL_PARAMS: dict[str, tuple[click.Command, dict[str, str]]] = {
 	),
 }
 
+#: Click 参数没有 IntRange / FloatRange、由命令体手工守卫的数值边界。
+#: ``show`` 用 ``type=int`` + ``index < 1`` 拒绝 0 / 负数；schema 仍须声明同一
+#: 下界，入口的合法集合才能与 CLI 一致（Issue #2839）。
+_MANUAL_BOUNDS: dict[str, dict[str, tuple[float | None, float | None]]] = {
+	"boss_show": {"number": (1, None)},
+}
+
+
 def _catalog() -> dict[str, dict[str, Any]]:
 	return {tool.name: tool.input_schema for tool in build_tool_catalog()}
 
@@ -140,7 +148,9 @@ def test_mcp_numeric_bounds_match_click_params() -> None:
 		for property_name, param_name in properties.items():
 			prop = schema["properties"][property_name]
 			param = params[param_name]
-			click_min, click_max = _click_bounds(param)
+			# 命令体手工守卫的边界优先；已登记的属性不应同时声明 Click 范围。
+			manual = _MANUAL_BOUNDS.get(tool_name, {}).get(property_name)
+			click_min, click_max = manual if manual is not None else _click_bounds(param)
 			for bound, expected, actual in (
 				("minimum", click_min, prop.get("minimum")),
 				("maximum", click_max, prop.get("maximum")),
@@ -151,6 +161,28 @@ def test_mcp_numeric_bounds_match_click_params() -> None:
 						f"Click 参数 {param_name}={expected!r}"
 					)
 	assert not problems, "MCP 工具数值边界与 Click 不一致:\n" + "\n".join(problems)
+
+
+def test_manual_bounds_only_replace_plain_click_params() -> None:
+	"""手工边界只能登记已映射、且 Click 参数本身没有范围的数值属性。"""
+	problems: list[str] = []
+	for tool_name, bounds in _MANUAL_BOUNDS.items():
+		command, properties = _TOOL_PARAMS.get(tool_name, (None, {}))
+		if command is None:
+			problems.append(f"{tool_name} 未登记 Click 命令映射")
+			continue
+		params = _params(command)
+		for property_name in bounds:
+			param_name = properties.get(property_name)
+			if param_name is None:
+				problems.append(f"{tool_name}.{property_name} 不是已映射的数值属性")
+				continue
+			click_bounds = _click_bounds(params[param_name])
+			if click_bounds != (None, None):
+				problems.append(
+					f"{tool_name}.{property_name} 已有 Click 边界 {click_bounds!r}，不应再登记手工边界"
+				)
+	assert not problems, "手工数值边界登记无效:\n" + "\n".join(problems)
 
 
 def test_every_numeric_tool_property_is_checked() -> None:
