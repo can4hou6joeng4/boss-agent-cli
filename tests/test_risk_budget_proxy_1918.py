@@ -65,7 +65,10 @@ def test_lease_identity_detects_replaced_file(tmp_path) -> None:
 
 
 def test_unlinked_lease_file_does_not_admit_second_holder(tmp_path) -> None:
-	first = RequestBudget(tmp_path, interval=0, max_per_minute=20, wait_timeout=0.4)
+	# 首个持有者只负责占住租约：等待上限必须容得下慢机上的 SQLite / 租约初始化，
+	# 否则 0.4s 会在第一次 attempt() 就按「节流等待超时」失败，把测试意图
+	# （第二个持有者拿不到租约）掩盖成一次假红（CI Python 3.14 慢机复现）。
+	first = RequestBudget(tmp_path, interval=0, max_per_minute=20, wait_timeout=10.0)
 	second = RequestBudget(tmp_path, interval=0, max_per_minute=20, wait_timeout=0.4)
 	entered = threading.Event()
 	release = threading.Event()
