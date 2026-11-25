@@ -706,7 +706,9 @@ class TestRenderers:
 
 		output = stream.getvalue()
 		assert output.count("z") == 500, "描述应被截断到 500 字符"
-		assert "..." in output
+		# 截断不再是裸 "..."：写明省略了多少字、去哪里看全文（Issue #2768）。
+		assert "已省略 300 字" in output
+		assert "--json" in output
 		assert "description:" in output
 
 	def test_render_status_logged_in(self, monkeypatch):

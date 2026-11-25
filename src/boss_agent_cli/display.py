@@ -549,7 +549,7 @@ def render_operator_actions(hints: dict[str, Any] | None) -> None:
 	console.print()
 	for index, action in enumerate(actions):
 		prefix = "↓ 你需要：" if index == 0 else "　　　　　"
-		console.print(f"[yellow]{prefix}[/yellow]{escape_markup(redact_sensitive_text(str(action)))}")
+		console.print(f"[yellow]{prefix}[/yellow]{escape_markup(redact_sensitive_text(str(action)))}", soft_wrap=True)
 
 
 def handle_output(
@@ -645,7 +645,7 @@ def handle_error_output(
 		error_line.append(f" [{strip_control(str(code))}] {strip_control(safe_message)}")
 		console.print(error_line)
 		if safe_recovery:
-			console.print(f"  [dim]recovery: {escape_markup(safe_recovery)}[/dim]")
+			console.print(f"  [dim]recovery: {escape_markup(safe_recovery)}[/dim]", soft_wrap=True)
 		render_operator_actions(hints)
 		# TTY 与 JSON 出口同一退出码契约：--exit-codes sysexits 在终端下同样生效
 		# （此前硬编码 1，认证 / 限流 / 风控失败全部退 1，Issue #2051）。
@@ -780,6 +780,28 @@ def handle_platform_error_output(
 # ── Table builders ──────────────────────────────────────────────────
 
 
+def job_field_text(data: dict[str, Any], *keys: str) -> str:
+	"""职位字段的终端文本：缺失 / 空串 / 纯空白都显示 ``-``（Issue #2767）。
+
+	``data.get(key, "-")`` 的默认值只挡键缺失，而上游 ``build_job_from_card``
+	用 ``field_text`` 把缺失归一成空串，于是详情里出现 ``exp:  | edu:  |``、
+	``boss:  ()``，表格里空单元格与其它列的 ``-`` 不一致。容器字段按
+	``cell_text`` 的口径转文本，不把 Python repr 打给用户。
+	"""
+	for key in keys:
+		if key not in data:
+			continue
+		value = data[key]
+		if isinstance(value, str):
+			if value.strip():
+				return escape_markup(value)
+			continue
+		text = cell_text(value)
+		if text and text != "-":
+			return escape_markup(text)
+	return "-"
+
+
 def render_job_table(
 	items: list[dict[str, Any]],
 	title: str,
@@ -815,20 +837,20 @@ def render_job_table(
 	for i, job in enumerate(items, 1):
 		table.add_row(
 			str(i),
-			escape_markup(job.get("title", job.get("jobName", "-"))),
-			escape_markup(job.get("company", job.get("brandName", "-"))),
-			escape_markup(job.get("salary", job.get("salaryDesc", "-"))),
-			escape_markup(job.get("employment_type") or "-"),
-			escape_markup(job.get("experience", job.get("jobExperience", "-"))),
-			escape_markup(job.get("education", job.get("jobDegree", "-"))),
-			escape_markup(job.get("city", job.get("cityName", "-"))),
+			job_field_text(job, "title", "jobName"),
+			job_field_text(job, "company", "brandName"),
+			job_field_text(job, "salary", "salaryDesc"),
+			job_field_text(job, "employment_type"),
+			job_field_text(job, "experience", "jobExperience"),
+			job_field_text(job, "education", "jobDegree"),
+			job_field_text(job, "city", "cityName"),
 		)
 
 	console.print(table)
 	if show_command:
-		console.print(f"  [dim]use: {escape_markup(show_command)} to view details[/dim]")
+		console.print(f"  [dim]use: {escape_markup(show_command)} to view details[/dim]", soft_wrap=True)
 	if hint_next:
-		console.print(f"  [dim]{escape_markup(hint_next)}[/dim]")
+		console.print(f"  [dim]{escape_markup(hint_next)}[/dim]", soft_wrap=True)
 
 
 def unix_time_label(value: Any) -> str:
@@ -864,15 +886,21 @@ def iso_time_label(value: Any) -> str:
 
 def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None) -> None:
 	"""Render job detail as a rich panel."""
-	title = escape_markup(data.get("title", "-"))
-	salary = escape_markup(data.get("salary", "-"))
-	exp = escape_markup(data.get("experience", "-"))
-	edu = escape_markup(data.get("education", "-"))
-	city = escape_markup(data.get("city", "-"))
-	company = escape_markup(data.get("company", "-"))
-	boss = escape_markup(data.get("boss_name", "-"))
-	boss_title = escape_markup(data.get("boss_title", "-"))
+	title = job_field_text(data, "title")
+	salary = job_field_text(data, "salary")
+	exp = job_field_text(data, "experience")
+	edu = job_field_text(data, "education")
+	city = job_field_text(data, "city")
+	company = job_field_text(data, "company")
+	boss = job_field_text(data, "boss_name")
+	boss_title = job_field_text(data, "boss_title")
 	desc = str(data.get("description", ""))
+	if boss == "-":
+		boss_line = boss_title if boss_title != "-" else "-"
+	elif boss_title == "-":
+		boss_line = boss
+	else:
+		boss_line = f"{boss} ({boss_title})"
 
 	skills = label_items(data.get("skills"))
 	skill_str = ", ".join(escape_markup(skill) for skill in skills) if skills else "-"
@@ -884,14 +912,18 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 		f"\n"
 		f"[bold green]company:[/bold green] {company}\n"
 		f"\n"
-		f"[bold magenta]boss:[/bold magenta] {boss} ({boss_title})\n"
+		f"[bold magenta]boss:[/bold magenta] {boss_line}\n"
 	)
 
 	if desc:
+		omitted = ""
 		if len(desc) > 500:
-			desc = desc[:500] + "..."
+			# 只留一个 "..." 会让真人以为那就是全文；明确写出省略了多少字以及
+			# 去哪里看完整内容（Issue #2768）。
+			omitted = f"\n[dim]…… 已省略 {len(desc) - 500} 字，完整描述用 --json 查看[/dim]"
+			desc = desc[:500]
 		# 先截断再转义：截断可能落在转义序列中间。
-		text += f"\n[bold]description:[/bold]\n{escape_markup(desc)}"
+		text += f"\n[bold]description:[/bold]\n{escape_markup(desc)}{omitted}"
 
 	panel = Panel(text, title="job detail", border_style="cyan")
 	console.print(panel)
@@ -914,7 +946,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	jid = data.get("job_id", "")
 	if sid and jid:
 		greet_command = greet_command or "boss greet <security_id> <job_id>"
-		console.print(f"  [dim]next: {escape_markup(greet_command)}[/dim]")
+		console.print(f"  [dim]next: {escape_markup(greet_command)}[/dim]", soft_wrap=True)
 
 
 def render_status(
@@ -941,7 +973,7 @@ def render_status(
 			console.print("[green]logged in[/green]")
 	else:
 		# 登录命令可能带自定义 --data-dir：方括号目录名不能被当作样式吞掉。
-		console.print(f"[yellow]not logged in[/yellow] - run: {escape_markup(login_action)}")
+		console.print(f"[yellow]not logged in[/yellow] - run: {escape_markup(login_action)}", soft_wrap=True)
 	lock = data.get("cdp_risk_lock")
 	if isinstance(lock, dict) and lock.get("locked"):
 		since = escape_markup(lock.get("locked_at") or "unknown")
@@ -1156,7 +1188,8 @@ def render_next_steps(actions: "Sequence[str] | None") -> None:
 	for action in actions:
 		# 命令里带数据目录等用户可控文本：不转义时 `[bold]` 会被 Rich 吞掉，
 		# 未配对的 `[/bold]` 直接抛 MarkupError，整个人工提示都打不出来。
-		console.print(f"    [dim]{escape_markup(action)}[/dim]")
+		# soft_wrap：Rich 的硬折行会把命令断成两行，照抄后无法执行（Issue #2770）。
+		console.print(f"    [dim]{escape_markup(action)}[/dim]", soft_wrap=True)
 
 
 def render_action_result(
