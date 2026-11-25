@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 向导其余面板补齐与 CLI / 向导菜单一致的取值：`jobs_list` 读 `jobStatusDesc / statusDesc`、`candidates` 读 `positionName`、无姓名的最近消息回退 `friendId`、简历 ISO 时间显示到分钟；表格文本统一按安全标量渲染，容器 / 布尔 / `NaN` / 超大整数不再显示 Python repr 或让整个面板中断，日报对象公司名与异常计数也不再原样输出（Issue #2807）。
+
 ## [3.4.217] - 2026-11-25
 
 ### Fixed

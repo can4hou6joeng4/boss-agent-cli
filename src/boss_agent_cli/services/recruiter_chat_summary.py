@@ -116,23 +116,20 @@ def message_status_label(item: dict[str, Any], friend_id: int | None = None) -> 
 	return RECRUITER_MSG_STATUS_LABELS.get(status)
 
 
-def message_text(item: dict[str, Any]) -> str | None:
+def message_text(item: dict[str, Any], *, skip_blank: bool = False) -> str | None:
 	# 值归一在 chat_utils.message_text_value：布尔 / 容器 / 非有限数值按缺失
 	# 处理（Issue #2730），候选人 chatmsg 共用同一份（Issue #2749）。
-	for key in ("last_msg", "lastMsg", "lastText", "content", "text", "message", "msgContent"):
-		text = message_text_value(item.get(key))
-		if text is not None:
-			return text
 	body = item.get("body")
-	if isinstance(body, dict):
-		text = message_text_value(body.get("text"))
-		if text is not None:
-			return text
-	info = last_info(item)
-	for key in ("showText", "text"):
-		text = message_text_value(info.get(key))
-		if text is not None:
-			return text
+	fields = (
+		(item, ("last_msg", "lastMsg", "lastText", "content", "text", "message", "msgContent")),
+		(body if isinstance(body, dict) else {}, ("text", "content")),
+		(last_info(item), ("showText", "text")),
+	)
+	for source, keys in fields:
+		for key in keys:
+			text = message_text_value(source.get(key))
+			if text is not None and (not skip_blank or text.strip()):
+				return text
 	return None
 
 

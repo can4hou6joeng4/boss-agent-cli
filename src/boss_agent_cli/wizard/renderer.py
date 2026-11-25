@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -14,7 +15,10 @@ from rich.panel import Panel
 from rich.table import Table
 
 from boss_agent_cli import display
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.services.chat_utils import message_text_value
+from boss_agent_cli.services.recruiter_chat_summary import message_text as last_message_text
+from boss_agent_cli.services.recruiter_last_messages import as_friend_int, friend_id_for
 from boss_agent_cli.wizard.catalog import GOALS
 from boss_agent_cli.wizard.models import count_or_none
 from boss_agent_cli.wizard.prompts import STATUS_LABELS
@@ -815,6 +819,21 @@ def _chat_content_text(item: Mapping[str, Any]) -> str:
 	return body_text or "—"
 
 
+def _last_message_friend_ids(data: Mapping[str, Any]) -> set[int]:
+	friend_ids = data.get("friend_ids")
+	if isinstance(friend_ids, list):
+		return {parsed for value in friend_ids if (parsed := as_friend_int(value)) is not None}
+	# 旧断点可能只有消息列表。摘要中的 ID 可用于识别原始记录的 from/to。
+	messages = data.get("messages")
+	if not isinstance(messages, list):
+		return set()
+	return {
+		parsed
+		for message in messages
+		if isinstance(message, Mapping) and (parsed := as_friend_int(message.get("friendId"))) is not None
+	}
+
+
 def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> None:
 	"""Markdown-style preview for generic list goals (search / shortlist / pipeline…)."""
 	from rich import box
@@ -822,6 +841,9 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 	from rich.text import Text
 
 	goal = str(run.get("goal") or "")
+	last = _as_mapping(run.get("last_result")) or {}
+	data = _as_mapping(last.get("data")) or last
+	known_friend_ids = _last_message_friend_ids(data) if goal == "last_messages" else set()
 	# 聊天记录的 messages 已与 CLI 同口径；裸 items 可能含 dict.from / dict.body。
 	items = _list_items_from_run(run, preferred_keys=("messages",) if goal == "chat_history" else ())
 	if not items:
@@ -840,21 +862,37 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("简历", style="bold", no_wrap=True)
 		table.add_column("更新", style="dim", no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
+			updated = item.get("updated_at")
+			if isinstance(updated, str) and "T" in updated:
+				converted = display.iso_time_label(updated)
+				if converted != "-":
+					updated = converted
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or item.get("title") or "未命名简历", 24),
-				_clip_text(item.get("updated_at") or item.get("created_at") or "—", 20),
+				_clip_text(_first_safe_text(item, ("name", "title"), "未命名简历"), 24),
+				_clip_text(
+					_first_safe_text(
+						{"updated_at": updated, "created_at": item.get("created_at")}, ("updated_at", "created_at"), "—"
+					),
+					20,
+				),
 			)
 	elif goal in {"watch"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
 		table.add_column("监控名", style="bold", no_wrap=True)
 		table.add_column("关键词", style="dim", no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
-			params = item.get("params") if isinstance(item.get("params"), Mapping) else {}
+			raw_params = item.get("params")
+			params: Mapping[str, Any] = raw_params if isinstance(raw_params, Mapping) else {}
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or "未命名", 16),
-				_clip_text((params or {}).get("query") or item.get("query") or "—", 24),
+				_clip_text(_first_safe_text(item, ("name",), "未命名"), 16),
+				_clip_text(
+					_first_safe_text(
+						{"query": params.get("query"), "fallback": item.get("query")}, ("query", "fallback"), "—"
+					),
+					24,
+				),
 			)
 	elif goal in {"pipeline"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -864,9 +902,9 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("title") or item.get("jobName") or "未命名", 24),
-				_clip_text(item.get("company") or item.get("brandName") or "—", 14),
-				_clip_text(item.get("stage") or item.get("relation") or "—", 12),
+				_clip_text(_first_safe_text(item, ("title", "jobName"), "未命名"), 24),
+				_clip_text(_first_safe_text(item, ("company", "brandName"), "—"), 14),
+				_clip_text(_first_safe_text(item, ("stage", "relation"), "—"), 12),
 			)
 	elif goal in {"communication", "last_messages"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -874,14 +912,22 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		table.add_column("公司/职位", style="dim", overflow="ellipsis", max_width=20, no_wrap=True)
 		table.add_column("最近消息", style="dim", overflow="ellipsis", max_width=28, no_wrap=True)
 		for index, item in enumerate(items[:limit], start=1):
+			name = _first_safe_text(item, ("name", "friendName", "geekName"))
+			last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "content"))
+			if goal == "last_messages":
+				# 逐条使用与 CLI 一致的识别规则。同一联系人可返回多条消息。
+				raw = dict(item)
+				name = name or _safe_text(friend_id_for(raw, known_friend_ids))
+				last_msg = (
+					_safe_text(last_message_text(raw, skip_blank=True))
+					or last_msg
+					or _safe_text(_chat_content_text(item))
+				)
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or item.get("friendName") or item.get("geekName") or "未命名", 16),
-				_clip_text(
-					item.get("brandName") or item.get("company") or item.get("jobName") or item.get("title") or "—",
-					20,
-				),
-				_clip_text(item.get("lastMsg") or item.get("last_msg") or item.get("content") or "—", 28),
+				_clip_text(name or "未命名", 16),
+				_clip_text(_first_safe_text(item, ("brandName", "company", "jobName", "title"), "—"), 20),
+				_clip_text(last_msg or "—", 28),
 			)
 	elif goal in {"chat_history"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -901,9 +947,9 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("name") or item.get("geekName") or "未命名", 16),
-				_clip_text(item.get("expectPosition") or item.get("jobName") or item.get("title") or "—", 20),
-				_clip_text(item.get("city") or item.get("cityName") or "—", 8),
+				_clip_text(_first_safe_text(item, ("name", "geekName"), "未命名"), 16),
+				_clip_text(_first_safe_text(item, ("expectPosition", "positionName", "jobName", "title"), "—"), 20),
+				_clip_text(_first_safe_text(item, ("city", "cityName"), "—"), 8),
 			)
 	elif goal in {"jobs_list"}:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -912,8 +958,8 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("title") or item.get("jobName") or item.get("name") or "未命名", 28),
-				_clip_text(item.get("status") or item.get("jobStatus") or "—", 10),
+				_clip_text(_first_safe_text(item, ("title", "jobName", "name"), "未命名"), 28),
+				_clip_text(_first_safe_text(item, ("jobStatusDesc", "statusDesc", "status", "jobStatus"), "—"), 10),
 			)
 	else:
 		table.add_column("#", style="dim", justify="right", no_wrap=True)
@@ -924,10 +970,10 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 		for index, item in enumerate(items[:limit], start=1):
 			table.add_row(
 				str(index),
-				_clip_text(item.get("title") or item.get("jobName") or item.get("name") or "未命名", 28),
-				_clip_text(item.get("company") or item.get("brandName") or "—", 14),
-				_clip_text(item.get("city") or item.get("cityName") or "—", 8),
-				_clip_text(item.get("salary") or item.get("salaryDesc") or "—", 12),
+				_clip_text(_first_safe_text(item, ("title", "jobName", "name"), "未命名"), 28),
+				_clip_text(_first_safe_text(item, ("company", "brandName"), "—"), 14),
+				_clip_text(_first_safe_text(item, ("city", "cityName"), "—"), 8),
+				_clip_text(_first_safe_text(item, ("salary", "salaryDesc"), "—"), 12),
 			)
 	footer = Text()
 	if len(items) > limit:
@@ -960,9 +1006,9 @@ def _render_management_result(
 		meta = Table(show_header=False, box=None, pad_edge=False)
 		meta.add_column("k", style="dim", width=10)
 		meta.add_column("v", style="bold")
-		meta.add_row("新匹配", display.escape_markup(data.get("new_match_count") or 0))
-		meta.add_row("待跟进", display.escape_markup(data.get("follow_up_count") or 0))
-		meta.add_row("面试", display.escape_markup(data.get("interview_count") or 0))
+		meta.add_row("新匹配", display.escape_markup(_count_text(data.get("new_match_count"), "0")))
+		meta.add_row("待跟进", display.escape_markup(_count_text(data.get("follow_up_count"), "0")))
+		meta.add_row("面试", display.escape_markup(_count_text(data.get("interview_count"), "0")))
 		if summary:
 			meta.add_row("摘要", display.escape_markup(summary))
 		# Sample rows from each bucket.
@@ -975,8 +1021,8 @@ def _render_management_result(
 			for item in bucket[:3]:
 				if not isinstance(item, Mapping):
 					continue
-				label = item.get("title") or item.get("jobName") or item.get("name") or "—"
-				company = item.get("company") or item.get("brandName") or ""
+				label = _first_safe_text(item, ("title", "jobName", "name"), "—")
+				company = _company_text(item)
 				text = f"{label}" + (f" · {company}" if company else "")
 				preview.add_row(kind, display.escape_markup(text))
 		parts: list[Any] = [headline, Text(""), meta]
@@ -1024,7 +1070,7 @@ def _render_management_result(
 				failed = entry.get("error")
 				batch.add_row(
 					display.escape_markup(entry.get("name") or "—"),
-					"—" if failed else display.escape_markup(entry.get("new_count", "—")),
+					"—" if failed else display.escape_markup(_count_text(entry.get("new_count"))),
 					display.escape_markup(failed) if failed else "完成",
 				)
 			display.console.print(Panel(batch, title=f"批量监控结果（{len(data['watches'])} 条）", border_style="cyan"))
@@ -1207,9 +1253,46 @@ def _short_artifact_lines(paths: Mapping[str, Any] | Sequence[Any]) -> tuple[str
 	return names, f"[dim]{display.escape_markup(parent)}[/dim]"
 
 
+def _safe_text(value: Any, default: str = "") -> str:
+	"""表格文本字段：容器 / 布尔 / 非有限数按缺失，整数走 ``safe_text`` 不预检位长。"""
+	if value is None or isinstance(value, (dict, list, tuple, bool)):
+		return default
+	if isinstance(value, float) and not math.isfinite(value):
+		return default
+	return safe_text(value).strip() or default
+
+
+def _first_safe_text(item: Any, keys: tuple[str, ...], default: str = "") -> str:
+	"""按优先级取第一个可用文本；前一键漂移成容器 / 非文本时不吞掉后续回退。"""
+	if not isinstance(item, Mapping):
+		return default
+	for key in keys:
+		text = _safe_text(item.get(key))
+		if text:
+			return text
+	return default
+
+
+def _count_text(value: Any, default: str = "—") -> str:
+	return _safe_text(value, default)
+
+
+def _company_text(item: Mapping[str, Any]) -> str:
+	"""公司名按既有优先级取：company 再 brandName；对象取 name / brandName。"""
+	for key in ("company", "brandName"):
+		value = item.get(key)
+		if isinstance(value, Mapping):
+			text = _first_safe_text(value, ("name", "brandName"))
+		else:
+			text = _safe_text(value)
+		if text:
+			return text
+	return ""
+
+
 def _clip_text(value: Any, limit: int) -> str:
 	"""裁剪成表格单元格用的单行文本，并按 Rich 字面量转义（见 ``display.escape_markup``）。"""
-	text = " ".join(str(value or "").split())
+	text = " ".join(_safe_text(value).split())
 	if len(text) <= limit:
 		return display.escape_markup(text)
 	if limit <= 1:
