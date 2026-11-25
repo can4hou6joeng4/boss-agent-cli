@@ -124,6 +124,13 @@ def _is_plain_scalar(value: Any) -> bool:
 	return isinstance(value, str) or (isinstance(value, (int, float)) and not isinstance(value, bool))
 
 
+def _plain_scalar_text(value: Any) -> str:
+	"""纯标量列表元素：非有限浮点显示 ``-``，与 ``cell_text`` 的标量口径一致（Issue #2835）。"""
+	if isinstance(value, float) and not math.isfinite(value):
+		return "-"
+	return value if isinstance(value, str) else safe_text(value)
+
+
 def cell_text(value: Any) -> str:
 	"""把表格单元格的值转成给真人看的文本；未做 markup 转义，交给 ``escape_markup``。
 
@@ -134,17 +141,22 @@ def cell_text(value: Any) -> str:
 	- ``None`` 与空容器显示 ``-``，与键缺失同一写法；
 	- 元素全是字符串 / 数值的列表用 ``, `` 连接（与职位详情的 skills 同写法）；
 	- 其余容器输出 JSON 文本，与 ``--json`` 看到的一致；
-	- 标量保持原样，空字符串仍是空单元格。
+	- 非有限浮点（``NaN`` / ``Infinity``，平台 JSON 的 ``1e400`` / ``NaN``
+	  会解析成这类值）显示 ``-``，与 ``field_text`` / 通用面板同一缺失口径
+	  （Issue #2817、#2835）；
+	- 其余标量保持原样，空字符串仍是空单元格。
 	"""
 	if value is None:
 		return "-"
 	if isinstance(value, str):
 		return value
+	if isinstance(value, float) and not math.isfinite(value):
+		return "-"
 	if isinstance(value, (list, tuple, dict)):
 		if not value:
 			return "-"
 		if not isinstance(value, dict) and all(_is_plain_scalar(element) for element in value):
-			return ", ".join(element if isinstance(element, str) else safe_text(element) for element in value)
+			return ", ".join(_plain_scalar_text(element) for element in value)
 		try:
 			return json.dumps(value, ensure_ascii=False, default=str)
 		except (TypeError, ValueError, RecursionError):
@@ -815,8 +827,9 @@ def job_field_text(data: dict[str, Any], *keys: str) -> str:
 	``boss:  ()``，表格里空单元格与其它列的 ``-`` 不一致。容器字段按
 	``cell_text`` 的口径转文本，不把 Python repr 打给用户。
 
-	布尔与非有限浮点按缺失处理：``cell_text`` 会原样给出 ``True`` / ``nan``，
-	那不是职位字段的可展示值（Issue #2815）。
+	布尔与非有限浮点按缺失处理：``cell_text`` 会把布尔原样给出 ``True``；
+	非有限浮点已由 ``cell_text`` 统一显示 ``-``（Issue #2835），这里仍显式
+	跳过这两类值，保持职位字段的入口契约（Issue #2815）。
 	"""
 	for key in keys:
 		if key not in data:
