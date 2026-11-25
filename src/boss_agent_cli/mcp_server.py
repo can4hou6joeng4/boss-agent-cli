@@ -275,7 +275,8 @@ _ACTION_DIMENSION_TOOL_NAMES = frozenset(
 _DRY_RUN_DEFAULT_TOOL_NAMES = frozenset({"boss_agent_run", "boss_agent_train"})
 
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
-_READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；先降低 limit/count 或改用 active=online 再重试"
+_READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；如仍需结果，可按原参数重新调用"
+_EXPORT_READ_INTERRUPT_RECOVERY = "导出已中断，不产生平台写入；可减少 count 或收窄筛选范围后重试"
 #: search / watch 没有 limit / count 参数，恢复文案不能提示不存在的选项（Issue #1860）。
 _FILTER_READ_INTERRUPT_RECOVERY = (
 	"只读命令已中断，不产生平台写入；该命令按福利 / 活跃度筛选逐条查详情，"
@@ -312,6 +313,7 @@ def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
 		# active=online 或缩小范围，而不是让调用方直接重试同一段长扫描（Issue #2725）。
 		if welfare or active not in ("", "online"):
 			return _FILTER_READ_INTERRUPT_RECOVERY
+		return _EXPORT_READ_INTERRUPT_RECOVERY
 	return _READ_INTERRUPT_RECOVERY
 #: 子进程没能启动：从未运行过，不可能有平台副作用。真正要处理的是安装 / 路径，
 #: 让 Agent 去核对 checkpoint 与平台结果只会把人引向不存在的现场（Issue #962）。
