@@ -62,7 +62,9 @@ def test_non_zero_chat_flag_keeps_the_existing_success_contract(chat):
 	assert platform.is_success(response) is True
 
 
-@pytest.mark.parametrize("field", ["geek_id", "job_id", "expect_id", "lid", "security_id"])
+# lid 是访问上下文而非目标标识（平台可能给空值，schema 也允许空串），
+# 空白校验只覆盖真正标识候选人与职位的 ID（Issue #2789）。
+@pytest.mark.parametrize("field", ["geek_id", "job_id", "expect_id", "security_id"])
 @pytest.mark.parametrize("value", ["", "   "])
 @pytest.mark.parametrize("mode", ["--yes", "--dry-run"])
 def test_greet_rejects_blank_ids_before_auth_request_and_reservation(tmp_path, field, value, mode):
@@ -77,6 +79,20 @@ def test_greet_rejects_blank_ids_before_auth_request_and_reservation(tmp_path, f
 	assert f"--{field.replace('_', '-')}" in body["error"]["message"]
 	assert body["error"]["recovery_action"]
 	assert body["hints"]["next_actions"][0].endswith("hr recommendations --job-id <job_id>")
+	client.start_chat.assert_not_called()
+	assert not (tmp_path / "cache" / "boss_agent.db").exists()
+
+
+@pytest.mark.parametrize("value", ["", " \t"])
+def test_greet_allows_blank_lid_in_dry_run_without_auth_request(tmp_path, value):
+	client = MagicMock()
+	with patch(f"{_RECOMMENDATIONS}.AuthManager") as auth:
+		result = _invoke_with_platform(_RECOMMENDATIONS, client, [*_greet_args(tmp_path, lid=value), "--dry-run"])
+		auth.assert_not_called()
+
+	assert result.exit_code == 0, result.output
+	body = json.loads(result.output)
+	assert body["data"]["dry_run"] is True
 	client.start_chat.assert_not_called()
 	assert not (tmp_path / "cache" / "boss_agent.db").exists()
 

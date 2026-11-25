@@ -154,7 +154,8 @@ def greet_cmd(
 	if not require_compliance_allowed(ctx, "recruiter-greet"):
 		return
 	data: dict[str, Any] = {"geek_id": geek_id, "job_id": job_id, "sent": False}
-	blank = blank_option_names(geek_id=geek_id, job_id=job_id, expect_id=expect_id, lid=lid, security_id=security_id)
+	# lid 是访问上下文而非目标标识：平台可能给空值，schema 也允许空串（Issue #2789）。
+	blank = blank_option_names(geek_id=geek_id, job_id=job_id, expect_id=expect_id, security_id=security_id)
 	if blank:
 		# 首次招呼是不可逆写入：空 ID 不能发给平台，也不能以空键写下预约 / 已发送记录
 		# （Issue #1782）。必须排在取凭据与 claim 之前，dry-run 同样拒绝。

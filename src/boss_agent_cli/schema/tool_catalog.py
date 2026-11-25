@@ -1246,7 +1246,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 
 
 #: 必填但允许空串的参数：CLI 不拒绝它们，声明 minLength 会挡掉当前合法的调用。
-#: `hr greet --lid` 是唯一一处「required 但平台可能给空值」的上下文字段。
+#: `hr greet --lid` 是唯一一处「required 但平台可能给空值」的上下文字段：
+#: lid 只作访问上下文，CLI 只拒绝空白目标 ID（geek_id / job_id / expect_id /
+#: security_id），lid 空串照常放行（Issue #2789）。
 _EMPTY_ALLOWED_REQUIRED: dict[str, frozenset[str]] = {
 	"boss_hr_greet": frozenset({"lid"}),
 	# 空串是显式清空备注（Issue #872 / #1607），不能因 anyOf 条件必填被加上 minLength。
