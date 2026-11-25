@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.210 (2026-11-25): job detail blanks render as `-`, long descriptions state how much was omitted, and follow-up commands are emitted on one line; login / logout / shortlist writes / favorites sync / digest render readable panels and login failures surface operator guidance; `hr` read and write commands render tables, record panels, and action confirmations, with the `hr resume` sectioned panel showing its command label, while JSON envelopes remain unchanged (Issues #2767, #2768, #2770, #2769, #2774, #2778).
+
 v3.4.209 (2026-11-25): terminal tables wrap long unbroken text instead of truncating Chinese sentences and paths; panels expand lists and objects, keep `0` and `False`, and bound nested fields in sectioned records with a `--json` hint; `preset` / `watch` show only the filters that are set and format list timestamps in local time; `watch run --all` lists each watch's result and new jobs; successful terminal output is redacted with the same rules as the envelope (Issues #2761, #2762, #2763, #2764, #2765).
 
 v3.4.208 (2026-11-25): multi-page aggregation of the chat list and favorites deduplicates per entry, so a list that shifts between pages no longer makes `pipeline` / `follow-up` / `digest` and `favorites sync` count the same entry twice; on the terminal side `boss status` no longer prints `logged in as None`, generic tables no longer show the Python repr of `None` / lists / objects, and an unknown time is no longer rendered as 1970; the `RATE_LIMITED` troubleshooting guide now slows requests down, and `config set request_delay` accepts the array form that `config get` displays (Issues #2753, #2754, #2755, #2756, #2757).
