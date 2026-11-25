@@ -6,6 +6,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._render import render_identity
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
@@ -35,7 +36,14 @@ def whoami_cmd(ctx: click.Context) -> None:
 			)
 			return
 		record = interpret_recruiter_identity(platform.unwrap_data(result))
-		handle_output(ctx, "recruiter-whoami", record, hints=_hints(ctx, record))
+		hints = _hints(ctx, record)
+		handle_output(
+			ctx,
+			"recruiter-whoami",
+			record,
+			render=lambda d: render_identity(d, title="hr whoami", next_steps=hints.get("next_actions", [])),
+			hints=hints,
+		)
 
 
 def _hints(ctx: click.Context, record: dict[str, Any]) -> dict[str, list[str]]:

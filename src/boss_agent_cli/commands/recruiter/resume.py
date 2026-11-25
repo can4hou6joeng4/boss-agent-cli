@@ -7,6 +7,7 @@ from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_i
 from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.services.resume_parser import parse_resume
 from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._render import render_resume
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
 
 
@@ -103,9 +104,9 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			)
 			return
 
+		next_actions = [hint_command(ctx, "hr applications")]
 		handle_output(
 			ctx, "recruiter-resume", data,
-			hints={"next_actions": [
-				hint_command(ctx, "hr applications"),
-			]},
+			render=lambda d: render_resume(d, title="hr resume", next_steps=next_actions),
+			hints={"next_actions": next_actions},
 		)
