@@ -7,6 +7,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands.recruiter._hints import reject_blank_options, hint_command
+from boss_agent_cli.commands.recruiter._render import render_friend_list
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
@@ -61,6 +62,7 @@ def applications_cmd(ctx: click.Context, job_id: str | None, label_id: int, page
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		handle_output(
 			ctx, "recruiter-applications", data,
+			render=lambda d: render_friend_list(d, title="hr applications", next_steps=next_actions),
 			pagination=pagination,
 			hints=hints,
 		)

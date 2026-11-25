@@ -8,6 +8,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.commands.recruiter._hints import hint_command, positional_hint
+from boss_agent_cli.commands.recruiter._render import render_job_list
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
@@ -94,6 +95,7 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 			ctx,
 			"recruiter-jobs-list",
 			data,
+			render=lambda d: render_job_list(d, title="hr jobs list", next_steps=next_actions),
 			pagination=pagination,
 			hints=hints,
 		)

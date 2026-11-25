@@ -31,6 +31,11 @@ from boss_agent_cli.services.pagination import (
 	rows_from,
 )
 from boss_agent_cli.commands.recruiter._hints import hint_command, reject_blank_options
+from boss_agent_cli.commands.recruiter._render import (
+	render_friend_list,
+	render_last_messages,
+	render_message_history,
+)
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
@@ -216,7 +221,11 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 		hints.update(unread_totals(summary_hint.get("page_snapshot")))
 		if summary_hint:
 			hints["summary_sources"] = summary_hint
-		handle_output(ctx, "recruiter-chat", data, pagination=pagination, hints=hints)
+		handle_output(
+			ctx, "recruiter-chat", data,
+			render=lambda d: render_friend_list(d, title="hr chat", next_steps=hints["next_actions"]),
+			pagination=pagination, hints=hints,
+		)
 
 
 @click.command("chatmsg")
@@ -254,6 +263,7 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		handle_output(
 			ctx, "recruiter-chatmsg", data,
+			render=lambda d: render_message_history(d, title="hr chatmsg", next_steps=hints["next_actions"]),
 			pagination=pagination,
 			hints=hints,
 		)
@@ -317,6 +327,7 @@ def recruiter_last_messages_cmd(
 				ctx,
 				"recruiter-last-messages",
 				{"friend_ids": [], "messages": []},
+				render=lambda d: render_last_messages(d, title="hr last-messages", next_steps=next_actions),
 				pagination=pagination,
 				hints={"next_actions": next_actions, "operator_actions": operator_actions},
 			)
@@ -352,6 +363,7 @@ def recruiter_last_messages_cmd(
 		handle_output(
 			ctx, "recruiter-last-messages",
 			output,
+			render=lambda d: render_last_messages(d, title="hr last-messages", next_steps=next_actions),
 			pagination=pagination,
 			hints=hints,
 		)

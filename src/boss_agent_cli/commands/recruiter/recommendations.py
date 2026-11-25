@@ -16,6 +16,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.commands.recruiter._hints import blank_option_names, hint_command
+from boss_agent_cli.commands.recruiter._render import render_candidate_list
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
 	handle_auth_errors,
@@ -82,6 +83,7 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 			operator_actions.append(UNKNOWN_HAS_MORE_OPERATOR_ACTION)
 		handle_output(
 			ctx, "recruiter-recommendations", data,
+			render=lambda d: render_candidate_list(d, title="hr recommendations", next_steps=next_actions),
 			pagination=pagination,
 			hints={"next_actions": next_actions, "operator_actions": operator_actions},
 		)
