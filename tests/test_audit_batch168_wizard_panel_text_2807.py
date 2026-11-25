@@ -139,3 +139,73 @@ def test_convertible_large_integer_is_still_rendered(rendered: io.StringIO) -> N
 	text = rendered.getvalue()
 	assert "9" in text
 	assert len(text) < 1000
+
+
+def test_last_messages_accepts_string_friend_id(rendered: io.StringIO) -> None:
+	data = {
+		"items": [{"friendId": "9", "lastMsg": "正常正文"}],
+		"messages": [{"friendId": 9, "last_msg": "正常正文"}],
+	}
+	renderer.render_run(_run("last_messages", data))
+
+	text = rendered.getvalue()
+	assert "9" in text
+	assert "正常正文" in text
+	assert "未命名" not in text
+
+
+def test_last_messages_prefers_known_uid_over_gid(rendered: io.StringIO) -> None:
+	data = {
+		"items": [{"uid": 9, "gid": 17, "lastMsg": "正常正文"}],
+		"messages": [{"friendId": 9, "last_msg": "正常正文"}],
+	}
+	renderer.render_run(_run("last_messages", data))
+
+	text = rendered.getvalue()
+	assert "9" in text
+	assert "17" not in text
+
+
+def test_last_messages_legacy_checkpoint_keeps_raw_name_and_body(rendered: io.StringIO) -> None:
+	row = {"friend_id": 9, "name": "联系人", "lastMsg": "正常正文"}
+	renderer.render_run(_run("last_messages", {"items": [row], "messages": [row]}))
+
+	text = rendered.getvalue()
+	assert "联系人" in text
+	assert "正常正文" in text
+
+
+def test_last_messages_huge_friend_id_does_not_break_panel(rendered: io.StringIO) -> None:
+	renderer.render_run(_run("last_messages", {"items": [{"friendId": 10**5000, "lastMsg": "正常正文"}]}))
+
+	assert "正常正文" in rendered.getvalue()
+
+
+@pytest.mark.parametrize(
+	"goal, item, expected",
+	[
+		("jobs_list", {"jobName": "职位", "jobStatusDesc": "  ", "status": "招聘中"}, "招聘中"),
+		("candidates", {"name": "候选人", "positionName": "  ", "jobName": "后端工程师"}, "后端工程师"),
+	],
+	ids=["status", "position"],
+)
+def test_blank_primary_field_does_not_swallow_fallback(
+	rendered: io.StringIO, goal: str, item: dict[str, Any], expected: str
+) -> None:
+	renderer.render_run(_run(goal, {"items": [item]}))
+
+	assert expected in rendered.getvalue()
+
+
+def test_digest_keeps_company_precedence_and_mapping(rendered: io.StringIO) -> None:
+	data = {
+		"new_matches": [
+			{"title": "职位甲", "company": "已有公司", "brandName": "品牌名称"},
+			{"title": "职位乙", "brandName": {"name": "对象公司"}},
+		]
+	}
+	renderer.render_run(_run("digest", data))
+
+	text = rendered.getvalue()
+	assert "职位甲 · 已有公司" in text
+	assert "职位乙 · 对象公司" in text

@@ -831,17 +831,33 @@ def _last_message_summaries(data: Any) -> dict[int, Mapping[str, Any]]:
 	return result
 
 
+def _as_friend_int(value: Any) -> int | None:
+	if type(value) is int:
+		return value
+	if isinstance(value, str) and value.strip().isdigit():
+		try:
+			return int(value.strip())
+		except ValueError:
+			return None
+	return None
+
+
 def _friend_id_for_raw(item: Mapping[str, Any], summaries: Mapping[int, Mapping[str, Any]]) -> int | None:
-	for key in ("friendId", "friend_id", "gid", "uid"):
-		value = item.get(key)
-		if type(value) is int:
-			return value
+	candidates = [
+		friend_id
+		for key in ("friendId", "friend_id", "gid", "uid")
+		if (friend_id := _as_friend_int(item.get(key))) is not None
+	]
+	# 与 CLI 的 known_ids 同口径：能命中本次归一化摘要的 ID 优先于其他 ID。
+	for friend_id in candidates:
+		if friend_id in summaries:
+			return friend_id
 	for side in ("from", "to"):
 		party = item.get(side)
-		uid = party.get("uid") if isinstance(party, Mapping) else None
-		if type(uid) is int and uid in summaries:
+		uid = _as_friend_int(party.get("uid")) if isinstance(party, Mapping) else None
+		if uid is not None and uid in summaries:
 			return uid
-	return None
+	return candidates[0] if candidates else None
 
 
 def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> None:
@@ -929,10 +945,15 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 				if not name:
 					name = _first_safe_text(item, ("name", "friendName", "geekName"))
 				if not name and friend_id is not None:
-					name = str(friend_id)
+					name = _safe_text(friend_id, "未命名")
 				last_msg = _first_safe_text(summary or {}, ("last_msg", "lastMsg", "message"))
 				if not last_msg:
-					last_msg = _chat_content_text(item)
+					last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "message", "content"))
+				if not last_msg:
+					body = item.get("body")
+					last_msg = (
+						_first_safe_text(body, ("text", "content")) if isinstance(body, Mapping) else _safe_text(body)
+					)
 			else:
 				name = _first_safe_text(item, ("name", "friendName", "geekName"))
 				last_msg = _first_safe_text(item, ("lastMsg", "last_msg", "content"))
@@ -1035,11 +1056,7 @@ def _render_management_result(
 				if not isinstance(item, Mapping):
 					continue
 				label = _first_safe_text(item, ("title", "jobName", "name"), "—")
-				company = _first_safe_text(item, ("brandName", "companyName"))
-				if not company and isinstance(item.get("company"), Mapping):
-					company = _first_safe_text(item["company"], ("name", "brandName"))
-				if not company:
-					company = _first_safe_text(item, ("company",))
+				company = _company_text(item)
 				text = f"{label}" + (f" · {company}" if company else "")
 				preview.add_row(kind, display.escape_markup(text))
 		parts: list[Any] = [headline, Text(""), meta]
@@ -1276,7 +1293,7 @@ def _safe_text(value: Any, default: str = "") -> str:
 		return default
 	if isinstance(value, float) and not math.isfinite(value):
 		return default
-	return safe_text(value) or default
+	return safe_text(value).strip() or default
 
 
 def _first_safe_text(item: Any, keys: tuple[str, ...], default: str = "") -> str:
@@ -1292,6 +1309,19 @@ def _first_safe_text(item: Any, keys: tuple[str, ...], default: str = "") -> str
 
 def _count_text(value: Any, default: str = "—") -> str:
 	return _safe_text(value, default)
+
+
+def _company_text(item: Mapping[str, Any]) -> str:
+	"""公司名按既有优先级取：company 再 brandName；对象取 name / brandName。"""
+	for key in ("company", "brandName"):
+		value = item.get(key)
+		if isinstance(value, Mapping):
+			text = _first_safe_text(value, ("name", "brandName"))
+		else:
+			text = _safe_text(value)
+		if text:
+			return text
+	return ""
 
 
 def _clip_text(value: Any, limit: int) -> str:
