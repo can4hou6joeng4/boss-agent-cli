@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.224（2026-11-26）：向导采集浏览行与结果菜单、`boss agent crawl` 的采集职位映射统一改用安全标量，容器 / 布尔 / 非有限数 / 超大整数按缺失处理，repr 不再进入 TTY 与 AI 提示；通用表格单元格的 `NaN` / `Infinity` 显示 `-`；MCP 入口的 batch-greet `limit=0` 按只读处理、筛选枚举大小写白名单补齐、`boss_show` 编号补下界（Issue #2831、#2833、#2835、#2837、#2839）。
+
 v3.4.223（2026-11-26）：`escape_markup()` 与 `safe_text()` 同口径，超大整数与深嵌套值按缺失处理；AI 结果的对象数组内联拼接改用安全文本与单元格归一；`render_message_panel()` / `render_sectioned_record()` / `render_ai_result()` 的 Panel 标题统一按外部值转义（Issue #2826、#2828）。
 
 v3.4.222（2026-11-26）：向导菜单的损坏任务提示先对数据库里的 run_id 做转义再交给 Rich，run_id 含 markup、链接或控制字符时不再打断整个 TTY 渲染（Issue #2823）。
