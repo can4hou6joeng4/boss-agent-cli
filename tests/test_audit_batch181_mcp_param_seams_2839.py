@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_server import (
 	_CASE_INSENSITIVE_ENUM_TOOLS,
@@ -66,14 +68,13 @@ def test_batch_greet_limit_zero_estimate_is_single_search() -> None:
 	assert _estimated_requests(("batch-greet", "go", "--count", "0")) == 1
 
 
-def test_read_interrupt_recovery_for_batch_greet_read_forms() -> None:
-	for argv in (
-		("batch-greet", "go", "--count", "0"),
-		("batch-greet", "go", "--dry-run"),
-	):
-		recovery = _read_interrupt_recovery(argv)
-		assert "未发出任何招呼" in recovery
-		assert "active=online" not in recovery
+@pytest.mark.parametrize("arguments,constraint", [({"limit": 0}, "零上限"), ({"dry_run": True}, "预览模式")])
+def test_read_interrupt_recovery_for_batch_greet_read_forms(arguments: dict[str, object], constraint: str) -> None:
+	argv = tuple(_build_args("boss_batch_greet", {"query": "go", **arguments}))
+	recovery = _read_interrupt_recovery(argv)
+	assert "未发出任何招呼" in recovery
+	assert constraint in recovery and "按原参数重试" in recovery
+	assert all(option not in recovery for option in ("--count", "limit", "active="))
 
 
 # ── 2. batch-greet 大小写不敏感枚举 ────────────────────────────
