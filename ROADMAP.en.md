@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.211 (2026-11-25): `config get/set/reset` error paths render error codes and recovery guidance in the terminal instead of printing a raw JSON envelope, and sectioned record panels consistently show an escaped command title while JSON envelopes stay unchanged (Issues #2781, #2783).
+
 v3.4.210 (2026-11-25): job detail blanks render as `-`, long descriptions state how much was omitted, and follow-up commands are emitted on one line; login / logout / shortlist writes / favorites sync / digest render readable panels and login failures surface operator guidance; `hr` read and write commands render tables, record panels, and action confirmations, with the `hr resume` sectioned panel showing its command label, while JSON envelopes remain unchanged (Issues #2767, #2768, #2770, #2769, #2774, #2778).
 
 v3.4.209 (2026-11-25): terminal tables wrap long unbroken text instead of truncating Chinese sentences and paths; panels expand lists and objects, keep `0` and `False`, and bound nested fields in sectioned records with a `--json` hint; `preset` / `watch` show only the filters that are set and format list timestamps in local time; `watch run --all` lists each watch's result and new jobs; successful terminal output is redacted with the same rules as the envelope (Issues #2761, #2762, #2763, #2764, #2765).
