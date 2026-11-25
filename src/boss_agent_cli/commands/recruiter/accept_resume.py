@@ -21,6 +21,7 @@ from boss_agent_cli.display import (
 	handle_platform_error_output,
 	platform_error_contract,
 	risk_error_message,
+	render_action_result,
 )
 
 
@@ -42,6 +43,7 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			ctx,
 			command,
 			{**data, "dry_run": True},
+			render=lambda d: render_action_result(d, title="hr accept-resume", next_steps=[]),
 			hints={"operator_actions": ["预览未验证请求状态；明确批准该候选人的这条请求后才可加 --yes"]},
 		)
 		return
@@ -188,10 +190,12 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 				details={**data, "accepted": None, "status": status if type(status) is int else None},
 			)
 			return
+		next_actions = [hint_command(ctx, f"hr chatmsg {friend_id}")]
 		handle_output(
 			ctx,
 			command,
 			{**data, "accepted": True},
-			hints={"next_actions": [hint_command(ctx, f"hr chatmsg {friend_id}")],
+			render=lambda d: render_action_result(d, title="hr accept-resume", next_steps=next_actions),
+			hints={"next_actions": next_actions,
 				"operator_actions": ["同意不代表附件已下载，可在该会话里查看后续附件消息"]},
 		)

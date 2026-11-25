@@ -23,6 +23,7 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	handle_platform_error_output,
+	render_action_result,
 )
 
 
@@ -221,6 +222,7 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			ctx,
 			"recruiter-location",
 			{**base, "dry_run": True},
+			render=lambda d: render_action_result(d, title="hr location", next_steps=[]),
 			hints={
 				"operator_actions": [
 					"预览不会读取会话。核对候选人后才可加 --yes；"
@@ -337,9 +339,11 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 				details=sent,
 			)
 			return
+		next_actions = [hint_command(ctx, f"hr chatmsg {friend_id}")]
 		handle_output(
 			ctx,
 			"recruiter-location",
 			sent,
-			hints={"next_actions": [hint_command(ctx, f"hr chatmsg {friend_id}")]},
+			render=lambda d: render_action_result(d, title="hr location", next_steps=next_actions),
+			hints={"next_actions": next_actions},
 		)

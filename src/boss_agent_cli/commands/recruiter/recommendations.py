@@ -25,6 +25,7 @@ from boss_agent_cli.display import (
 	handle_platform_error_output,
 	risk_error_contract,
 	shell_argument,
+	render_action_result,
 )
 from boss_agent_cli.services.candidate_actions import candidate_action_provably_unsent
 from boss_agent_cli.services.pagination import (
@@ -196,6 +197,7 @@ def greet_cmd(
 		operator_actions = ["核对候选人和话术；明确批准后才可加 --yes 发送"]
 		handle_output(
 			ctx, "recruiter-greet", {**data, "dry_run": True, "message": message},
+			render=lambda d: render_action_result(d, title="hr greet", next_steps=[]),
 			hints={"operator_actions": operator_actions},
 		)
 		return
@@ -276,10 +278,12 @@ def greet_cmd(
 			return
 		# 招呼发出后 Agent 需要回到沟通列表跟进候选人：成功信封原先没有 hints，
 		# 终端也不渲染任何内容，整条链在「已发送」处断掉。
+		next_actions = [
+			hint_command(ctx, "hr chat"),
+			hint_command(ctx, "hr last-messages"),
+		]
 		handle_output(
 			ctx, "recruiter-greet", data,
-			hints={"next_actions": [
-				hint_command(ctx, "hr chat"),
-				hint_command(ctx, "hr last-messages"),
-			]},
+			render=lambda d: render_action_result(d, title="hr greet", next_steps=next_actions),
+			hints={"next_actions": next_actions},
 		)
