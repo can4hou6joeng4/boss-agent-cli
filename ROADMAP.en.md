@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.221 (2026-11-26): the `boss ai local status` terminal output now renders through safe scalar normalization; local AI config and recommended-model fields that are objects, booleans, non-finite numbers or huge integers show `-` instead of raising `ValueError` or leaking Python reprs (Issue #2820).
+
 v3.4.220 (2026-11-26): CLI job detail, `boss status` risk lock and generic key-value panels now render through safe scalar normalization, with wizard job detail, local crawl brief and chat direction aligned; objects, booleans, non-finite numbers and huge integers no longer leak Python reprs or break the panel (Issues #2812, #2815, #2817).
 
 v3.4.219 (2026-11-26): wizard non-list panels now render through safe scalar normalization; objects, booleans, non-finite numbers and huge integers no longer leak Python reprs, nan / inf / True or break the panel (Issue #2809).
