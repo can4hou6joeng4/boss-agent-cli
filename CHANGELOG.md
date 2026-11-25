@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.216] - 2026-11-25
+
 ### Fixed
 
 - 向导 `recruiter_last_messages` / `candidate_chat_history` 复用 CLI 的消息归一化：`messages` 现在分别给出 `friendId / unread / msg_status / last_msg / last_time` 与 `from / type / text / time`，不再让 Agent 在向导与顶层命令之间自行猜测平台字段；原有 `items` / `result` 裸数据保持不变（Issue #2801）。

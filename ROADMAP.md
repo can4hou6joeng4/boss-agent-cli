@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.216（2026-11-25）：向导 `recruiter_last_messages` / `candidate_chat_history` 复用 CLI 的消息归一化，`messages` 与顶层命令同口径；裸 `items` / `result` 保持不变（Issue #2801）。
+
 v3.4.215（2026-11-25）：`boss_agent_run` 的 MCP schema 编码「resume 必须显式 `dry_run=false`」，不再放行必然被映射层拒绝的 `--dry-run --resume` 组合；合法恢复调用不受影响（Issue #2798）。
 
 v3.4.214（2026-11-25）：MCP schema 补齐互斥约束并修正 `not` 语义——`boss_watch_run` 编码 name / all 恰好一个；`boss_crawl_shortlist` 与 name-only / selectors-only 等主要合法用法不再被误拒；`boss_hr_jobs` / `boss_config` / `boss_wizard` 编码 action→参数矩阵，不再出现「schema 合法但命令必失败」（Issue #2792 / #2794 / #2795）。
