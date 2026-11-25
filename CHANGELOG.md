@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.212] - 2026-11-25
+
 ### Fixed
 
 - `BossCliGroup.main` 的 14 条启动期错误路径（Click 用法错误、缓存错误、本地 IO / 配置错误等）改走统一的 TTY 错误渲染：终端不再把 JSON 信封打到 stdout，改为在 stderr 显示错误码、消息、恢复动作与真人指引；显式 `--json` 即使 stdout 是终端也仍输出信封，`--json` / 管道信封与退出码不变（Issue #2786）。
