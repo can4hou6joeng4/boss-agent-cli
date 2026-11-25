@@ -13,7 +13,7 @@ from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.digest import build_digest, render_digest_markdown
 from boss_agent_cli.output import write_document_stdout
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, json_forced, open_file_command, render_message_panel, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, json_forced, open_file_command, render_action_result, render_message_panel, render_simple_list
 from boss_agent_cli.pipeline_state import build_pipeline_items, now_ts_or_clock, select_follow_up_candidates
 
 
@@ -159,11 +159,13 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 		if output_path:
 			target = prepare_output_path(output_path)
 			write_text_atomic(target, md_text)
+			open_cmd = open_file_command(str(target))
 			handle_output(
 				ctx,
 				"digest",
 				{"format": "md", "path": str(target), "bytes": len(md_text.encode("utf-8"))},
-				hints={"next_actions": [open_file_command(str(target))],
+				render=lambda d: render_action_result(d, title="digest", next_steps=[open_cmd]),
+				hints={"next_actions": [open_cmd],
 					"operator_actions": ["用 cat 或邮件客户端直接发送该文件"]},
 			)
 		elif json_forced(ctx):

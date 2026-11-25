@@ -1,6 +1,7 @@
 """把登录失败归类成带双通道 hints 的错误信封载荷（login 命令与 wizard 预检共用）。"""
 
 import re
+from typing import Any
 
 import click
 
@@ -18,7 +19,7 @@ from boss_agent_cli.output import is_local_io_error, redact_sensitive_text
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 
 
-def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object]:
+def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, Any]:
 	"""Return a user-facing, redacted login error envelope payload.
 
 	The login flow intentionally remains unchanged; this helper only turns broad
@@ -44,7 +45,7 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		next_actions: list[str],
 		operator_actions: list[str],
 		recovery: str | None = None,
-	) -> dict[str, object]:
+	) -> dict[str, Any]:
 		# recoverable 以错误码登记表为准：风控码必须报不可恢复，否则 Agent 会把
 		# 「重试登录」当成合法动作反复触发风控（Issue #1390）。未登记的码保留
 		# 登录链路既有的可重试语义。

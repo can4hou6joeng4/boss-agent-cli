@@ -32,7 +32,11 @@ def test_logout_handles_exception(mock_auth_cls):
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "LOGOUT_FAILED"
 	assert parsed["error"]["recoverable"] is True
-	assert "boss logout" in parsed["error"]["recovery_action"]
+	# 恢复文案走 registry 的 ctx 改写：logout 读的是本次运行的数据目录，
+	# 裸 `boss logout` 会清掉默认目录下的登录态（Issue #2769）。
+	recovery = parsed["error"]["recovery_action"]
+	assert recovery.startswith("检查数据目录权限与磁盘空间后重试 boss --data-dir ")
+	assert recovery.endswith(" logout")
 
 
 # ── show 错误分支 ──────────────────────────────────────────

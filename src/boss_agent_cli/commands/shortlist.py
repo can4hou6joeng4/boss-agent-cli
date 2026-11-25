@@ -7,6 +7,7 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	positional_args,
+	render_action_result,
 	render_simple_list,
 )
 from boss_agent_cli.services.text_files import is_utf8_encodable
@@ -152,16 +153,16 @@ def shortlist_add_cmd(
 		)
 	# 回显存储后的行，而不是入参：重复加入同一职位时本地标签/备注会保留下来，
 	# 入参里没给这些字段（空字符串），直接回显会让 Agent 以为资料被清空了。
+	next_actions = [
+		_hint_command(ctx, "shortlist list"),
+		_hint_command(ctx, f"shortlist remove {positional_args(security_id, job_id)}"),
+	]
 	handle_output(
 		ctx,
 		"shortlist",
 		{"action": "add", **stored},
-		hints={
-			"next_actions": [
-				_hint_command(ctx, "shortlist list"),
-				_hint_command(ctx, f"shortlist remove {positional_args(security_id, job_id)}"),
-			]
-		},
+		render=lambda d: render_action_result(d, title="shortlist add", next_steps=next_actions),
+		hints={"next_actions": next_actions},
 	)
 
 
@@ -322,6 +323,9 @@ def shortlist_annotate_cmd(
 			"updated": True,
 			"item": current,
 		},
+		render=lambda d: render_action_result(
+			d, title="shortlist annotate", next_steps=[_hint_command(ctx, "shortlist compare")]
+		),
 		hints={"next_actions": [_hint_command(ctx, "shortlist compare")]},
 	)
 
@@ -415,9 +419,11 @@ def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> N
 		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.remove_shortlist(security_id, job_id)
+	next_actions = [_hint_command(ctx, "shortlist list")]
 	handle_output(
 		ctx,
 		"shortlist",
 		{"action": "remove", "security_id": security_id, "job_id": job_id, "removed": removed},
-		hints={"next_actions": [_hint_command(ctx, "shortlist list")]},
+		render=lambda d: render_action_result(d, title="shortlist remove", next_steps=next_actions),
+		hints={"next_actions": next_actions},
 	)
