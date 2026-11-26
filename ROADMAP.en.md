@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.241 (2026-11-26): post-write authentication failures in the wizard keep the persisted write marker, so `--resume` cannot replay a dispatched write; explicit platform rejections such as rate limiting remain replayable (Issue #2910).
+
 v3.4.240 (2026-11-26): wizard chat-tab errors without explicit unsent evidence no longer bypass the persisted write marker, so `--resume` cannot replay an unknown write; `hr resume` now states when an explicit `--friend-id` was unused on the view path and offers the exchange follow-up (Issues #2904, #2905).
 
 v3.4.239 (2026-11-26): recruiter composite actions distinguish unknown outcomes using write-boundary evidence, so pre-write failures no longer report `ACTION_UNCONFIRMED`; `hr resume --friend-id` hints now mention `--exchange`; `hr chat` / `hr last-messages` pagination totals and wizard pagination evidence count actually extracted rows through the shared implementation (Issues #2898, #2899, #2900).
