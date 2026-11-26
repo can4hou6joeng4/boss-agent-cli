@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.251 (2026-11-27): Fix crawl recovery hints, wizard exchange-type validation and reservation failures, cleanup path checks and privacy preflight, and export terminal stop reasons (Issues #2941, #2943, #2944, #2946, #2947, #2949).
+
 v3.4.250 (2026-11-27): The `chatmsg` detail follow-up now uses `positional_hint()` so special security IDs replay verbatim (Issue #2938).
 
 v3.4.249 (2026-11-26): `boss doctor` no longer suggests login / status follow-ups that a local risk lock will reject; manual unlock steps come first (Issue #2935).
