@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `ai local smoke` 遇到手工写入的空 / 纯空白 `ai_model` 时不再发出请求并把服务商 400 归成可重试 `AI_API_ERROR`：与主 AI 命令同口径在本地报 `CONFIG_INVALID` 并给出补模型名的修复命令（Issue #2862）。
+- `ai local status` 与 `is_configured()` 不再把纯空白的 provider / model 报成已配置：这些值在命令层会被拒绝，状态面板与实际可用性保持一致（Issue #2863）。
+
 ## [3.4.228] - 2026-11-26
 
 ### Fixed

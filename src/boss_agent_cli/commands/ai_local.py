@@ -375,19 +375,32 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 	try:
 		max_tokens = ai_int_setting(config, "ai_max_tokens", 512)
 		model_value = ai_text_setting(config, "ai_model")
-		model = model_value or ""
+		if not model_value or not model_value.strip():
+			# 空 / 纯空白模型名是确定性的本地配置错误（Issue #2862）：status 已按
+			# is_configured() 报 configured=false，这里再发请求只会拿到服务商 400
+			# 并被归成可重试的 AI_API_ERROR。与主命令 _create_ai_service 同口径拦截。
+			raise AIConfigValueError(
+				"AI 配置项 ai_model 未设置或为空",
+				recovery_hint="ai local configure --runtime ollama --model qwen3:14b",
+			)
+		model = model_value
 		base_url = normalize_base_url(base_url)
 	except (AIConfigValueError, ValueError) as exc:
+		# 字符串项带 recovery_hint 时给精确修复命令，数值项沿用通用提示。
+		hint = getattr(exc, "recovery_hint", None)
+		recovery_action = (
+			_hint_command(ctx, hint)
+			if hint
+			else _hint_command(ctx, "ai config --max-tokens 512")
+			+ " 或 " + _hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b")
+		)
 		handle_error_output(
 			ctx,
 			"ai.local.smoke",
 			code="CONFIG_INVALID",
 			message=str(exc),
 			recoverable=True,
-			recovery_action=(
-				_hint_command(ctx, "ai config --max-tokens 512")
-				+ " 或 " + _hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b")
-			),
+			recovery_action=recovery_action,
 		)
 		return
 	service = AIService(
