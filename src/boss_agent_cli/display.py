@@ -1283,8 +1283,8 @@ def render_export_summary(data: dict[str, Any]) -> None:
 		)
 	else:
 		console.print(f"[green]exported[/green] {count} jobs ({fmt})")
-	if data.get("truncated"):
-		console.print("[yellow]注意：扫描到内部页数上限，结果可能不完整[/yellow]")
+	# 截断原因由 export 的 hints.operator_actions 统一渲染；这里再按 truncated
+	# 写死页数上限会误报 active_target_reached，并重复显示警告（Issue #2949）。
 
 
 def render_next_steps(actions: "Sequence[str] | None") -> None:
