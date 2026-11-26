@@ -114,11 +114,21 @@ def collect_favorites_items(
 	*,
 	max_pages: int = MAX_FAVORITES_PAGES,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-	"""安全聚合多页职位收藏，保留原始顺序。
+	"""兼容只需要条目的调用方；完整性信息由 collect_favorites_page 提供。"""
+	items, error_response, _pages_scanned, _truncated = collect_favorites_page(platform, max_pages=max_pages)
+	return items, error_response
 
-	返回 (items, error_response)：
-	- 成功聚合：([cards...], None)
-	- 任一页平台失败：([], raw_response)
+
+def collect_favorites_page(
+	platform: Any,
+	*,
+	max_pages: int = MAX_FAVORITES_PAGES,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, int, bool]:
+	"""安全聚合多页职位收藏，保留原始顺序并报告重复页早停的完整性。
+
+	返回 (items, error_response, pages_scanned, truncated)：
+	- 成功聚合：([cards...], None, 已请求页数, 是否因仍有后续的重复页早停)
+	- 任一页平台失败：([], raw_response, 已请求页数, False)
 	- 成功包络但 zpData / cardList 形状漂移：抛 FavoritesResponseInvalid
 
 	v1 固定 isActive=true；平台仍可能返回 jobValidStatus=2 的失效职位，调用方必须按字段判断。
@@ -129,11 +139,14 @@ def collect_favorites_items(
 	page = 1
 	seen_signatures: set[tuple[str, ...]] = set()
 	seen_job_ids: set[str] = set()
+	pages_scanned = 0
+	truncated = False
 
 	for _ in range(max_pages):
 		resp = platform.job_favorites(page=page, tag=FAVORITES_TAG, is_active=True)
+		pages_scanned += 1
 		if not platform.is_success(resp):
-			return [], resp
+			return [], resp, pages_scanned, False
 
 		platform_data = platform.unwrap_data(resp)
 		if not isinstance(platform_data, dict):
@@ -162,6 +175,8 @@ def collect_favorites_items(
 		if any(identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
+				# 与沟通聚合同口径：保留早停，但平台明确有后续时只能报告前缀。
+				truncated = platform_data.get("hasMore") is True
 				break
 			seen_signatures.add(signature)
 		# 整页签名只挡「整页重复」：翻页期间收藏列表前移时，上一页末尾的卡片会在
@@ -178,7 +193,7 @@ def collect_favorites_items(
 			f"职位收藏超过安全分页上限 {max_pages} 页，未写入不完整结果"
 		)
 
-	return items, None
+	return items, None, pages_scanned, truncated
 
 
 @click.group("favorites")
@@ -312,7 +327,7 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
 		try:
-			cards, error_response = collect_favorites_items(platform)
+			cards, error_response, pages_scanned, truncated = collect_favorites_page(platform)
 		except NotImplementedError as exc:
 			handle_not_supported(ctx, "favorites-sync", exc, fallback_message="当前平台不支持职位收藏")
 			return
@@ -353,6 +368,7 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			result = cache.add_shortlist_batch(items, source="favorites")
 
+	warnings = ["收藏列表重复页仍声明有后续，已提前停止；本次同步不完整，计数仅覆盖已扫描前缀。"] if truncated else []
 	handle_output(
 		ctx, "favorites-sync",
 		{
@@ -362,6 +378,8 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 			"active_count": status_counts[JOB_STATUS_ACTIVE],
 			"inactive_count": status_counts[JOB_STATUS_INACTIVE],
 			"unknown_count": status_counts[JOB_STATUS_UNKNOWN],
+			"pages_scanned": pages_scanned,
+			"truncated": truncated,
 		},
 		render=lambda d: render_action_result(
 			d,
@@ -378,5 +396,7 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 				_hint_command(ctx, "apply <security_id> <job_id>"),
 				_hint_command(ctx, "greet <security_id> <job_id>"),
 			],
+			"warnings": warnings,
+			"operator_actions": warnings,
 		},
 	)

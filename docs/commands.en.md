@@ -231,6 +231,8 @@ The `hints.next_actions` from `favorites` and `shortlist` preserve the original 
 
 `history` / `favorites list` follow the same `pagination.has_more` contract as `recommend` / `chat`: `true` / `false` only when the platform returns a boolean `hasMore`; a missing or ambiguous value is `null` with `has_more_source=unknown`, never defaulted to `false`, and no next-page action is suggested. `total` is always the number of rows on this page (`total_kind=returned_page_count`). In a successful `favorites` envelope only `null` / a missing `cardList` is treated as an empty list; falsy non-lists such as `{}` / `""` / `0`, and pages whose elements are all non-objects, are reported as a retryable `NETWORK_ERROR` instead of being disguised as "no favorites" or as the page-limit error.
 
+For `favorites sync`, `data.pages_scanned` counts requested pages, and `data.truncated` marks an early stop when a repeated page still explicitly reports more pages. Valid jobs already imported are kept, but the sync is incomplete and its counts cover only the scanned prefix; envelope `hints.warnings` and terminal operator guidance explain the repeated-page cause. A normal last page, or a repeated page without an explicit remaining-page signal, reports `truncated=false`. Reaching the safety page limit still returns `RESULT_LIMIT_REACHED` without writing incomplete results.
+
 ## Recruiter mode
 
 `boss hr whoami` reads `getUserInfo`. `identity` 1 means the current login is on the recruiter side and `ready` is true. `profile_recruit` echoes the account `recruit` flag and is not the decision. A dual-identity account sitting on the candidate side returns `ready: false`; switch to recruiting on the official site and check again. This command does not switch identity.

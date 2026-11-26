@@ -310,6 +310,8 @@ def test_favorites_sync_imports_only_explicit_active_jobs(mock_auth_cls, mock_pl
 		"active_count": 1,
 		"inactive_count": 1,
 		"unknown_count": 2,
+		"pages_scanned": 1,
+		"truncated": False,
 	}
 	items = _shortlist_items(tmp_path)
 	assert [item["job_id"] for item in items] == ["job_active"]
@@ -501,6 +503,8 @@ def test_favorites_sync_null_identifiers_are_skipped(mock_auth_cls, mock_platfor
 		"active_count": 2,
 		"inactive_count": 0,
 		"unknown_count": 0,
+		"pages_scanned": 1,
+		"truncated": False,
 	}
 	assert _shortlist_items(tmp_path) == []
 
@@ -563,7 +567,7 @@ def test_collect_favorites_rejects_response_shape_drift(zp_data):
 	assert "职位收藏响应格式无效" in str(excinfo.value)
 
 
-@patch("boss_agent_cli.commands.favorites.collect_favorites_items")
+@patch("boss_agent_cli.commands.favorites.collect_favorites_page")
 @patch("boss_agent_cli.commands.favorites.get_platform_instance")
 @patch("boss_agent_cli.commands.favorites.AuthManager")
 def test_favorites_sync_response_shape_drift_returns_network_error(
@@ -585,7 +589,7 @@ def test_favorites_sync_response_shape_drift_returns_network_error(
 	assert _shortlist_items(tmp_path) == []
 
 
-@patch("boss_agent_cli.commands.favorites.collect_favorites_items")
+@patch("boss_agent_cli.commands.favorites.collect_favorites_page")
 @patch("boss_agent_cli.commands.favorites.get_platform_instance")
 @patch("boss_agent_cli.commands.favorites.AuthManager")
 def test_favorites_sync_page_limit_returns_error(mock_auth_cls, mock_platform_cls, mock_collect, tmp_path):

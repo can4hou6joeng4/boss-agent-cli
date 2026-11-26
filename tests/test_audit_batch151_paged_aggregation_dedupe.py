@@ -448,6 +448,8 @@ def test_favorites_sync_counts_each_job_once(tmp_path: Path) -> None:
 		"active_count": 5,
 		"inactive_count": 0,
 		"unknown_count": 0,
+		"pages_scanned": 2,
+		"truncated": False,
 	}
 	assert sorted(row["job_id"] for row in _shortlist_rows(tmp_path)) == [f"job_{job}" for job in (1, 2, 3, 4, 5)]
 
