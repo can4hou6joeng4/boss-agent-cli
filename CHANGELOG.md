@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.231] - 2026-11-26
+
 ### Fixed
 
 - CDP 探测只接受 `ws://` / `wss://` 绝对地址：`webSocketDebuggerUrl` 是对象、布尔值或相对地址时按不可用处理，`doctor` 不再把它报成可用通道，也不再把对象写进检查 detail（Issue #2869）。
