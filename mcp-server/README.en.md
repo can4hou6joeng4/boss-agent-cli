@@ -49,11 +49,11 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **80 implemented tools**.
+The current MCP server exposes **83 implemented tools**.
 
 ### Capability scope and recovery hints
 
-Call `boss_schema` with `{"format":"mcp-tools"}` to inspect tool schemas; the `native` format describes the full CLI command surface and `wizard_catalog`. CLI subcommands and MCP tools do not correspond one for one: local resumes currently have `boss_resume_list` / `boss_resume_show`, while `resume init` / `resume delete` and `favorites sync` require the CLI.
+Call `boss_schema` with `{"format":"mcp-tools"}` to inspect tool schemas; the `native` format describes the full CLI command surface and `wizard_catalog`. CLI subcommands and MCP tools do not correspond one for one: local resumes expose `boss_resume_list` / `boss_resume_show` / `boss_resume_init` / `boss_resume_delete`, and job favorites expose `boss_favorites_list` / `boss_favorites_sync`; other maintenance steps still require the CLI. `boss_resume_delete` removes a local resume file irreversibly; `boss_favorites_sync` reads the platform and writes the local shortlist.
 
 The envelope's `hints.next_actions` contains follow-up CLI commands, which cannot be called directly as MCP tool names. A host using only MCP should look for an equivalent tool or a registered `boss_wizard` goal first; when none exists, explain the required CLI step without claiming it has completed. `hints.operator_actions` remains for human instructions such as scanning a QR code or operating a browser.
 

@@ -298,9 +298,26 @@ _PRESET_READ_INTERRUPT_RECOVERY = (
 _DRY_RUN_INTERRUPT_RECOVERY = "演练命令已中断，不产生平台写入；可直接重试或降低 limit"
 #: 只读保证只适用于原参数：未开启预览时，增大零上限会变成真实写入（Issue #2847）。
 _BATCH_GREET_READ_INTERRUPT_RECOVERY = "只读调用已中断，未发出任何招呼；如仍需结果，请保留原来的预览模式或零上限，按原参数重试"
+#: 本地维护工具只写本机文件：中断后不能按通用写文案让 Agent 去核对平台结果，
+#: 那会把恢复引向不存在的平台写入（Issue #2975）。
+_LOCAL_RESUME_INIT_INTERRUPT_RECOVERY = (
+	"初始化已中断；本地简历文件可能已写入。先运行 boss_resume_list 确认名称，再决定是否重试；不产生平台写入"
+)
+_LOCAL_RESUME_DELETE_INTERRUPT_RECOVERY = (
+	"删除已中断；本机删除可能已生效。先运行 boss_resume_list 确认，再决定是否重试；不产生平台写入"
+)
+_LOCAL_FAVORITES_SYNC_INTERRUPT_RECOVERY = (
+	"同步已中断；本地候选池可能已部分更新，重新执行会按当前收藏继续 upsert；平台侧只读"
+)
 
 
 def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
+	if args[:2] == ("resume", "init"):
+		return _LOCAL_RESUME_INIT_INTERRUPT_RECOVERY
+	if args[:2] == ("resume", "delete"):
+		return _LOCAL_RESUME_DELETE_INTERRUPT_RECOVERY
+	if args[:2] == ("favorites", "sync"):
+		return _LOCAL_FAVORITES_SYNC_INTERRUPT_RECOVERY
 	if args and args[0] == "wizard" and _option_value(args, "--stop") is not None:
 		return "先用 wizard --status 查询同一 run_id 的当前状态；确认仍需停止后再发出 stop，不要自动重试"
 	return _WRITE_INTERRUPT_RECOVERY
@@ -427,6 +444,11 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 	返回 None 表示这条命令不做参数估算（保持默认 120s 超时）。
 	"""
 	command = args[0]
+	if command == "favorites" and len(args) > 1 and args[1] == "sync":
+		# 收藏同步逐页拉取且没有可拆分的分页参数：只按默认 120s 估算，收藏较多的
+		# 账号必然在同步中途被掐断（本地可能已部分 upsert）。直接给满估算封顶，
+		# 超时仍受 _MAX_CLI_TIMEOUT_SECONDS 约束。
+		return _MAX_ESTIMATED_REQUESTS
 	if command == "batch-greet":
 		# 只看 ``--`` 之前的选项：关键词恰好是 "--dry-run" 时不能把预算当成预览
 		# （Issue #2176）。
