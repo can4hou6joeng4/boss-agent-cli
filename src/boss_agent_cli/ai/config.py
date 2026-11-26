@@ -23,8 +23,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
 from boss_agent_cli.services.private_files import (
 	DIRECTORY_MODE,
-	chmod_best_effort,
 	load_or_create_private_salt,
+	tighten_private_directory,
 	tighten_private_file,
 	write_private_bytes,
 )
@@ -241,7 +241,7 @@ class AIConfigStore:
 		# 口令：同机其他用户能读密文与 salt 就能解密。ai/ 与 auth/ 按 0700 创建，
 		# 历史安装的宽松权限在打开时一并收紧（与 AuthManager 的 TokenStore 同口径）。
 		self._ai_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
-		chmod_best_effort(self._ai_dir, DIRECTORY_MODE)
+		tighten_private_directory(self._ai_dir)
 		self._key_path = self._ai_dir / "api_key.enc"
 		self._config_path = self._ai_dir / "config.json"
 		self._auth_dir = data_dir / "auth"

@@ -67,6 +67,9 @@ def tighten_private_directory(path: Path) -> None:
 
 	只收紧**已存在且可写**的目录：
 
+	- 符号链接不跟随：``stat()`` 会拿到链接目标的模式，``chmod`` 等于修改
+	  数据目录之外的目录（Issue #2892）；与 ``tighten_private_file`` 同口径
+	  改用 ``lstat``，只处理普通目录。
 	- 世界可写的共享位置（``/tmp`` 这类 1777）不是本程序的数据目录，收紧会
 	  破坏同机其他进程；
 	- 只读目录（如用户手动 ``chmod 0500`` 的数据目录）是显式选择，收紧会
@@ -75,10 +78,10 @@ def tighten_private_directory(path: Path) -> None:
 	新建目录由调用方用 ``mkdir(mode=DIRECTORY_MODE)`` 直接创建。
 	"""
 	try:
-		mode = path.stat().st_mode
+		mode = path.lstat().st_mode
 	except (OSError, ValueError):
 		return
-	if mode & 0o002 or not mode & 0o200:
+	if not stat.S_ISDIR(mode) or mode & 0o002 or not mode & 0o200:
 		return
 	chmod_best_effort(path, DIRECTORY_MODE)
 
@@ -184,7 +187,7 @@ def load_or_create_private_salt(auth_dir: Path) -> bytes:
 		# 内嵌 NUL 等非法目录名在 mkdir 处只抛裸 ValueError；补上 filename
 		# 后命令层按本地路径错误报，而不是未分类异常（Issue #2374）。
 		raise OSError(errno.EINVAL, str(exc), str(auth_dir)) from exc
-	chmod_best_effort(auth_dir, DIRECTORY_MODE)
+	tighten_private_directory(auth_dir)
 	salt_path = auth_dir / "salt"
 	with exclusive_file_lock(auth_dir / "refresh.lock") as acquired:
 		if acquired:
@@ -213,7 +216,22 @@ def write_private_bytes(path: Path, data: bytes) -> None:
 	umask 的 0644 权限。写入器负责检查目标类型，避免替换已有的特殊文件。
 	"""
 	refuse_non_regular_target(path)
-	path.parent.mkdir(parents=True, exist_ok=True)
+	# mkdir(mode=...) 只作用于最末一级，默认 umask 下中间层仍是 0755；先记下
+	# 本次真正新建的目录，创建完逐层收紧，不动调用方已有的目录（Issue #2892）。
+	created_dirs: list[Path] = []
+	cursor = path.parent
+	while True:
+		try:
+			cursor.lstat()
+			break
+		except FileNotFoundError:
+			created_dirs.append(cursor)
+			if cursor.parent == cursor:
+				break
+			cursor = cursor.parent
+	path.parent.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+	for directory in reversed(created_dirs):
+		tighten_private_directory(directory)
 	temporary: Path | None = None
 	try:
 		# 临时名只用截断后的目标名（最多 32 字符）：把完整目标名拼进前缀时，
