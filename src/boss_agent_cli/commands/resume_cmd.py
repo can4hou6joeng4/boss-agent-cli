@@ -24,7 +24,13 @@ from boss_agent_cli.display import (
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
-from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore, _portable_filename
+from boss_agent_cli.resume.store import (
+	ResumeAlreadyExistsError,
+	ResumeImportError,
+	ResumeStore,
+	_portable_filename,
+	_resume_filename_too_long,
+)
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.json_files import path_mode
 from boss_agent_cli.services.output_path import prepare_output_path
@@ -76,15 +82,28 @@ def _reject_unencodable_job_fields(ctx: click.Context, fields: tuple[tuple[str, 
 
 
 def _require_resume_name(ctx: click.Context, name: str) -> bool:
-	"""空简历名按参数错误拒绝。
+	"""空或超出文件名上限的简历名按参数错误拒绝。
 
 	空字符串是合法 argv，但拿它查 store 只会得到「简历 '' 不存在」：错误码是
 	RESUME_NOT_FOUND（不可恢复、看不出是漏填了名字），而同一类输入在
 	`resume init --name ""` / `resume clone <源> ""` 里都是 INVALID_PARAM。
+	拼成 ``<name>.json`` 后超过文件系统文件名上限的名称同样不可能有对应文件：
+	直接访问只会得到 ENAMETOOLONG，再被误报成 RESUME_FILE_INVALID 或
+	LOCAL_IO_ERROR（Issue #2959）。
 	"""
-	if name.strip():
-		return True
 	list_cmd = _hint_command(ctx, "resume list")
+	if name.strip():
+		if not _resume_filename_too_long(name):
+			return True
+		handle_error_output(
+			ctx,
+			"resume",
+			code="INVALID_PARAM",
+			message="简历名称过长：拼成 .json 后超过文件系统文件名上限，无法保存或读取",
+			recovery_action=f"缩短简历名称后重试；用 {list_cmd} 查看已有简历",
+			hints={"next_actions": [list_cmd]},
+		)
+		return False
 	handle_error_output(
 		ctx,
 		"resume",
@@ -718,6 +737,18 @@ def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 			code="INVALID_PARAM",
 			message="新简历名称不能为空",
 			recovery_action=f"补上新简历名称后重试，例如 {_hint_command(ctx, 'resume clone <源简历> <新名称>')}",
+			hints={"next_actions": [_hint_command(ctx, "resume list")]},
+		)
+		return
+	# 目标名同样要先于任何路径访问检查：超过文件名上限的名称不可能落盘，
+	# 否则 ENAMETOOLONG 会被兜成本地磁盘错误（Issue #2959）。
+	if _resume_filename_too_long(new_name):
+		handle_error_output(
+			ctx,
+			"resume",
+			code="INVALID_PARAM",
+			message="新简历名称过长：拼成 .json 后超过文件系统文件名上限，无法保存或读取",
+			recovery_action=f"缩短新简历名称后重试；用 {_hint_command(ctx, 'resume list')} 查看已有简历",
 			hints={"next_actions": [_hint_command(ctx, "resume list")]},
 		)
 		return
