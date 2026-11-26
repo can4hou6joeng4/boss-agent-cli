@@ -74,6 +74,30 @@ def _portable_filename(name: str) -> str:
 	return "".join("_" if _is_windows_illegal_filename_char(char) else char for char in _safe_filename(name))
 
 
+#: 简历文件名的固定后缀与常见文件系统的文件名长度上限（NAME_MAX）。
+_RESUME_FILENAME_SUFFIX = ".json"
+_RESUME_FILENAME_MAX_UNITS = 255
+
+
+def _resume_filename_too_long(name: str) -> bool:
+	"""名称拼成 ``<name>.json`` 后是否超过本机文件系统文件名上限。
+
+	超过上限的名称在任何本地简历目录里都不可能有对应文件：直接访问会让
+	``lstat`` / ``open`` 抛 ENAMETOOLONG，再被误报成「简历损坏」或「本地磁盘
+	错误」（Issue #2959）。POSIX 按 UTF-8 字节计，Windows 按 UTF-16 单元计；
+	含无法编码的孤立代理项时交给其他名称检查，不在这里判长度。
+	"""
+	try:
+		filename = _portable_filename(name)
+		if os.name == "nt":
+			units = len(filename.encode("utf-16-le")) // 2
+		else:
+			units = len(os.fsencode(filename))
+	except (UnicodeEncodeError, ValueError):
+		return False
+	return units + len(_RESUME_FILENAME_SUFFIX) > _RESUME_FILENAME_MAX_UNITS
+
+
 def _unsafe_resume_name_reason(name: str) -> str | None:
 	"""名称不能安全落盘时返回给用户看的原因（Issue #1507）。
 
@@ -88,6 +112,8 @@ def _unsafe_resume_name_reason(name: str) -> str | None:
 		return "name 不能只由点号组成"
 	if _is_windows_device_name(name):
 		return f"name '{name}' 是 Windows 保留设备名，请换一个名称"
+	if _resume_filename_too_long(name):
+		return "name 过长（拼成 <name>.json 后超过文件系统文件名上限）"
 	try:
 		name.encode("utf-8")
 	except UnicodeEncodeError:
