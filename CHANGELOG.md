@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [3.4.253] - 2026-11-27
+
+### Changed
+
+- MCP 双语文档明确工具目录与 CLI 子命令的覆盖关系、`next_actions` 的 CLI 契约，并补充通过 `boss_wizard` 恢复已有采集任务的参数示例，区分采集任务与向导 workflow 的 `run_id`（Issue #2975，文档部分）。
+
 ### Fixed
 
 - `boss_crawl_shortlist.selectors` 与 `boss_wizard.requested_steps` 的 MCP schema 补齐非空字符串和元素唯一性约束，入口在启动 CLI 子进程前按 `INVALID_PARAM` 拒绝空串或重复项；类型错误优先报告，大数组的错误条数保持有界（Issue #2976）。
