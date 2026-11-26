@@ -12,6 +12,7 @@
 - `resume` 对拼成 `<name>.json` 后超过文件系统文件名上限的名称按 `INVALID_PARAM` 拒绝，不再把 ENAMETOOLONG 误报成简历损坏或本地磁盘错误；`resume import` 的 JSON `name` 同样提示名称过长（Issue #2959）。
 - `shortlist add` 省略 `--source` 时不再用默认 `manual` 覆盖既有来源：新记录仍记为 `manual`，重复加入保留原来源，显式传入才覆盖；收藏 / 采集导入后的轮换标识刷新不再因一次手工重加而失效（Issue #2960）。
 - `chatmsg` / `chat-summary` / 招聘者聊天与向导的 `candidate_chat_history` / `recruiter_chat_history` 共用同一消息容器解析：`messages` 为空时依次回退 `historyMsgList` / `messageList`，同一响应不再出现 CLI 读到 0 条、向导读到 1 条（Issue #2962）。
+- `batch-greet` 在平台明确拒绝（限流 / 重试耗尽）或请求可证明未发出、但本地预约释放失败时改报不可重试的 `LOCAL_STATE_WRITE_FAILED`，不再误报 `ACTION_UNCONFIRMED` 或 `INTERNAL_ERROR`，并停止剩余候选人（Issue #2964）。
 
 ## [3.4.251] - 2026-11-27
 

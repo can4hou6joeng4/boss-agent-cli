@@ -478,6 +478,22 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			stop_error: Exception | None = None
 			unconfirmed: dict[str, Any] | None = None
 			cache_write_failed = False
+			# 平台未接受 / 请求未发出，但本地 pending 预约没删掉：不能用「结果未知」
+			# 收尾，否则下一次执行会撞上残留预约（Issue #2964）。
+			release_error: Exception | None = None
+			release_failed_item: JobItem | None = None
+
+			def _release_or_stop(item: JobItem) -> bool:
+				"""释放当前候选人的预约；失败时让批次按本地状态错误收尾。"""
+				nonlocal release_error, release_failed_item
+				try:
+					release_candidate_action(cache, item.job_id, "greet", account=account)
+				except Exception as exc:
+					release_error = exc
+					release_failed_item = item
+					return False
+				return True
+
 			# 尚未落到 results 的候选人：SIGINT 落在请求或重试等待中时，它的最后一次
 			# 招呼可能已经发出，不能当成未执行（Issue #1491）。
 			current_item: JobItem | None = None
@@ -571,7 +587,6 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 									)
 									break
 								if error_code in {"RATE_LIMITED", "GREET_LIMIT"}:
-									release_candidate_action(cache, item.job_id, "greet", account=account)
 									# 触发停批的候选人同样要进结果：既不能从 greeted/failed
 									# 里消失，也不能让限流批次以 ok:true 收尾（Issue #2003）。
 									results.append({
@@ -583,6 +598,11 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										"error": error_code,
 										"details": cli_error_details(resp),
 									})
+									if not _release_or_stop(item):
+										# 平台已明确拒绝，请求没有产生记录；释放失败只是本地
+										# 状态问题，不能按「结果未知」收尾（Issue #2964）。
+										stopped_reason = "LOCAL_STATE_WRITE_FAILED"
+										break
 									stopped_reason = error_code
 									break
 								error_msg = error_code
@@ -618,8 +638,11 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
 								# request_sent=False / 通道不可用 / 派发前失败可以证明未发出，撤销
 								# 预约；风控与超时可能已产生写入，保留 pending 按结果未知处理。
-								if candidate_action_provably_unsent(e):
-									release_candidate_action(cache, item.job_id, "greet", account=account)
+								if candidate_action_provably_unsent(e) and not _release_or_stop(item):
+									# 请求可以证明未发出，但预约没删掉：下一次执行会被
+									# pending 挡住，报本地状态错误而不是原始停止原因。
+									stopped_reason = "LOCAL_STATE_WRITE_FAILED"
+									break
 								stop_error = e
 								stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
 								logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
@@ -639,7 +662,6 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								break
 							stop_code = getattr(e, "code", None)
 							if stop_code in ("RATE_LIMITED", "GREET_LIMIT"):
-								release_candidate_action(cache, item.job_id, "greet", account=account)
 								results.append({
 									"security_id": item.security_id,
 									"job_id": item.job_id,
@@ -648,6 +670,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 									"status": "failed",
 									"error": str(stop_code),
 								})
+								if not _release_or_stop(item):
+									stopped_reason = "LOCAL_STATE_WRITE_FAILED"
+									break
 								stopped_reason = str(stop_code)
 								break
 
@@ -656,7 +681,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 							logger.warning(f"打招呼失败，重试中: {item.title}")
 							time.sleep(random.uniform(1.0, 2.0))
 							continue
-						release_candidate_action(cache, item.job_id, "greet", account=account)
+						release_error_after_retry = not _release_or_stop(item)
 						results.append({
 							"security_id": item.security_id,
 							"job_id": item.job_id,
@@ -665,6 +690,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 							"status": "failed",
 							"error": error_msg,
 						})
+						if release_error_after_retry:
+							stopped_reason = "LOCAL_STATE_WRITE_FAILED"
+							break
 
 					current_item = None
 					if stopped_reason:
@@ -754,6 +782,35 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 						"operator_actions": [
 							"先在 BOSS 直聘官方页面核对已发送的招呼；不要自动重发本次批次",
 							f"确认磁盘空间与缓存目录权限后，再用 {_hint_command(ctx, 'chat')} 核对会话",
+						]
+					},
+				)
+				return
+
+			if release_error is not None:
+				# 平台未接受本次招呼（或请求可证明未发出），但本地预约没有释放：
+				# 报不可重试的本地状态错误，而不是结果未知。否则 Agent 会按「结果
+				# 可能已生效」去核对，照指引重试又会撞上残留的 pending（Issue #2964）。
+				data["stopped_reason"] = "LOCAL_STATE_WRITE_FAILED"
+				handle_error_output(
+					ctx, "batch-greet",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="本次招呼未产生平台记录，但本地预约未释放；已停止剩余候选人",
+					recoverable=False,
+					recovery_action="先确认数据目录可写（磁盘空间、缓存目录权限），再对未完成的候选人重新执行批量打招呼命令",
+					details={
+						**data,
+						"request_sent": False,
+						"recorded": False,
+						"replay_safe": False,
+						"unreleased": (
+							release_failed_item.to_dict() if release_failed_item is not None else None
+						),
+						"release_error": type(release_error).__name__,
+					},
+					hints={
+						"operator_actions": [
+							"检查磁盘空间与 ~/.boss-agent 目录权限；本次招呼未被平台接受，修好后只对未完成的候选人重新执行",
 						]
 					},
 				)
