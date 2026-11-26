@@ -409,4 +409,12 @@ class AIConfigStore:
 		config = self.load_config()
 		provider = config.get("ai_provider")
 		model = config.get("ai_model")
+		# 空白串是真值：只按 bool 判断会把纯空白 provider / model 报成已配置，
+		# 而命令层（_create_ai_service / ai local smoke）都会在发请求前拒绝它
+		# （Issue #2863）。类型漂移仍交给命令层的 ai_text_setting 报具体
+		# CONFIG_INVALID，避免在这里被笼统归成 AI_NOT_CONFIGURED。
+		if isinstance(provider, str) and not provider.strip():
+			return False
+		if isinstance(model, str) and not model.strip():
+			return False
 		return bool(all([provider, model]) and self.api_key_is_set() and self.get_base_url())
