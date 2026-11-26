@@ -125,6 +125,11 @@ def prepare_output_path(path: str | os.PathLike[str]) -> Path:
 			f"-o / --output 的家目录写法无法展开（{exc}）：{os.fspath(path)!r}；"
 			"请改用绝对路径或 ~/ 开头的当前用户路径"
 		) from exc
+	# 与 inspect_output_path 共用同一 UTF-8 守卫：macOS 上非 UTF-8 文件名会
+	# 在 os.replace 阶段抛 EILSEQ，届时父目录已创建（Issue #2892）。参数错误
+	# 必须在任何副作用之前暴露，并带上 filename 供命令层归类本地 IO 错误。
+	if _FS_REQUIRES_UTF8_NAMES and not _utf8_representable(target):
+		raise OSError(errno.EINVAL, "文件名不是合法 UTF-8，无法写入", str(target))
 	try:
 		target.parent.mkdir(parents=True, exist_ok=True)
 	except ValueError as exc:
