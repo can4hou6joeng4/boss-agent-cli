@@ -203,7 +203,14 @@ def import_crawl_shortlist(
 		# "None" 的记录（Issue #2408）。与展示字段同口径按缺失处理。
 		security_id = safe_text(item.get("security_id") or "")
 		job_id = safe_text(item.get("job_id") or "")
-		if not security_id or not job_id or not is_utf8_encodable(security_id) or not is_utf8_encodable(job_id):
+		# 纯空白主键与 shortlist add / 收藏批量导入同口径按缺失处理：它们无法
+		# 用于后续请求，写入后会占住唯一键，挡住同一职位的有效记录（Issue #2984）。
+		if (
+			not security_id.strip()
+			or not job_id.strip()
+			or not is_utf8_encodable(security_id)
+			or not is_utf8_encodable(job_id)
+		):
 			skipped_count += 1
 			continue
 		if job_id in known_job_ids:
