@@ -396,11 +396,15 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	worst = max((status_rank[item["status"]] for item in checks), default=0)
 	summary = "healthy" if worst == 0 else ("degraded" if worst == 1 else "broken")
 
+	# 运行前已存在的风险锁与本次探测命中风控一样：不能再给出会触发平台请求
+	# 或必然被本地锁拒绝的自动后继命令（Issue #2935）。
+	risk_locked = bool(risk_lock["locked"])
 	next_actions = []
 	operator_actions = []
 	login_command = _doctor_command(ctx, "login")
 	if not has_token:
-		next_actions.append(login_command)
+		if not risk_locked:
+			next_actions.append(login_command)
 		operator_actions.append(f"尚未建立登录态；执行 {login_command}，按提示在官方页面完成登录")
 	else:
 		auth_quality = next((item for item in checks if item["name"] == "auth_token_quality"), None)
@@ -408,14 +412,14 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 			operator_actions.append(
 				f"本地登录态损坏；确认需要重建后，先执行 {_doctor_command(ctx, 'logout')}，再执行 {login_command}"
 			)
-		elif live_probe_risk is None:
+		elif live_probe_risk is None and not risk_locked:
 			next_actions.append(_doctor_command(ctx, "status", "--live"))
 			operator_actions.append("可选择执行一次 status --live，只读验证当前登录态；不是诊断时自动发起的请求")
 			if auth_quality and auth_quality["status"] == "warn":
 				operator_actions.append(
 					f"缺少 {config.secondary_token_label}；若状态异常，先在官方页面确认，再决定是否执行 {login_command} 重建登录态"
 				)
-	if not cdp_ok and live_probe_risk is None:
+	if not cdp_ok and live_probe_risk is None and not risk_locked:
 		next_actions.append(_doctor_command(ctx, "doctor", cdp_url=cdp_url or DEFAULT_CDP_URL))
 		operator_actions.append("如需 CDP，请先确认目标浏览器及调试端口已就绪，再重新诊断；不要反复重试")
 	if live_probe_risk is not None:
@@ -426,8 +430,13 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		# 报告同样要显示这些停止指引。
 		operator_actions.extend((risk_hints or {}).get("operator_actions") or [])
 		operator_actions.append(f"在线只读探测命中平台风控（{live_probe_risk}）：{recovery_action}")
-	if risk_lock["locked"]:
-		operator_actions.extend(unlock_operator_actions(clean_lock_command))
+	if risk_locked:
+		# 真人解锁步骤必须排在 login / status 等说明之前；风控契约已经给过
+		# 同样的步骤时去重，避免 TTY 重复输出（Issue #2935）。
+		unlock_actions = unlock_operator_actions(clean_lock_command)
+		operator_actions = list(unlock_actions) + [
+			action for action in operator_actions if action not in unlock_actions
+		]
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
 		operator_actions.append(f"需要提取本地登录态时，先在本机浏览器的 {config.site_host} 官方页面完成登录")
 	if source_root is not None:
