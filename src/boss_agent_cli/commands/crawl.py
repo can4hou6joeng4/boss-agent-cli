@@ -80,7 +80,7 @@ def _crawl_payload_for_ctx(ctx: click.Context, payload: dict[str, Any]) -> dict[
 # 这两步都读本地状态，必须带上当前数据目录，否则会在默认目录里找同名任务。
 def _run_not_found_hints(ctx: click.Context) -> dict[str, list[str]]:
 	return {"next_actions": [
-		boss_command_for_ctx(ctx, "crawl start <query>", include_data_dir=True),
+		boss_command_for_ctx(ctx, "crawl start <query> --city <城市>", include_data_dir=True),
 		boss_command_for_ctx(ctx, "crawl status <run_id>", include_data_dir=True),
 	]}
 
@@ -357,7 +357,7 @@ def _report_corrupt_run(ctx: click.Context, command: str, run_id: str | None, ex
 	异常里的 ``record_id`` 可能是 job_key，拼进 `crawl status` 只会得到
 	``CRAWL_RUN_NOT_FOUND``（Issue #1773）。
 	"""
-	next_actions = [boss_command_for_ctx(ctx, "crawl start <关键词>", include_data_dir=True)]
+	next_actions = [boss_command_for_ctx(ctx, "crawl start <关键词> --city <城市>", include_data_dir=True)]
 	if run_id is not None:
 		next_actions.append(boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True))
 	handle_error_output(

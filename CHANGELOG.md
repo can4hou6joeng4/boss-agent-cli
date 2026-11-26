@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `crawl status` 在任务不存在或断点损坏时给出的重建提示补齐必填 `--city`，Agent 可直接回放（Issue #2941）。
+
 ## [3.4.250] - 2026-11-27
 
 ### Fixed
