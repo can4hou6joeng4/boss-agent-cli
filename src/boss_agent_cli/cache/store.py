@@ -2329,8 +2329,14 @@ class CacheStore:
 				job_id = str(item.get("job_id") or "")
 				lid_value = item.get("lid")
 				lid = lid_value if isinstance(lid_value, str) and is_utf8_encodable(lid_value) else ""
+				# 空白主键与 CLI 的缺失标识同口径；不能用空白值刷新既有访问标识。
 				# 转义标识可能与已有合法标识相同，导致更新错误的条目。
-				if not security_id or not job_id or not is_utf8_encodable(security_id) or not is_utf8_encodable(job_id):
+				if (
+					not security_id.strip()
+					or not job_id.strip()
+					or not is_utf8_encodable(security_id)
+					or not is_utf8_encodable(job_id)
+				):
 					skipped_count += 1
 					continue
 				if job_id in existing_by_job_id:

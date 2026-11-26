@@ -229,6 +229,8 @@ MCP 的 `boss_crawl_shortlist.selectors` 与 `boss_wizard.requested_steps` 若�
 
 `history` / `favorites list` 的 `pagination.has_more` 与 `recommend` / `chat` 同一口径：只有平台返回布尔 `hasMore` 时才是 `true` / `false`；缺失或类型不明确时为 `null`、`has_more_source=unknown`，不会默认成 `false`，也不提示下一页。`total` 始终是本页返回条数（`total_kind=returned_page_count`）。`favorites` 的成功包络里 `cardList` 只有 `null` / 缺失才按空列表处理；`{}` / `""` / `0` 这类假值非列表、以及页内全为非对象元素同样按可重试 `NETWORK_ERROR` 上报，不会伪装成「没有收藏」或翻满上限后的数量超限。
 
+`favorites sync` 批量导入时会把空串或纯空白的访问标识 / 职位 ID 计入 `skipped_count`，不会落库，也不会覆盖同一职位原有的有效访问标识。
+
 `favorites sync` 的 `data.pages_scanned` 记录已请求页数，`data.truncated` 标记是否因「重复页仍明确声明有后续」而早停。此时保留已导入的有效职位，但同步不完整、计数仅覆盖已扫描前缀；信封 `hints.warnings` 与终端真人指引会说明重复页原因。正常末页或重复页未明确声明有后续时 `truncated=false`；达到安全分页上限仍报 `RESULT_LIMIT_REACHED`，不写入不完整结果。
 
 ## 招聘者模式
