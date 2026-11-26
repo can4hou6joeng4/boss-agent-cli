@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.252 (2026-11-27): Fix favorites/history pagination duplicate-page and last-page detection, incomplete friend-list aggregation markers, resume name length, shortlist source preservation, chat-history container parsing, and batch-greet release-failure semantics (Issues #2954, #2955, #2956, #2959, #2960, #2962, #2964).
+
 v3.4.251 (2026-11-27): Fix crawl recovery hints, wizard exchange-type validation and reservation failures, cleanup path checks and privacy preflight, and export terminal stop reasons (Issues #2941, #2943, #2944, #2946, #2947, #2949).
 
 v3.4.250 (2026-11-27): The `chatmsg` detail follow-up now uses `positional_hint()` so special security IDs replay verbatim (Issue #2938).
