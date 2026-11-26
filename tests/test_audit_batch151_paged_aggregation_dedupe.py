@@ -227,7 +227,9 @@ def test_identical_page_still_ends_the_scan() -> None:
 
 	assert error is None
 	assert platform.calls == [1, 2]
-	assert (pages_scanned, truncated) == (2, False)
+	# 第 2 页仍声明 hasMore=true，聚合只是前缀；早停保留但必须标记不完整
+	# （Issue #2956）。
+	assert (pages_scanned, truncated) == (2, True)
 	assert [item["uid"] for item in items] == [1, 2]
 
 

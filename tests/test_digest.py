@@ -22,7 +22,7 @@ def test_build_digest_handles_empty_sections():
 
 
 def test_render_digest_markdown_warns_when_truncated():
-	"""Markdown 日报常被直接转发，截断时必须写明计数只覆盖前 N 页（Issue #885）。"""
+	"""Markdown 日报常被直接转发，截断时必须写明计数只覆盖已扫描页（Issue #885）。"""
 	data = build_digest(new_matches=[], follow_ups=[], interviews=[])
 	data["truncated"] = True
 	data["chat_pages_scanned"] = 50
@@ -30,7 +30,8 @@ def test_render_digest_markdown_warns_when_truncated():
 	text = render_digest_markdown(data, generated_at="2026-11-12 10:00:00")
 
 	assert "50 页" in text
-	assert "仅覆盖已扫描的前 50 页" in text
+	assert "未能完整翻完" in text
+	assert "只覆盖这些页" in text
 
 
 def test_render_digest_markdown_has_no_warning_when_complete():

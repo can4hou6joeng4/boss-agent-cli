@@ -71,7 +71,9 @@ def test_fully_repeated_page_still_stops_early() -> None:
 		("contact-b", "job-b"),
 	]
 	assert pages_scanned == 2
-	assert truncated is False
+	# 重复页仍声明 hasMore=true，无法证明列表完整；早停保留但结果必须标为前缀
+	# （Issue #2956，与 contact_lookup 的重复页语义一致）。
+	assert truncated is True
 
 
 def test_same_contact_missing_job_id_on_second_page_is_not_duplicate() -> None:
