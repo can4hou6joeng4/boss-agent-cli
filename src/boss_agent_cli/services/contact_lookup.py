@@ -129,14 +129,21 @@ def find_friend(
 		# 签名全为空时无法判断是否重复页，继续翻页，避免把缺字段的新页面
 		# 当成重复页提前结束（与 services/friend_list_pages 的聚合守卫一致）。
 		identities = [_lookup_identity(item) for item in page_items]
+		has_more = platform_data.get("hasMore")
 		if any(identity[0] or identity[1] for identity in identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
+				if has_more is True:
+					# 重复页仍明确声明有后续时遍历结果不可信：保留早停，
+					# 但不能落成确定的「不存在」（Issue #2916）。
+					raise FriendLookupLimitExceeded(
+						"沟通列表出现重复页但仍声明有后续，无法确认联系人是否存在；"
+						"请先用 boss chat 取到稳定 uid 再查询，不要重放同一 security_id 查询"
+					)
 				terminated = True
 				break
 			seen_signatures.add(signature)
 
-		has_more = platform_data.get("hasMore")
 		if not page_items:
 			# 形状守卫先于内容守卫：没有可识别的列表容器时，兄弟键是字符串 /
 			# 对象这类真值也不能当成「整页元素被跳过」继续翻页，否则单个畸形
