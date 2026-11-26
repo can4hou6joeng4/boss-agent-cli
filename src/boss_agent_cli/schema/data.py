@@ -973,7 +973,7 @@ SCHEMA_DATA = {
 			},
 			"subcommands": {
 				"list": "预览职位收藏单页及有效状态（不落库）",
-				"sync": "同步明确有效的职位收藏到本地候选池（远端只读拉取，本地 upsert；刷新动态访问 ID 并保留首次收藏时间）",
+				"sync": "同步明确有效的职位收藏到本地候选池（远端只读拉取，本地 upsert；刷新动态访问 ID 并保留首次收藏时间）；data.pages_scanned 为请求页数，重复页仍有后续时 data.truncated=true，计数仅覆盖已扫描前缀",
 			},
 		},
 		"digest": {

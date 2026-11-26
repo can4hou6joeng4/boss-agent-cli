@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `favorites sync` 遇重复页且平台仍明确声明有后续时保留早停，并返回 `pages_scanned` / `truncated` 和信封、终端警告；计数不再把已扫描前缀伪装成完整同步，正常末页与分页上限错误语义保持不变（Issue #2979）。
+
 ## [3.4.253] - 2026-11-27
 
 ### Changed
