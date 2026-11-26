@@ -177,6 +177,20 @@ def test_request_stop_release_failure_is_local_state_error(tmp_path: Path) -> No
 	_assert_pending(tmp_path, "job-1", "sec-1")
 
 
+def test_request_stop_release_failure_marks_candidate_failed(tmp_path: Path) -> None:
+	"""请求停止点释放失败时，已尝试的候选人必须出现在 failed 里（Issue #2972）。"""
+	platform = _Platform(RequestBudgetExceeded("no slot"))
+
+	result = _invoke(platform, tmp_path, release_broken=True)
+
+	envelope = _assert_local_state_error(result)
+	failed = envelope["error"]["details"]["failed"]
+	assert [item["job_id"] for item in failed] == ["job-1"]
+	assert failed[0]["status"] == "failed"
+	assert failed[0]["error"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert failed[0]["details"] == {"release_failed": True}
+
+
 def test_rate_limited_with_working_release_stays_rate_limited(tmp_path: Path) -> None:
 	platform = _Platform({"code": 9, "message": "too fast"})
 

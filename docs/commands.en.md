@@ -328,11 +328,13 @@ AI commands likewise read the AI config, `resumes/`, shortlist and job-descripti
 | Command | Description |
 |---------|-------------|
 | `boss config list/set/reset` | Configuration management |
-| `boss clean` | Clean caches; `--all` clears all caches (search cache, greeting/application records, recruiter greeting records, job description cache, and work-location send records); `--risk-lock` explicitly clears the local risk lock after the user confirms the intended official business page has recovered; `--dry-run` keeps the lock, and cleanup does not establish server recovery |
+| `boss clean` | Clean caches; `--all` clears all caches (search cache, greeting/application records, recruiter greeting records, job description cache, and work-location send records); `--risk-lock` explicitly clears the local risk lock after the user confirms the intended official business page has recovered; `--dry-run` keeps the lock, and cleanup does not establish server recovery; `--pending-claims` clears unfinished greet/apply claims (including outcome-unknown claims; verify on the platform first) |
 | `boss stats` | Funnel stats from local state (greeted/applied/shortlist) |
 | `boss export <query>` | Export results (CSV/JSON/HTML, supports `--url` web filters; `--welfare` / `--active` work like `search` and check job details before filtering) |
 
 The execution hint returned by `clean --dry-run` removes `--dry-run` and preserves the current `--data-dir`, `--all` / `--privacy`, and `--days`. Paths are quoted so following the hint uses the same data directory and cleanup scope as the preview. Login and diagnostic hints after cleanup also keep that directory. A preview with `--risk-lock` provides its scoped execution command only in `hints.operator_actions` for the operator.
+
+`clean --pending-claims` deletes `pending` greet/apply rows from `candidate_action_claims`; successfully sent `sent` rows are kept, so historical deduplication is unaffected. A pending row may also come from an outcome-unknown send (the process exited inside the send window), so the flag is not part of `--all` and must only be used after checking the platform, otherwise a retry may send twice; `--dry-run` only reports how many rows would be removed.
 
 Follow-up and `INVALID_PARAM` recovery hints from `config list` / `get` / `set` / `reset` keep the current `--data-dir` and platform. Unknown keys, invalid values, and the `config get` / `config list` / `config set` examples after a successful write all carry the shell-quoted absolute directory, so following them reads and writes the same `config.json` instead of creating one in the default directory. The TTY "next steps" list renders command text literally: directories containing Rich tags such as `[bold]` are shown as-is and never break the output.
 

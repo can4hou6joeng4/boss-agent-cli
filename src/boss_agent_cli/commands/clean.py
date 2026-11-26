@@ -46,8 +46,26 @@ from boss_agent_cli.display import (
 	default=False,
 	help="用户确认官方目标业务页恢复后显式清除 BOSS 本地风控锁；不解除服务器风险",
 )
+@click.option(
+	"--pending-claims",
+	"pending_claims",
+	is_flag=True,
+	default=False,
+	help=(
+		"清除本地未完成的 greet/apply 预约（含结果未知的预约）；"
+		"执行前必须先在平台核对，否则重试可能重复发送"
+	),
+)
 @click.pass_context
-def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool, days: int, risk_lock: bool) -> None:
+def clean_cmd(
+	ctx: click.Context,
+	dry_run: bool,
+	clean_all: bool,
+	privacy: bool,
+	days: int,
+	risk_lock: bool,
+	pending_claims: bool,
+) -> None:
 	"""清理过期缓存和临时文件。"""
 	data_dir = ctx.obj["data_dir"]
 	results: list[dict[str, Any]] = []
@@ -231,6 +249,16 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 			current_target = "职位描述缓存"
 			freed, count = _clean_job_desc_cache(data_dir, dry_run=dry_run)
 			results.append(_clean_result("职位描述缓存", freed, count))
+			total_freed += freed
+
+		# 7) 未完成的写动作预约：显式 opt-in，且不并入 --all。
+		# 释放预约失败后重跑会被 pending 挡住（LOCAL_STATE_WRITE_FAILED 的
+		# 恢复路径），这是唯一的清理入口；结果未知的预约也在这里，删除前
+		# 必须先在平台核对，否则重试可能重复发送（Issue #2971）。
+		if pending_claims:
+			current_target = "未完成的动作预约"
+			freed, count = _clean_pending_action_claims(data_dir, dry_run=dry_run)
+			results.append(_clean_result("未完成的动作预约", freed, count))
 			total_freed += freed
 
 	except CacheDatabaseInvalid as exc:
@@ -897,6 +925,33 @@ def _clean_apply_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 def _clean_location_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	"""清理招聘者工作地点发送记录。"""
 	return _clean_table(data_dir, "recruiter_location_records", dry_run=dry_run)
+
+
+def _clean_pending_action_claims(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
+	"""清除 pending 的 greet/apply 预约；sent 行保留，历史去重不受影响。
+
+	``sent`` 行是成功发送后的去重依据，删掉会让同一职位可以被再次发送；
+	这里只删除「已预约、尚未确认发送」的行，与 ``release_candidate_action``
+	的删除条件一致。
+	"""
+	db_path = data_dir / "cache" / "boss_agent.db"
+	if not _cache_db_present(db_path):
+		return 0, 0
+	conn = _open_cache_db(db_path, root=data_dir)
+	try:
+		if not _table_exists(conn, "candidate_action_claims"):
+			return 0, 0
+		row = conn.execute(
+			"SELECT COUNT(*) FROM candidate_action_claims WHERE status = 'pending'"
+		).fetchone()
+		count = int(row[0])
+		estimated_size = count * 100
+		if not dry_run and count > 0:
+			conn.execute("DELETE FROM candidate_action_claims WHERE status = 'pending'")
+			conn.commit()
+		return estimated_size, count
+	finally:
+		conn.close()
 
 
 def _clean_job_desc_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:

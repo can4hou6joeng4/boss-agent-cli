@@ -564,6 +564,14 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"description": "清理超过指定天数的快照和导出文件",
 						"default": 30,
 					},
+					"pending_claims": {
+						"type": "boolean",
+						"description": (
+							"清除本地未完成的 greet/apply 预约（含结果未知的预约）；"
+							"执行前必须先在平台核对，否则重试可能重复发送"
+						),
+						"default": False,
+					},
 				},
 				"required": [],
 			},

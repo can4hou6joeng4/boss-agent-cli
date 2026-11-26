@@ -1043,6 +1043,11 @@ SCHEMA_DATA = {
 					"default": False,
 					"description": "用户确认 BOSS 官方目标业务页风险解除后显式清除本地风险锁；不解除服务器风险，Agent 不应自行执行",
 				},
+				"--pending-claims": {
+					"type": "bool",
+					"default": False,
+					"description": "清除本地未完成的 greet/apply 预约（含结果未知的预约）；执行前必须先在平台核对，否则重试可能重复发送",
+				},
 			},
 		},
 		"stats": {
