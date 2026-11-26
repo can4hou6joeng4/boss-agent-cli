@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.234 (2026-11-26): Request budget records dispatch time after local preparation, so setup work no longer shortens request intervals (Issue #2880).
+
 v3.4.233 (2026-11-26): Search next-page hints are replayable and identical on cache hits; stats counts share one read snapshot (Issue #2874 #2875 #2876).
 
 v3.4.232 (2026-11-26): Friend-list page signatures now use the same uid + job identity as row deduplication, so valid rows for different jobs of one contact are no longer dropped (Issue #2872).
