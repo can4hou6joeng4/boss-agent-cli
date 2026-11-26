@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from patchright.sync_api import sync_playwright
 
@@ -314,7 +315,15 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 		# 与解析失败一样按「拿不到调试端口」处理（Issue #1421）。
 		if not isinstance(payload, dict):
 			return None
-		return cast("str | None", payload.get("webSocketDebuggerUrl"))
+		ws_url = payload.get("webSocketDebuggerUrl")
+		# 只做 cast 不会改变运行时类型：真值对象 / 相对地址会被 doctor 报成
+		# 可用通道，也会被 connect_over_cdp 当成端点（Issue #2869）。
+		if not isinstance(ws_url, str):
+			return None
+		parsed = urlparse(ws_url)
+		if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+			return None
+		return ws_url
 	# ValueError 覆盖 JSON 语法错误；深嵌套响应在 3.11–3.13 抛 RecursionError。
 	# 与解析失败一样按「响应无法解析」处理：拿不到调试端口即视为探测不可用（Issue #1378）。
 	# httpx.InvalidURL 直接继承 Exception（不是 HTTPError / ValueError）：畸形 cdp-url
