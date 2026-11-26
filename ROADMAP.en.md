@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.242 (2026-11-26): wizard authentication failures no longer clear the in-flight write marker and auto-redispatch a write; explicit rejections and failures carrying `request_sent=false` keep their existing retry contract (Issue #2913).
+
 v3.4.241 (2026-11-26): post-write authentication failures in the wizard keep the persisted write marker, so `--resume` cannot replay a dispatched write; explicit platform rejections such as rate limiting remain replayable (Issue #2910).
 
 v3.4.240 (2026-11-26): wizard chat-tab errors without explicit unsent evidence no longer bypass the persisted write marker, so `--resume` cannot replay an unknown write; `hr resume` now states when an explicit `--friend-id` was unused on the view path and offers the exchange follow-up (Issues #2904, #2905).
