@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 其余 AI 命令（analyze-jd / polish / optimize / suggest / reply / interview-prep / chat-coach / resume-optimize）按各自 prompt 的 JSON 示例校验已给出的顶层字段类型：类型漂移时按 `AI_PARSE_ERROR` 返回可重试信封，不再以 `ok=true` 透传错误形状；缺失字段不补键，成功信封形状不变（Issue #2865）。
+
 ## [3.4.229] - 2026-11-26
 
 ### Fixed
