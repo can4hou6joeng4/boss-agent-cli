@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.api._base_client import PlatformStatusRejected, RequestTextEncodingError, parameter_status_code
-from boss_agent_cli.api.browser_client import BrowserNavigationError, ChatTabCdpUnreachable
+from boss_agent_cli.api.browser_client import (
+	BrowserNavigationError,
+	ChatTabCdpUnreachable,
+	RecruiterChatTabRequired,
+)
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
@@ -746,6 +750,17 @@ class WorkflowRunner:
 				error = WorkflowActionError(
 					"CDP_UNAVAILABLE",
 					f"CDP 调试端点不可达，聊天页动作尚未发送: {exc}",
+					recoverable=recoverable,
+					recovery_action=recovery,
+				)
+			except RecruiterChatTabRequired as exc:
+				# 招聘者聊天页不存在，脚本未发送。与 CLI 的 display 分支同码：
+				# 不能落成可重试的 NETWORK_ERROR，更不能按结果未知拦住恢复
+				# （Issue #2898）。
+				recoverable, recovery = error_contract_for_code("RECRUITER_CHAT_TAB_REQUIRED")
+				error = WorkflowActionError(
+					"RECRUITER_CHAT_TAB_REQUIRED",
+					str(exc),
 					recoverable=recoverable,
 					recovery_action=recovery,
 				)
