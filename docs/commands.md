@@ -252,7 +252,7 @@ boss crawl stop <run_id>
 
 招聘者命令的后继与恢复提示显式携带原 `--data-dir`：`hr whoami` / `applications` / `resume` / `chat` / `chatmsg` / `last-messages` / `jobs` / `candidates` / `recommendations` / `greet` / `reply` / `request-resume` / `accept-resume` / `download-resume` / `location` 的 `hints.next_actions`、终端 `next_steps`、失败与空结果的 `recovery_action`，以及嵌入 `operator_actions` 的核对命令都指回同一份登录态与本地缓存。`hr` 组自身会设置 recruiter 角色，照抄提示无需再补 `--role`，也不会读取默认目录中另一套账号状态；当前平台不支持招聘者模式时，恢复命令固定 `--platform zhipin` 并保留原目录。
 
-`boss hr resume` 默认返回结构化简历；`data.basic.gender` 仅转换已识别的整数编码，字段缺失、`null` 或未知值保留为空字符串，不推断候选人的性别。加 `--raw` 可读取原始响应。
+`boss hr resume` 默认返回结构化简历；`data.basic.gender` 仅转换已识别的整数编码，字段缺失、`null` 或未知值保留为空字符串，不推断候选人的性别。加 `--raw` 可读取原始响应。查看路径同时传 `--friend-id` 却漏了 `--exchange` 时仍按查看成功返回，但 `hints` 会说明该参数本次未使用，并给出 `hr resume --friend-id <friend_id> --exchange` 后继命令。
 
 先在同一组候选人参数和话术后加 `--dry-run` 预览；操作者明确批准该候选人和话术后，才改为 `--yes` 发送。MCP 的 `yes` 默认不传，Agent 不得自行确认；预览本身不构成人工批准。
 
