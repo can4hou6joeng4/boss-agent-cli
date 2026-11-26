@@ -1351,11 +1351,11 @@ def _ai_value_lines(value: Any) -> list[str]:
 				inline = "  ".join(f"{safe_text(key)}={cell_text(child)}" for key, child in item.items())
 				lines.append(f"  · {escape_markup(inline)}")
 			else:
-				lines.append(f"  · {escape_markup(item)}")
+				lines.append(f"  · {escape_markup(cell_text(item))}")
 		return lines
 	if isinstance(value, dict):
-		return [f"  [bold]{escape_markup(k)}:[/bold] {escape_markup(v)}" for k, v in value.items()]
-	return [f"  {escape_markup(value)}"]
+		return [f"  [bold]{escape_markup(k)}:[/bold] {escape_markup(cell_text(v))}" for k, v in value.items()]
+	return [f"  {escape_markup(cell_text(value))}"]
 
 
 def render_ai_result(
