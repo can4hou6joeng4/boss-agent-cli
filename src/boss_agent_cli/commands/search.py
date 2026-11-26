@@ -176,7 +176,11 @@ def _build_next_page_command(ctx: click.Context, *, page: int, params: _NextPage
 	语义不同，调用方本来就不给下一页提示。
 	"""
 	argv = ["search"]
-	if params.query:
+	# 以 ``-`` 开头的关键词排在全部选项之后，用 ``--`` 与选项隔开（Issue #2874）：
+	# shell 引用只保护空白 / 元字符，挡不住 Click 把 ``-remote`` / ``--help``
+	# 当成选项；放在末尾才能让提示原样重放到同一查询条件。
+	dashed_query = bool(params.query and params.query.startswith("-"))
+	if params.query and not dashed_query:
 		argv.append(params.query)
 	if params.search_url:
 		argv.extend(["--url", params.search_url])
@@ -200,7 +204,10 @@ def _build_next_page_command(ctx: click.Context, *, page: int, params: _NextPage
 		argv.extend(["--sort", params.sort_mode])
 	argv.extend(["--page", str(page + 1)])
 	# 前缀（平台 / 数据目录）由 _hint_command 负责转义，这里只转义本次调用参数。
-	return _hint_command(ctx, " ".join(shell_argument(part) for part in argv))
+	rendered = " ".join(shell_argument(part) for part in argv)
+	if dashed_query:
+		rendered += f" {positional_hint(params.query)}"
+	return _hint_command(ctx, rendered)
 
 
 _UNKNOWN_HAS_MORE_ACTION = "平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"
@@ -567,7 +574,7 @@ def search_cmd(
 					# 提示按本次调用重建，不取缓存里的旧值：分页证据来自缓存的
 					# pagination，数据目录 / --sort 来自本次调用。
 					cached_has_more = cached_pagination.get("has_more") if isinstance(cached_pagination, dict) else None
-					cached_hints, _ = _result_hints(
+					cached_hints, cached_next_page_command = _result_hints(
 						ctx,
 						page=page,
 						params=next_page_params,
@@ -577,7 +584,10 @@ def search_cmd(
 					handle_output(
 						ctx, "search", items,
 						render=lambda data: render_job_table(
-							data, f"search: {query}", show_command=show_command_for_ctx(ctx, index_saved=saved),
+							data, f"search: {query}",
+							page=page,
+							hint_next=_more_hint(cached_next_page_command) if cached_next_page_command else "",
+							show_command=show_command_for_ctx(ctx, index_saved=saved),
 						),
 						pagination=cached_pagination, hints=cached_hints,
 					)
