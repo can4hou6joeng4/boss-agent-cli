@@ -57,6 +57,21 @@ class FriendListShapeError(RuntimeError):
 	"""响应缺少可识别的联系人列表容器，无法判断联系人是否存在（Issue #1978）。"""
 
 
+def _lookup_identity(item: Mapping[str, Any]) -> tuple[str, str]:
+	"""翻页去重键：稳定 uid + 职位 ID；没有 uid 时退回可用的 securityId。
+
+	uid 是联系人主键，同一条目重复出现时职位 ID 也相同；带上职位 ID 是为了
+	不把「同一联系人、不同职位各占一行」误判成重复页。securityId 每次请求
+	轮换，只在完全没有 uid 时作为兜底，与 friend_security_id 的可用字符串
+	口径一致（Issue #2883）。
+	"""
+	uid = friend_uid(item)
+	if uid:
+		job_id = item.get("encryptJobId")
+		return uid, job_id.strip() if isinstance(job_id, str) else ""
+	return "", friend_security_id(item)
+
+
 def find_friend(
 	platform: Any,
 	identifier: str | int,
@@ -82,7 +97,7 @@ def find_friend(
 
 	page = start_page
 	terminated = False
-	seen_signatures: set[tuple[str, ...]] = set()
+	seen_signatures: set[tuple[tuple[str, str], ...]] = set()
 	for _ in range(max_pages):
 		resp = platform.friend_list(page=page)
 		if not platform.is_success(resp):
@@ -99,17 +114,22 @@ def find_friend(
 		# uid 只认非空字符串：布尔 / 容器漂移时 str() 会让不同联系人共用
 		# 同一文本，匹配到错误对象（Issue #2063）。
 		for item in page_items:
-			if stable_uid(item.get("uid")) == needle:
+			if friend_uid(item) == needle:
 				return item, None
 		for item in page_items:
-			if stable_uid(item.get("securityId")) == needle:
+			# securityId 的匹配必须与下游 friend_security_id 同口径：漂移成整数 /
+			# 容器的值不能被 stable_uid 转成文本后误命中，否则会找到一个写请求
+			# 用不上的令牌（Issue #2883）；snake_case 也要按文档支持。
+			if friend_security_id(item) == needle:
 				return item, None
 
 		# securityId 会在请求间轮换，不能用于重复页判定；有 uid 时必须优先用 uid。
+		# 同一联系人的不同职位各占一行，签名要带上职位 ID，否则相邻两页只因
+		# 职位不同而 uid 相同就会被当成重复页，漏掉后面的目标联系人（Issue #2883）。
 		# 签名全为空时无法判断是否重复页，继续翻页，避免把缺字段的新页面
 		# 当成重复页提前结束（与 services/friend_list_pages 的聚合守卫一致）。
-		identities = [stable_uid(item.get("uid")) or stable_uid(item.get("securityId")) for item in page_items]
-		if any(identities):
+		identities = [_lookup_identity(item) for item in page_items]
+		if any(identity[0] or identity[1] for identity in identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
 				terminated = True
