@@ -595,8 +595,8 @@ class RequestBudget:
 			self._check(check)
 			while True:
 				self._check(check)
-				now = time.time()
 				with self._database() as db:
+					now = time.time()
 					# typeof 漂移的行既不会被数值比较删除，也会让 MIN() 返回文本；
 					# 本地调度元数据无保留价值，直接归零让下一轮自愈。
 					db.execute(
@@ -652,9 +652,13 @@ class RequestBudget:
 							raise RequestBudgetExceeded("请求节流等待超时，请求未发出")
 						if claim is not None:
 							claim()
-						db.execute("INSERT INTO request_attempts(requested_at,kind) VALUES(?,?)", (now, kind))
+						# 数据库准备与预约回调可能耗时：用完成这些工作后的时间登记，
+						# 不能把本地准备时间算进下一次派发的间隔（Issue #2880）。
+						requested_at = time.time()
+						db.execute("INSERT INTO request_attempts(requested_at,kind) VALUES(?,?)", (requested_at, kind))
 						db.execute(
-							"UPDATE request_state SET last_at=?,next_at=? WHERE id=1", (now, now + self.interval)
+							"UPDATE request_state SET last_at=?,next_at=? WHERE id=1",
+							(requested_at, requested_at + self.interval),
 						)
 						db.commit()
 						break
