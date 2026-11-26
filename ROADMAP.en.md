@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.231 (2026-11-26): CDP probing only accepts valid ws(s) endpoints, so diagnostics no longer report drifted values as an available channel (Issue #2869).
+
 v3.4.230 (2026-11-26): AI commands validate declared top-level model output field types and return a retryable parse error on drift (Issue #2865).
 
 v3.4.229 (2026-11-26): Blank local AI model names are rejected before any request and status now matches usability (Issues #2862, #2863).
