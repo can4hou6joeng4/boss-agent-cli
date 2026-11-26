@@ -98,6 +98,7 @@ def collect_friend_list_page(
 
 	- 翻到平台 ``hasMore=False``、重复页或可识别的空列表容器：``truncated=False``，
 	  结果完整；成功响应缺少列表容器时无法证明列表结束，继续翻页（Issue #2927）；
+	  重复页仍明确声明有后续时保留早停，但标记 ``truncated=True``（Issue #2956）；
 	- 翻满 ``max_pages`` 且平台仍声称有下一页：``truncated=True``，items 只是前
 	  ``max_pages`` 页。调用方必须把这一点告诉 Agent / 用户，不能当成完整统计
 	  （Issue #885）。
@@ -151,6 +152,10 @@ def collect_friend_list_page(
 		if any(uid for uid, _ in identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
+				# 重复页仍明确声明有后续时无法证明列表完整：保留早停避免重复请求，
+				# 但结果只是前缀，必须与联系人查找同口径标记不完整（Issue #2956）。
+				if platform_data.get("hasMore") is True:
+					truncated = True
 				break
 			seen_signatures.add(signature)
 		# 整页签名只挡「整页重复」。沟通列表按最近消息排序、按页码取数：翻页期间
