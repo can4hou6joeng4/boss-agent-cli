@@ -35,12 +35,17 @@ def redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
+	"""从平台原始条目构造 HTML 导出条目。
+
+	文本字段与管线路径一样走 ``field_text``：容器 / 数字 / 布尔漂移按缺失
+	处理，不能把 JSON repr 直接写进 HTML 单元格（Issue #2895）。
+	"""
 	return {
-		"title": raw.get("jobName", ""),
-		"company": raw.get("brandName", ""),
-		"city": raw.get("cityName", ""),
-		"experience": raw.get("jobExperience", ""),
-		"education": raw.get("jobDegree", ""),
+		"title": field_text(raw, "jobName"),
+		"company": field_text(raw, "brandName"),
+		"city": field_text(raw, "cityName"),
+		"experience": field_text(raw, "jobExperience"),
+		"education": field_text(raw, "jobDegree"),
 		"skills": field_list(raw, "skills"),
 		"welfare": field_list(raw, "welfareList"),
 	}
