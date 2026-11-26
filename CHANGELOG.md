@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- 向导 `--status` / `--stop` / `--resume` 对漂移成容器的 `result.inner_run_id` / `error.details.run_id` 不再生成带 Python repr 的不可执行提示，改为跳过该条后继命令（Issue #2924）。
 - `ACTION_UNCONFIRMED` 的登记表文案改为角色中立，共享错误出口按当前角色注入核对命令：求职者不再收到 `boss hr chatmsg <friend_id>`，而是候选侧 `chat` 与 `hints.next_actions`；招聘者仍保留 `hr chatmsg`（Issue #2921）。
 
 ## [3.4.243] - 2026-11-26

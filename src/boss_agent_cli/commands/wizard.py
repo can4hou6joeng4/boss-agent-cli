@@ -157,6 +157,24 @@ def _run_after_stop(store: WorkflowStore, run_id: str) -> dict[str, Any]:
 		return {"run_id": run_id, "status": "stopped", "steps": []}
 
 
+def _usable_identifier(value: Any) -> str | None:
+	"""只接受可直接放进命令参数的可读标识；容器 / 空串一律跳过。
+
+	``hints.next_actions`` 是给 Agent 执行的命令，不是展示文本。断点字段漂移成
+	对象 / 列表时 ``str()`` 只会产出 Python repr，执行必然失败（Issue #2924）。
+	"""
+	if not isinstance(value, str):
+		return None
+	text = value.strip()
+	if not text:
+		return None
+	try:
+		text.encode("utf-8")
+	except UnicodeEncodeError:
+		return None
+	return text
+
+
 def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:
 	"""取被 stop 的 run 里绑定的 crawl 子任务 run_id（如有）。
 
@@ -169,11 +187,11 @@ def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:
 		result = step.get("result") or {}
 		if not isinstance(result, Mapping):
 			continue
-		inner = result.get("inner_run_id")
+		inner = _usable_identifier(result.get("inner_run_id"))
 		if inner is None and isinstance(result.get("data"), Mapping):
-			inner = result["data"].get("run_id")
+			inner = _usable_identifier(result["data"].get("run_id"))
 		if inner:
-			return str(inner)
+			return inner
 	return ""
 
 
@@ -253,13 +271,13 @@ def _busy_hints(ctx: click.Context, error: Mapping[str, Any]) -> dict[str, list[
 	details = error.get("details")
 	if not isinstance(details, Mapping):
 		return None
-	run_id = details.get("run_id")
+	run_id = _usable_identifier(details.get("run_id"))
 	if not run_id:
 		return None
 	if error.get("code") == "WORKFLOW_BUSY":
-		status_cmd = boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run_id))}", include_data_dir=True)
+		status_cmd = boss_command_for_ctx(ctx, f"wizard --status {shell_argument(run_id)}", include_data_dir=True)
 	elif error.get("code") == "CRAWL_BUSY":
-		status_cmd = boss_command_for_ctx(ctx, f"crawl status {shell_argument(str(run_id))}", include_data_dir=True)
+		status_cmd = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
 	else:
 		return None
 	return {"next_actions": [status_cmd]}
