@@ -36,6 +36,7 @@ from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
 	CandidateActionNotRecorded,
 	candidate_action_provably_unsent,
+	exception_reports_request_unsent,
 	run_candidate_action,
 )
 from boss_agent_cli.services.chat_utils import (
@@ -1015,10 +1016,12 @@ def _write_call(
 	``--resume`` 凭这条记录拒绝重放（Issue #1019）。``call`` 只负责发请求：参数的
 	校验与前置读取放在调用之前，那时被终止的步骤没有记录，恢复后照常重跑。
 
-	``provably_unsent`` 只由**单请求**写动作传入：异常命中判定时撤销预落的
-	「结果未知」标记，让 ``--resume`` 能重试一次从未发出的写请求（与
-	greet / apply 的 #2298 同口径）。复合动作（写后还有读取，例如
-	``view_geek`` 或聊天页发送）不得传入：同一异常类型可能发生在写请求之后。
+	``provably_unsent`` 命中时撤销预落的「结果未知」标记，让 ``--resume`` 能重试
+	一次从未发出的写请求（与 greet / apply 的 #2298 同口径）。单请求写可以直接
+	传 ``candidate_action_provably_unsent``；复合动作（写后还有读取，例如
+	``view_geek`` 或聊天页发送）只能传 ``exception_reports_request_unsent``
+	这类**只认底层显式证据**的判定——同一个异常类型可能发生在写请求之后
+	（Issue #2898）。
 
 	不经 runner 直接调用动作时没有步骤可记，直接执行。
 	"""
@@ -3163,6 +3166,9 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		"消息发送失败",
 		write=True,
 		check_command=f"hr chatmsg {friend_id}",
+		# 复合动作不按异常类型推断；只认客户端在写前读取 / 脚本发送前标注的
+		# request_sent=False（Issue #2898）。
+		provably_unsent=exception_reports_request_unsent,
 	)
 
 
@@ -3190,6 +3196,9 @@ def _recruiter_request_resume(
 		"附件简历请求失败",
 		write=True,
 		check_command=f"hr chatmsg {friend_id}",
+		# 写前读取 / 脚本发送前失败带显式 request_sent=False 时才撤销写标记；
+		# 写后回读失败没有该证据，继续按结果未知保护（Issue #2898）。
+		provably_unsent=exception_reports_request_unsent,
 	)
 
 
@@ -3204,6 +3213,8 @@ def _recruiter_exchange_contact(
 		"联系方式交换请求失败",
 		write=True,
 		check_command=f"hr chatmsg {friend_id}",
+		# 同 recruiter_request_resume：只认显式写前证据（Issue #2898）。
+		provably_unsent=exception_reports_request_unsent,
 	)
 
 

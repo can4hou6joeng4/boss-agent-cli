@@ -142,17 +142,40 @@ def classify_platform_response(platform: Any, response: Any) -> Outcome:
 	return "retryable"
 
 
+def exception_reports_request_unsent(exc: BaseException) -> bool:
+	"""异常本身是否带着「写请求确定未发出」的显式证据（``request_sent=False``）。
+
+	只认底层客户端在**写入边界**标注的属性，不按异常类型推断。复合动作（写前
+	读取 → 写 → 写后回读）里同一个异常类型可能发生在写之后，类型判定会把
+	「结果未知」错放成可重试；反过来，写前读失败又会被一律当成结果未知
+	（``hr request-resume``，Issue #2898）。因此 ``exchange_request_by_friend``
+	这类复合调用在写前阶段自行标注本属性，调用方只消费证据。
+
+	与 ``details.request_sent`` 是同一语义的两种载体：前者用于 ``WorkflowActionError``
+	等带 details 的类型，本属性用于跨层传递时不便改 details 的异常实例。
+	"""
+	try:
+		return getattr(exc, "request_sent", None) is False
+	except Exception:
+		# 异常对象自身的属性访问失败不能反转判定：保留 pending 是安全方向。
+		return False
+
+
 def was_provably_unsent(exc: BaseException) -> bool:
 	"""异常是否证明请求没有发出（可以安全释放预约）。
 
-	三类证据：
+	四类证据：
 	- ``details.request_sent is False``：预算 / 时限在调度前抛出的停止；
+	- 异常实例上的 ``request_sent is False``：底层客户端在写入边界标注的显式
+	  证据（见 :func:`exception_reports_request_unsent`）；
 	- ``BrowserSourceUnavailable``：浏览器通道全部不可用，请求从未发出；
 	- 带 ``replay_safe=True`` 的 typed 写错误（wizard 的 ``WorkflowActionError``）
 	  且不是风控 / ``UNKNOWN`` / ``ACTION_UNCONFIRMED``：平台已返回明确失败。
 
 	其余异常（超时、连接中断、风控）都可能已经产生平台写入，必须保留 pending。
 	"""
+	if exception_reports_request_unsent(exc):
+		return True
 	details = getattr(exc, "details", None)
 	if isinstance(details, dict) and details.get("request_sent") is False:
 		return True

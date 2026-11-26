@@ -43,6 +43,29 @@ from boss_agent_cli.api.zhipin_errors import (
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
+
+def _mark_request_not_sent(exc: BaseException) -> None:
+	"""给确定发生在写入之前的异常标注 ``request_sent=False``。
+
+	``send_message_by_friend`` / ``exchange_request_by_friend`` 是复合动作：
+	写前读取 → 聊天页脚本写入 → 写后回读。异常类型本身不能证明写没写——同一个
+	``ProxyConfigurationError`` 在写前读和写后回读都可能出现——所以只在调用方
+	确知写入尚未发生时调用本函数，由 ``services.candidate_actions.was_provably_unsent``
+	消费这条显式证据（Issue #2898）。
+
+	风控 / 停止异常不标：它们的语义是「立即停止」，不是「可以安全重试」。
+	"""
+	if isinstance(exc, PlatformRiskError) or is_request_stop(exc):
+		return
+	try:
+		if getattr(exc, "request_sent", None) is False:
+			return
+		setattr(exc, "request_sent", False)
+	except (AttributeError, TypeError, ValueError):
+		# 少数内建 / 扩展异常实例拒绝动态属性：宁可不标，也不能掩盖原始异常。
+		pass
+
+
 _CHAT_FRONTEND_HELPERS_JS = """
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const squashText = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
@@ -712,7 +735,12 @@ class BossRecruiterClient(_BaseHttpClient):
 			args.update(extra_args)
 
 		self._check_cdp_risk_lock_raw()
-		browser = self._get_browser()
+		try:
+			browser = self._get_browser()
+		except Exception as exc:
+			# 取浏览器会话发生在脚本发送之前：失败证明本次动作没有写平台。
+			_mark_request_not_sent(exc)
+			raise
 		try:
 			if listen_ms is None:
 				return browser.evaluate_js(script, args), []
@@ -728,6 +756,7 @@ class BossRecruiterClient(_BaseHttpClient):
 			if isinstance(exc, (RecruiterChatTabRequired, BrowserSourceUnavailable, ChatTabCdpUnreachable)):
 				# CDP 端点不可达发生在脚本发送之前：本次动作没有写平台，不能
 				# 报「结果未知、勿重试」（Issue #1455）。
+				_mark_request_not_sent(exc)
 				raise
 			if is_request_stop(exc):
 				raise
@@ -1310,7 +1339,16 @@ class BossRecruiterClient(_BaseHttpClient):
 				exc=exc,
 				expected_bits=[content],
 			)
-		baseline_mids, _ = self._chat_history_snapshot(friend_id)
+		except Exception as exc:
+			# 写前读取失败：本次动作没有执行聊天页脚本（Issue #2898）。
+			_mark_request_not_sent(exc)
+			raise
+		try:
+			baseline_mids, _ = self._chat_history_snapshot(friend_id)
+		except Exception as exc:
+			# 写前快照同样是只读请求，失败时还没有发消息。
+			_mark_request_not_sent(exc)
+			raise
 		started_ms = int(time.time() * 1000)
 		result, events = self._run_chat_frontend_action(
 			friend_data=friend_data,
@@ -1473,6 +1511,10 @@ class BossRecruiterClient(_BaseHttpClient):
 				expected_bits=[],
 				extra={"exchange_type": exchange_type},
 			)
+		except Exception as exc:
+			# 写前读取失败：本次动作没有执行聊天页脚本（Issue #2898）。
+			_mark_request_not_sent(exc)
+			raise
 
 		component_name = _EXCHANGE_COMPONENT_NAMES.get(exchange_type)
 		if component_name is None:
@@ -1491,7 +1533,12 @@ class BossRecruiterClient(_BaseHttpClient):
 		expected_texts = _EXCHANGE_MESSAGE_TEXTS[exchange_type]
 		expected_bits = list(expected_texts)
 		# 动作前先记下已有消息，事后只认新出现的那条（只读请求，不影响写操作）。
-		baseline_mids, self_message = self._chat_history_snapshot(friend_id)
+		try:
+			baseline_mids, self_message = self._chat_history_snapshot(friend_id)
+		except Exception as exc:
+			# 写前快照是只读请求：失败时还没有发出交换请求。
+			_mark_request_not_sent(exc)
+			raise
 		check_availability = exchange_type in _EXCHANGE_AVAILABILITY_CHECK_TYPES
 		started_ms = int(time.time() * 1000)
 		result, events = self._run_chat_frontend_action(
