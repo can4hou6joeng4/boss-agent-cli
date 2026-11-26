@@ -1052,6 +1052,14 @@ class WorkflowRunner:
 					return self._finish_declared_status(run_id, step_name, result, result_data, declared_marker)
 				continue
 
+			# 认证类失败是写后也可能出现的响应（登录态在派发后才失效），不能
+			# 凭错误码就判定可重放；其他平台明确拒绝的码（如 RATE_LIMITED）
+			# 仍按既有契约放行恢复（Issue #2910）。
+			if error.replay_safe and error.code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}:
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error(error.code, write_marker)
+
 			error_data = error.to_dict()
 			failed_status = (
 				WorkflowStatus.STOPPED.value if error.code == "WORKFLOW_STOPPED" else WorkflowStatus.FAILED.value

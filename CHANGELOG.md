@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 向导写后遇到认证类失败（`AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`）时不再把已有写前标记改成可重放：`--resume` 保持结果未知与核对指引；限流等平台明确拒绝的码仍可按既有契约恢复重跑（Issue #2910）。
+
 ## [3.4.240] - 2026-11-26
 
 ### Fixed
