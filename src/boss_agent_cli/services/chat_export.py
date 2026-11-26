@@ -175,8 +175,13 @@ def prepare_render_data(
 			unread_value = raw_item.get("unread")
 			# 超大整数（>4300 位十进制）在 md/html 的 str()/f-string 里抛裸
 			# ValueError，整份导出会落成无信封的 traceback；与 safe_text 同口径
-			# 按缺失处理（Issue #2343）。
-			unread = unread_value if type(unread_value) is int and safe_text(unread_value) else 0
+			# 按缺失处理（Issue #2343）。负数没有平台语义，快照 diff 已按 0
+			# 处理，导出也必须一致，不能只在 CSV 里写出 "-1"（Issue #2886）。
+			unread = (
+				unread_value
+				if type(unread_value) is int and unread_value >= 0 and safe_text(unread_value)
+				else 0
+			)
 			rows.append({
 				"ref": ref, "is_new": is_new, "sid": sid, "key": key,
 				"brand_name": item.get("brand_name") or "-",
@@ -263,6 +268,11 @@ def _render_csv(friends: list[dict[str, Any]]) -> str:
 			# 非对象条目跳过：``item.items()`` 的 AttributeError 会让整份
 			# CSV 导出落成错误信封（Issue #2162）。
 			continue
+		# CSV 直接读原始 item，绕过 prepare_render_data 的未读归一化；负数
+		# 不得写成 "-1"（还会被公式防护前置单引号），与快照 diff 的 0 口径
+		# 保持一致（Issue #2886）。
+		if type(item.get("unread")) is int and item["unread"] < 0:
+			item = {**item, "unread": 0}
 		# null 写成空单元格，不落成字面量 None（Issue #1793）。
 		safe_row = {k: "" if v is None else sanitize_csv_cell(str(_text_cell(v))) for k, v in item.items()}
 		writer.writerow(safe_row)
