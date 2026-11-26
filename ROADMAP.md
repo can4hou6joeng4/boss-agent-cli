@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.250（2026-11-27）：`chatmsg` 的 `detail` 后继命令改用 `positional_hint()`，特殊 security_id 也能原样回放。（Issue #2938）。
+
 v3.4.249（2026-11-26）：`boss doctor` 在本地风险锁生效时不再建议会被锁拒绝的 login / status 后继命令，真人解锁步骤前置。（Issue #2935）。
 
 v3.4.248（2026-11-26）：`boss export` 快路径不再把元素全漂移的 `jobList` 当完整空页，后续页继续翻取并在预算耗尽时标记截断。（Issue #2932）。
