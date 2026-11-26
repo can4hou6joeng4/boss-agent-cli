@@ -143,9 +143,11 @@ def test_collect_friend_list_page_skips_bad_elements_and_stops_on_drifted_payloa
 	assert truncated is False
 
 	drifted = _FakePlatform("oops")
-	items, error, pages, truncated = collect_friend_list_page(drifted)
-	assert (items, error, pages, truncated) == ([], None, 1, False)
-	assert drifted.friend_calls == 1
+	# 成功但整页没有列表容器：不能当作平台确认的空页，必须继续翻页并标记截断
+	# （Issue #2927）。find_friend 对同一载荷则按不可判定报错（Issue #1978）。
+	items, error, pages, truncated = collect_friend_list_page(drifted, max_pages=2)
+	assert (items, error, pages, truncated) == ([], None, 2, True)
+	assert drifted.friend_calls == 2
 
 
 def test_find_friend_skips_bad_elements_and_stops_on_drifted_payload():
