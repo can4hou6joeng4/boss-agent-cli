@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.254 (2026-11-27): Report incomplete favorites syncs when repeated pages still advertise more results, and skip whitespace-only keys before batch imports to protect existing valid access identifiers (Issues #2979, #2981).
+
 v3.4.253 (2026-11-27): Fix MCP tool schema and parameter contracts (resume name length, shortlist source, nonempty and unique array items), recovery scoped to a single failed reservation release, and the batch-greet failed-result shape (Issues #2968, #2969, #2970, #2971, #2972, #2976).
 
 v3.4.252 (2026-11-27): Fix favorites/history pagination duplicate-page and last-page detection, incomplete friend-list aggregation markers, resume name length, shortlist source preservation, chat-history container parsing, and batch-greet release-failure semantics (Issues #2954, #2955, #2956, #2959, #2960, #2962, #2964).
