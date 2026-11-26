@@ -188,17 +188,18 @@ def _first_present(primary: dict[str, Any], secondary: dict[str, Any], keys: tup
 
 def _extract_links(msg: dict[str, Any], *, body: dict[str, Any]) -> list[str]:
 	links: list[str] = []
-	for value in list(msg.values()) + list(body.values()):
+	# 用显式栈而不是递归：消息体可能把 URL 放在 list 套 list / dict 的任意层级，
+	# 旧实现遇到嵌套 list 就停止（Issue #2886）；显式栈同时避开深嵌套的
+	# RecursionError。reverse 入栈保持原有的深度优先顺序，最后统一去重。
+	stack = [value for value in reversed(list(msg.values()) + list(body.values()))]
+	while stack:
+		value = stack.pop()
 		if isinstance(value, str):
 			links.extend(re.findall(r"https?://[^\s\"'<>]+", value))
 		elif isinstance(value, dict):
-			links.extend(_extract_links(value, body={}))
+			stack.extend(reversed(list(value.values())))
 		elif isinstance(value, list):
-			for item in value:
-				if isinstance(item, str):
-					links.extend(re.findall(r"https?://[^\s\"'<>]+", item))
-				elif isinstance(item, dict):
-					links.extend(_extract_links(item, body={}))
+			stack.extend(reversed(value))
 	return list(dict.fromkeys(links))
 
 
