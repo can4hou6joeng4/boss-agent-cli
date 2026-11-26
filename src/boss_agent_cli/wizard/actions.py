@@ -45,6 +45,7 @@ from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS,
 	chat_cutoff_ts,
 	matches_chat_filters,
+	message_list,
 	normalize_chat_message,
 	relation_text,
 )
@@ -1710,7 +1711,9 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 			count=count,
 		)
 		data = _unwrap(platform, response, "聊天记录获取失败", context=context)
-	items = _extract_list_items(data, ("messageList", "messages", "list", "items", "result"))
+	# 与 CLI `chatmsg` 共用容器的唯一真源：同一响应在两个入口必须读出同样的
+	# 消息集合，不能再让一侧认 ``messageList``、另一侧只认 ``historyMsgList``（Issue #2962）。
+	items = message_list(data)
 	# 与 CLI `chatmsg` 同一份归一化；items 仍保留平台原值供后续步骤使用（Issue #2801）。
 	messages = [normalize_chat_message(item, gid=gid, friend_name=friend_display_name(friend)) for item in items]
 	return StepResult(
@@ -2998,6 +3001,7 @@ def _recruiter_call(
 	fallback: str,
 	*,
 	list_keys: tuple[str, ...] = (),
+	list_extractor: Callable[[Any], list[dict[str, Any]]] | None = None,
 	write: bool = False,
 	check_command: str | None = None,
 	provably_unsent: Callable[[BaseException], bool] | None = None,
@@ -3017,7 +3021,12 @@ def _recruiter_call(
 			data = _unwrap(platform, call(platform), fallback, context=context, check_command=check_command)
 	payload: dict[str, Any] = {"result": data}
 	items: list[dict[str, Any]] = []
-	if list_keys:
+	if list_extractor is not None:
+		# 有共享解析器时不再走通用键猜测：聊天历史这类有明确容器集合的
+		# 数据必须与 CLI 读出同一结果（Issue #2962）。
+		items = list_extractor(data)
+		payload = _with_items(payload, items)
+	elif list_keys:
 		items = _extract_list_items(data, list_keys)
 		payload = _with_items(payload, items)
 	if page is not None:
@@ -3214,7 +3223,7 @@ def _recruiter_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 			max_msg_id=_optional_int_input(inputs, "max_msg_id", minimum=1),
 		),
 		"聊天记录获取失败",
-		list_keys=("messageList", "messages", "list", "items", "result"),
+		list_extractor=message_list,
 	)
 
 
