@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.244 (2026-11-26): the `ACTION_UNCONFIRMED` registry entry is role-neutral and shared error exits inject the verification command by role, so candidates no longer receive the recruiter-only `hr chatmsg` guidance (Issue #2921).
+
 v3.4.243 (2026-11-26): AI result rendering now uses the shared cell text rules instead of showing `None` / container reprs; repeated contact pages with more results report an incomplete traversal instead of a definitive not-found (Issues #2915, #2916).
 
 v3.4.242 (2026-11-26): wizard authentication failures no longer clear the in-flight write marker and auto-redispatch a write; explicit rejections and failures carrying `request_sent=false` keep their existing retry contract (Issue #2913).
