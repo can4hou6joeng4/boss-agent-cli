@@ -790,9 +790,10 @@ SCHEMA_DATA = {
 							"run_id": {"type": "string", "description": "crawl run 标识，由 boss crawl start 返回"},
 							"selectors": {
 								"type": "array",
-								"items": {"type": "string"},
+								"items": {"type": "string", "minLength": 1},
 								"minItems": 1,
-								"description": "要导入的职位 selector 列表，取自 boss_crawl_results 的返回；与 all 必须且只能选一个",
+								"uniqueItems": True,
+								"description": "要导入的职位 selector 列表，取自 boss_crawl_results 的返回；元素不能为空或重复；与 all 必须且只能选一个",
 							},
 							"all": {
 								"type": "boolean",
