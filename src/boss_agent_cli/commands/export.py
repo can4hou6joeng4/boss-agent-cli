@@ -2,7 +2,7 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.models import dict_items, JobItem, field_list
+from boss_agent_cli.api.models import dict_items, JobItem
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
@@ -396,9 +396,14 @@ def export_cmd(
 					fallback_message="搜索结果获取失败",
 				)
 				return
-			platform_data = platform.unwrap_data(raw) or {}
-			job_list = dict_items(field_list(platform_data, "jobList"))
-			if not job_list:
+			unwrapped = platform.unwrap_data(raw)
+			platform_data = unwrapped if isinstance(unwrapped, dict) else {}
+			raw_job_list = platform_data.get("jobList")
+			job_list = dict_items(raw_job_list)
+			if not job_list and isinstance(raw_job_list, list) and not raw_job_list:
+				# 平台明确给出空列表才算列表结束。非空容器里元素全是 null /
+				# 数字 / 字符串时不能提前终止，否则 hasMore=true 的后续页会被
+				# 静默丢掉（Issue #2932）；缺容器同理。
 				stop_reason = "empty_page"
 				break
 
@@ -417,7 +422,7 @@ def export_cmd(
 			# 只有平台明确返回布尔 false 才算「没有下一页」。缺失或类型不明确的
 			# hasMore 被当成 false 会让 export 静默只导出第一页（Issue #903）；
 			# 与 crawler 的保守默认一致，继续翻页，仍受 count / max_pages /
-			# 空 jobList 三重终止约束。
+			# 明确空 jobList 三重终止约束；整页元素漂移不是终止条件（Issue #2932）。
 			if platform_data.get("hasMore") is False:
 				stop_reason = "platform_has_more_false"
 				break
