@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.244] - 2026-11-26
+
 ### Fixed
 
 - `ACTION_UNCONFIRMED` 的登记表文案改为角色中立，共享错误出口按当前角色注入核对命令：求职者不再收到 `boss hr chatmsg <friend_id>`，而是候选侧 `chat` 与 `hints.next_actions`；招聘者仍保留 `hr chatmsg`（Issue #2921）。
