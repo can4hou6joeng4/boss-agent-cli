@@ -161,7 +161,7 @@ def chatmsg_cmd(
 
 		hints: dict[str, Any] = {"next_actions": [
 			boss_command_for_ctx(ctx, "chat", include_data_dir=True),
-			boss_command_for_ctx(ctx, f"detail {fresh_security_id}", include_data_dir=True),
+			boss_command_for_ctx(ctx, f"detail {positional_hint(fresh_security_id)}", include_data_dir=True),
 		]}
 		if pagination["has_more"] is True and page_can_advance(pagination):
 			# 翻页命令必须保留 --raw：只写 --page / --count 时下一页的

@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `chatmsg` 成功后的 `detail` 后继命令改用 `positional_hint()` 保护位置参数，以 `-` 开头或含空白的 security_id 也能原样回放（Issue #2938）。
+
 ## [3.4.249] - 2026-11-26
 
 ### Fixed
