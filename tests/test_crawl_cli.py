@@ -726,7 +726,7 @@ def test_resume_missing_run_reports_not_found_before_requiring_login(tmp_path):
 	payload = _envelope(result)
 	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 	assert "missing" in payload["error"]["message"]
-	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query> --city <城市>", "crawl status <run_id>")
 
 
 def test_resume_existing_run_without_login_still_requires_auth(tmp_path):
@@ -774,7 +774,7 @@ def test_empty_run_id_is_invalid_param_not_run_not_found(tmp_path):
 		payload = _envelope(result)
 		assert payload["error"]["code"] == "INVALID_PARAM", command
 		assert "run_id 不能为空" in payload["error"]["message"], command
-		_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
+		_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query> --city <城市>", "crawl status <run_id>")
 		# 恢复动作要说明「补上已存在的 run_id」或新建任务，而不是「修正参数」。
 		assert "run_id" in payload["error"]["recovery_action"], command
 
@@ -1218,7 +1218,7 @@ def test_run_not_found_hint_checks_the_original_directory(tmp_path, monkeypatch)
 	result = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "crawl", "status", "missing"])
 	assert result.exit_code == 1, result.output
 	actions = _envelope(result)["hints"]["next_actions"]
-	_assert_state_commands(actions, data_dir, "crawl start <query>", "crawl status <run_id>")
+	_assert_state_commands(actions, data_dir, "crawl start <query> --city <城市>", "crawl status <run_id>")
 	status_hint = actions[1].replace("<run_id>", "run-1")
 	status = runner.invoke(cli, shlex.split(status_hint)[1:])
 	assert status.exit_code == 0, status.output
@@ -1622,7 +1622,7 @@ def test_corrupt_run_params_reports_envelope_instead_of_traceback(tmp_path, comm
 	assert error["code"] == "CACHE_RECORD_INVALID"
 	assert error["recoverable"] is True
 	assert "params" in error["message"]
-	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词>")
+	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词> --city <城市>")
 
 
 def test_corrupt_hook_results_reports_envelope(tmp_path):
@@ -1720,7 +1720,7 @@ def test_drifted_run_params_report_cache_record_invalid(tmp_path, monkeypatch, o
 	assert error["recoverable"] is True
 	# 记录损坏不是「任务不存在」：恢复指引必须是重建任务，而不是换一个 run_id。
 	assert "未找到 crawl run" not in error["message"]
-	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词>")
+	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词> --city <城市>")
 	assert probes == [] and launches == [], "损坏断点必须在预检和启动 worker 之前拒绝（Issue #1125）"
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		assert cache.get_crawl_run("run-1") == before, "失败恢复不能清 stop 或刷新时间戳"
@@ -1742,7 +1742,7 @@ def test_run_not_found_carries_recovery_and_hints(tmp_path):
 	payload = _envelope(result)
 	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 	assert payload["error"]["recovery_action"]
-	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query> --city <城市>", "crawl status <run_id>")
 
 
 def _block_crawl_runtime(monkeypatch, *names: str) -> None:
