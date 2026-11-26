@@ -221,7 +221,7 @@ boss crawl stop <run_id>
 
 `favorites` 与 `shortlist` 的 `hints.next_actions` 保留原 `--data-dir` 与平台：从收藏预览继续翻页、同步，再读取或比较候选池时，始终使用同一账号与本地目录。`shortlist` 参数错误时的恢复命令也保留目录；加入后的删除提示和缺失条目的重建提示会对两个标识按 shell 参数转义，可直接复制执行。
 
-`boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。
+`boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。`--source` 省略时新记录记为 `manual`；重复加入同一职位时保留已有来源，显式传入 `--source` 才会覆盖。
 
 `boss shortlist annotate` 至少需要一个非空 `--add-tag` / `--remove-tag` 或 `--note`；空标签与空 `--tag` 会返回 `INVALID_PARAM`，不会静默变成「没有过滤」或 `updated: true`。`--note ""` 仍表示清空备注。
 

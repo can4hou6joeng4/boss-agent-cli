@@ -2204,12 +2204,18 @@ class CacheStore:
 		首次加入时间一起清空。重新 `shortlist add` 同一职位（脚本重跑、换设备后
 		再导一次）就会静默丢掉这些本地数据。这里改成冲突时按字段更新：本次没给
 		空值的列保留原值，`created_at` 始终保留首次加入时间。
+
+		``source`` 缺失（``None``）表示调用方没有指定来源：新记录仍记为
+		``manual``，重复加入时保留原来源（Issue #2960）；显式给值仍可覆盖。
 		"""
 		security_id = str(item.get("security_id") or "")
 		job_id = str(item.get("job_id") or "")
 		if not is_utf8_encodable(security_id) or not is_utf8_encodable(job_id):
 			raise CacheWriteRejected(self._db_path, "security_id 与 job_id 必须可按 UTF-8 编码")
-		source = _shortlist_display_text(item.get("source"))
+		raw_source = item.get("source")
+		source = _shortlist_display_text(raw_source)
+		source_unspecified = raw_source is None
+		insert_source = "manual" if source_unspecified else source
 		lid_value = item.get("lid")
 		lid = lid_value if isinstance(lid_value, str) and is_utf8_encodable(lid_value) else ""
 		if not lid:
@@ -2224,7 +2230,8 @@ class CacheStore:
 			"company = COALESCE(NULLIF(excluded.company, ''), shortlist_records.company), "
 			"city = COALESCE(NULLIF(excluded.city, ''), shortlist_records.city), "
 			"salary = COALESCE(NULLIF(excluded.salary, ''), shortlist_records.salary), "
-			"source = COALESCE(NULLIF(excluded.source, ''), shortlist_records.source), "
+			"source = CASE WHEN ? = 1 THEN shortlist_records.source "
+			"ELSE COALESCE(NULLIF(excluded.source, ''), shortlist_records.source) END, "
 			"tags = COALESCE(NULLIF(excluded.tags, ''), shortlist_records.tags), "
 			"note = COALESCE(NULLIF(excluded.note, ''), shortlist_records.note), "
 			"lid = excluded.lid",
@@ -2235,13 +2242,14 @@ class CacheStore:
 				_shortlist_text(item.get("company", "")),
 				_shortlist_text(item.get("city", "")),
 				_shortlist_text(item.get("salary", "")),
-				source,
+				insert_source,
 				self._serialize_shortlist_tags(item.get("tags", [])),
 				_shortlist_text(item.get("note", "")),
 				lid,
 				security_id,
 				job_id,
 				time.time(),
+				1 if source_unspecified else 0,
 			),
 		)
 		self._conn.commit()

@@ -86,7 +86,10 @@ def shortlist_group() -> None:
 @click.option("--company", default="", help="公司名称")
 @click.option("--city", default="", help="城市")
 @click.option("--salary", default="", help="薪资")
-@click.option("--source", default="manual", help="来源，如 search/recommend/show/manual")
+@click.option(
+	"--source", default=None,
+	help="来源，如 search/recommend/show/manual；省略时新记录记为 manual，重复加入保留原来源",
+)
 @click.option("--lid", default="", help="与 security_id 同一列表项的访问上下文（可选；不推断有效期）")
 @click.option("--tags", default="", help="本地标签，逗号分隔")
 @click.option("--note", default="", help="本地备注")
@@ -99,7 +102,7 @@ def shortlist_add_cmd(
 	company: str,
 	city: str,
 	salary: str,
-	source: str,
+	source: str | None,
 	lid: str,
 	tags: str,
 	note: str,
@@ -128,7 +131,7 @@ def shortlist_add_cmd(
 			("--company", company),
 			("--city", city),
 			("--salary", salary),
-			("--source", source),
+			("--source", source or ""),
 			("--lid", lid),
 			("--tags", tags),
 			("--note", note),
