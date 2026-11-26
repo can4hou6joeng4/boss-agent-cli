@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.228（2026-11-26）：AI 配置查看与执行共用端点语法校验，模型输出的已知字段类型漂移按可重试解析错误处理（Issue #2858、#2859）。
+
 v3.4.227（2026-11-26）：MCP 超时估算覆盖 `boss_me` 默认四段请求与 `boss_agent_run` / `boss_agent_train` 的会话扫描，健康调用不再被宿主 120s 默认超时提前掐断（Issue #2852、#2854）。
 
 v3.4.226（2026-11-26）：MCP `batch-greet` 只读中断指引改为保留原预览模式或零上限、按原参数重试；求职者侧 `exchange` / `mark` 的 `ACTION_UNCONFIRMED` 改用同一数据目录的 `boss chat` 核对，不再指向招聘者的 `boss hr chatmsg <friend_id>`（Issue #2847、#2849）。

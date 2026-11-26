@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.228 (2026-11-26): AI config display now shares endpoint syntax validation with execution, and malformed model output fields return a retryable parse error (Issues #2858, #2859).
+
 v3.4.227 (2026-11-26): MCP timeout estimation now covers the four default `boss_me` sections and the conversation scan in `boss_agent_run` / `boss_agent_train`, so healthy calls are no longer cut off by the host's 120s default timeout (Issues #2852, #2854).
 
 v3.4.226 (2026-11-26): MCP `batch-greet` read-only interrupt guidance now keeps the original preview mode or zero limit and retries with the same arguments; candidate-side `exchange` / `mark` `ACTION_UNCONFIRMED` now verifies via `boss chat` in the same data directory instead of the recruiter-only `boss hr chatmsg <friend_id>` (Issues #2847, #2849).
