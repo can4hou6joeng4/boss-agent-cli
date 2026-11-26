@@ -259,8 +259,9 @@ def test_ws_text_frame_is_not_base64_decoded():
 def test_action_unconfirmed_is_registered_and_not_retryable():
 	spec = ERROR_CODES["ACTION_UNCONFIRMED"]
 	assert spec["recoverable"] is False
-	assert "boss hr chatmsg" in spec["recovery_action"]
-	assert "勿直接重试" in spec["recovery_action"]
+	# 登记表保持角色中立；招聘者专属核对命令由共享出口按 role 注入（Issue #2921）。
+	assert "hr " not in spec["recovery_action"]
+	assert "不要自动重试" in spec["recovery_action"]
 
 
 def test_cli_envelope_carries_action_unconfirmed_and_details():
