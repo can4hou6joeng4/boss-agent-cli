@@ -79,17 +79,19 @@ def matches_chat_filters(
 	)
 
 
-def message_list(platform_data: Any) -> list[Any]:
-	"""取聊天历史响应里的消息数组；``messages`` 优先，兼容 ``historyMsgList``。
+def message_list(platform_data: Any) -> list[dict[str, Any]]:
+	"""取聊天历史响应里的消息数组；``messages`` 优先，兼容其余消息容器键。
 
-	沿用原有「空数组视为缺失」的语义：``messages`` 为空时回退到
-	``historyMsgList``。字段缺失、响应非 mapping 或字段类型不是数组时返回
-	空列表，避免把畸形载荷当成可迭代的消息集合。数组里的 ``null`` / 数字 /
-	字符串元素同样跳过（Issue #1145；与 #1141 同一口径）。
+	沿用原有「空数组视为缺失」的语义：``messages`` 为空时依次回退到
+	``historyMsgList`` / ``messageList``。CLI、聊天摘要、招聘者聊天与向导
+	共用这一份实现，同一响应在不同入口不能再得到不同的消息数（Issue #2962）。
+	字段缺失、响应非 mapping 或字段类型不是数组时返回空列表，避免把畸形
+	载荷当成可迭代的消息集合。数组里的 ``null`` / 数字 / 字符串元素同样
+	跳过（Issue #1145；与 #1141 同一口径）。
 	"""
 	if not isinstance(platform_data, dict):
 		return []
-	for key in ("messages", "historyMsgList"):
+	for key in ("messages", "historyMsgList", "messageList"):
 		value = dict_items(platform_data.get(key))
 		if value:
 			return value
