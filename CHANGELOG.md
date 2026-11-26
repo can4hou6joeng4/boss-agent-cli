@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 向导的 `ChatTabCdpUnreachable` / `RecruiterChatTabRequired` 分支不再仅凭异常类型放行重放：没有 `request_sent=false` 显式证据且已有写前标记时保留结果未知与核对指引，有证据时仍按原错误码恢复重跑（Issue #2904）。
+
 ## [3.4.239] - 2026-11-26
 
 ### Fixed
