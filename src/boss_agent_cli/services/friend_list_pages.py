@@ -105,7 +105,7 @@ def collect_friend_list_page(
 	"""
 	items: list[dict[str, Any]] = []
 	page = start_page
-	seen_signatures: set[tuple[str, ...]] = set()
+	seen_signatures: set[tuple[tuple[str, str], ...]] = set()
 	seen_rows: set[tuple[str, str]] = set()
 	pages_scanned = 0
 	truncated = False
@@ -132,13 +132,19 @@ def collect_friend_list_page(
 				continue
 			break
 
-		# securityId 在每次请求间都会轮换（见 services/contact_lookup.py），
-		# 只能作为 uid 缺失时的回退标识；签名全为空时无法判断是否重复，
-		# 继续聚合，避免把缺字段的新页面当成重复页丢掉。uid 必须是非空
-		# 字符串：布尔 / 容器漂移会让各页签名相同，整页联系人被当成重复页
-		# 丢弃且 reported complete（Issue #2063）。
-		identities = [stable_uid(item.get("uid")) or stable_uid(item.get("securityId")) for item in page_items]
-		if any(identities):
+		# 整页签名必须与行去重同口径（Issue #2872）：同一联系人对应不同职位时
+		# 是两条合法记录，不能因为 uid 相同就把下一页当成重复页丢掉。
+		# securityId 在每次请求间都会轮换，只能作为 uid 缺失时的回退标识；
+		# 签名全为空时无法判断是否重复，继续聚合，避免把缺字段的新页面当成
+		# 重复页丢掉。uid 必须是非空字符串：布尔 / 容器漂移会让各页签名相同，
+		# 整页联系人被当成重复页丢弃且 reported complete（Issue #2063）。
+		row_keys = [_row_identity(item) for item in page_items]
+		identities = [
+			key if key is not None
+			else (stable_uid(item.get("uid")) or stable_uid(item.get("securityId")) or "", "")
+			for item, key in zip(page_items, row_keys)
+		]
+		if any(uid for uid, _ in identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
 				break
@@ -148,8 +154,7 @@ def collect_friend_list_page(
 		# 一次，两页只重叠一部分。pipeline 行不带 uid，securityId 又每次请求轮换，
 		# 下游无法自行去重，所以在这里保留首条（与职位侧的
 		# job_identity.deduplicate_job_result 同口径，Issue #2753）。
-		for item in page_items:
-			row_key = _row_identity(item)
+		for item, row_key in zip(page_items, row_keys):
 			if row_key is not None:
 				if row_key in seen_rows:
 					continue
