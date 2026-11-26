@@ -274,6 +274,10 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	# 4) CDP availability
 	try:
 		ws_url = probe_cdp(cdp_url)
+		# 诊断不能把真值但不可用的探测结果标成 ok；类型漂移一律按不可用处理
+		# （Issue #2869）。probe_cdp 自身已校验 ws(s) 地址，这里兜住外部打桩。
+		if ws_url is not None and (not isinstance(ws_url, str) or not ws_url.strip()):
+			ws_url = None
 		cdp_detail = ws_url or f"CDP 不可用（目标: {cdp_url or DEFAULT_CDP_URL}）"
 		if ws_url:
 			try:
