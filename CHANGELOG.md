@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-27
+
 ### Added
 
 - MCP 工具目录新增 `boss_favorites_sync`、`boss_resume_init`、`boss_resume_delete`：仅使用 MCP 的宿主可以同步职位收藏、创建与删除本地简历；本地维护工具中断后的恢复指引先核对本机状态，不再把 Agent 引向不存在的平台写入（Issue #2975）。
