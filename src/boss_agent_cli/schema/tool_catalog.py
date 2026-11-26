@@ -565,12 +565,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"default": 30,
 					},
 					"pending_claims": {
-						"type": "boolean",
-						"description": (
-							"清除本地未完成的 greet/apply 预约（含结果未知的预约）；"
-							"执行前必须先在平台核对，否则重试可能重复发送"
-						),
-						"default": False,
+						"type": "string",
+						"minLength": 32,
+						"description": "释放失败信封中的 claim_reference；仅清除对应的本次 greet/apply 预约，其他预约保持不变",
 					},
 				},
 				"required": [],

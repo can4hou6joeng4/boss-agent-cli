@@ -49,12 +49,9 @@ from boss_agent_cli.display import (
 @click.option(
 	"--pending-claims",
 	"pending_claims",
-	is_flag=True,
-	default=False,
-	help=(
-		"清除本地未完成的 greet/apply 预约（含结果未知的预约）；"
-		"执行前必须先在平台核对，否则重试可能重复发送"
-	),
+	default=None,
+	metavar="REFERENCE",
+	help="按释放失败信封中的 claim_reference 清除该次 greet/apply 预约；不清除其他预约",
 )
 @click.pass_context
 def clean_cmd(
@@ -64,9 +61,18 @@ def clean_cmd(
 	privacy: bool,
 	days: int,
 	risk_lock: bool,
-	pending_claims: bool,
+	pending_claims: str | None,
 ) -> None:
 	"""清理过期缓存和临时文件。"""
+	if pending_claims is not None and (
+		len(pending_claims) != 32 or any(c not in "0123456789abcdef" for c in pending_claims)
+	):
+		handle_error_output(
+			ctx, "clean", code="INVALID_PARAM",
+			message="--pending-claims 必须是释放失败信封中的 32 位 claim_reference",
+			recovery_action="从 LOCAL_STATE_WRITE_FAILED 信封复制完整 claim_reference；不要猜测其他预约的标识",
+		)
+		return
 	data_dir = ctx.obj["data_dir"]
 	results: list[dict[str, Any]] = []
 	total_freed = 0
@@ -251,13 +257,11 @@ def clean_cmd(
 			results.append(_clean_result("职位描述缓存", freed, count))
 			total_freed += freed
 
-		# 7) 未完成的写动作预约：显式 opt-in，且不并入 --all。
-		# 释放预约失败后重跑会被 pending 挡住（LOCAL_STATE_WRITE_FAILED 的
-		# 恢复路径），这是唯一的清理入口；结果未知的预约也在这里，删除前
-		# 必须先在平台核对，否则重试可能重复发送（Issue #2971）。
-		if pending_claims:
+		# 7) 仅清除释放失败信封指定的预约。每次预约的随机标识独立，旧指引
+		# 不能删除新建预约；其他在途 / 结果未知预约与 sent 行始终保留。
+		if pending_claims is not None:
 			current_target = "未完成的动作预约"
-			freed, count = _clean_pending_action_claims(data_dir, dry_run=dry_run)
+			freed, count = _clean_pending_action_claims(data_dir, pending_claims, dry_run=dry_run)
 			results.append(_clean_result("未完成的动作预约", freed, count))
 			total_freed += freed
 
@@ -332,6 +336,8 @@ def clean_cmd(
 			clean_args.append("--all")
 		if privacy:
 			clean_args.append("--privacy")
+		if pending_claims is not None:
+			clean_args.extend(("--pending-claims", pending_claims))
 		clean_args.extend(("--days", str(days)))
 		if risk_lock:
 			clean_args.append("--risk-lock")
@@ -927,12 +933,10 @@ def _clean_location_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]
 	return _clean_table(data_dir, "recruiter_location_records", dry_run=dry_run)
 
 
-def _clean_pending_action_claims(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
-	"""清除 pending 的 greet/apply 预约；sent 行保留，历史去重不受影响。
+def _clean_pending_action_claims(data_dir: Path, reference: str, *, dry_run: bool) -> tuple[int, int]:
+	"""仅清除指定版本的 pending 预约，其他账号、动作与后续新预约均保留。
 
-	``sent`` 行是成功发送后的去重依据，删掉会让同一职位可以被再次发送；
-	这里只删除「已预约、尚未确认发送」的行，与 ``release_candidate_action``
-	的删除条件一致。
+	恢复标识只在已证明未发送且释放失败时输出；历史预约不补发标识。
 	"""
 	db_path = data_dir / "cache" / "boss_agent.db"
 	if not _cache_db_present(db_path):
@@ -941,15 +945,18 @@ def _clean_pending_action_claims(data_dir: Path, *, dry_run: bool) -> tuple[int,
 	try:
 		if not _table_exists(conn, "candidate_action_claims"):
 			return 0, 0
-		row = conn.execute(
-			"SELECT COUNT(*) FROM candidate_action_claims WHERE status = 'pending'"
-		).fetchone()
-		count = int(row[0])
-		estimated_size = count * 100
-		if not dry_run and count > 0:
-			conn.execute("DELETE FROM candidate_action_claims WHERE status = 'pending'")
+		columns = {row[1] for row in conn.execute("PRAGMA table_info(candidate_action_claims)")}
+		if "recovery_id" not in columns:
+			return 0, 0
+		where = "status = 'pending' AND action IN ('greet', 'apply') AND recovery_id = ?"
+		if dry_run:
+			row = conn.execute(f"SELECT COUNT(*) FROM candidate_action_claims WHERE {where}", (reference,)).fetchone()
+			count = int(row[0])
+		else:
+			cursor = conn.execute(f"DELETE FROM candidate_action_claims WHERE {where}", (reference,))
+			count = cursor.rowcount
 			conn.commit()
-		return estimated_size, count
+		return count * 100, count
 	finally:
 		conn.close()
 
