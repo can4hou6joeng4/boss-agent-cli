@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.239 (2026-11-26): recruiter composite actions distinguish unknown outcomes using write-boundary evidence, so pre-write failures no longer report `ACTION_UNCONFIRMED`; `hr resume --friend-id` hints now mention `--exchange`; `hr chat` / `hr last-messages` pagination totals and wizard pagination evidence count actually extracted rows through the shared implementation (Issues #2898, #2899, #2900).
+
 v3.4.238 (2026-11-26): Both HTML export mapping paths now share text-field normalization, keeping drifted values out of table cells (Issue #2895).
 
 v3.4.237 (2026-11-26): Private directory tightening no longer follows symlinks, new parents use 0700, and output paths reject non-UTF-8 names early (Issue #2892).
