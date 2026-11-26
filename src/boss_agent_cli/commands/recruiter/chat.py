@@ -28,7 +28,6 @@ from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
 	page_can_advance,
-	rows_from,
 )
 from boss_agent_cli.commands.recruiter._hints import hint_command, reject_blank_options
 from boss_agent_cli.commands.recruiter._render import (
@@ -93,15 +92,19 @@ def _friend_data(data: Any) -> dict[str, Any]:
 
 def _fetch_friend_ids(
 	platform: Any, *, page: int, label_id: int, job_id: str | None,
-) -> tuple[list[int], dict[int, int], dict[str, Any] | None, dict[str, Any]]:
-	"""取一页沟通列表；同时把平台原始载荷带回，供调用方推导分页证据。"""
+) -> tuple[list[int], dict[int, int], dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]:
+	"""取一页沟通列表，返回 ids / 来源 / 错误 / 平台载荷 / 实际提取出的联系人行。
+
+	载荷供调用方推导 ``page`` / ``hasMore``；行数供 ``total``，两者必须来自同一次
+	提取，否则 ``result`` / ``list`` 形态会出现「有联系人、total 为 null」（Issue #2900）。
+	"""
 	result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
 	if not platform.is_success(result):
-		return [], {}, result, {}
+		return [], {}, result, {}, []
 	data = _friend_data(platform.unwrap_data(result))
 	items = friend_items(data)
 	ids = friend_ids_from_items(items)
-	return ids, friend_sources(items), None, data
+	return ids, friend_sources(items), None, data, items
 
 
 def _last_messages_page(
@@ -202,7 +205,9 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 		data = _friend_data(platform.unwrap_data(result))
 		friend_rows = friend_items(data)
 		summary_hint = _enrich_chat_summaries(platform, friend_rows, summary_limit=summary_limit)
-		pagination = list_pagination(data, page=page, rows=rows_from(data, "friendList"))
+		# total 必须按实际提取出的联系人行计数：只认 friendList 会让 result /
+		# list 形态的整页记录报成 null（Issue #2900）。
+		pagination = list_pagination(data, page=page, rows=friend_rows)
 		hints: dict[str, Any] = {"next_actions": [
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			hint_command(ctx, "hr chatmsg <friend_id>"),
@@ -305,11 +310,14 @@ def recruiter_last_messages_cmd(
 		# 只有从平台取了一页沟通列表才有分页证据；--friend-id 直查没有列表页，pagination 为 null。
 		pagination: dict[str, Any] | None = None
 		if not ids:
-			ids, sources, error, page_data = _fetch_friend_ids(platform, page=page, label_id=label_id, job_id=job_id)
+			ids, sources, error, page_data, page_rows = _fetch_friend_ids(
+				platform, page=page, label_id=label_id, job_id=job_id,
+			)
 			if error is not None:
 				handle_platform_error_output(ctx, "recruiter-last-messages", platform, error, fallback_message="沟通列表获取失败")
 				return
-			pagination = list_pagination(page_data, page=page, rows=rows_from(page_data, "friendList"))
+			# 与 `hr chat` 同一口径：total 是本次实际提取出的联系人行数（Issue #2900）。
+			pagination = list_pagination(page_data, page=page, rows=page_rows)
 		if not ids:
 			# 空结果不能只回一个空列表：Agent 拿不到任何后继动作，也不知道
 			# 是「没有会话」还是「筛选条件太窄」。

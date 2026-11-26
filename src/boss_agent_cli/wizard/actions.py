@@ -62,6 +62,7 @@ from boss_agent_cli.services.pagination import (
 	MAX_TRUSTED_COUNT,
 	MAX_TRUSTED_PAGE,
 	export_page_budget,
+	list_pagination,
 )
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
@@ -477,20 +478,17 @@ def _with_items(data: Mapping[str, Any], items: list[dict[str, Any]]) -> dict[st
 
 
 def _pagination_evidence(data: Any, page: int, items: list[dict[str, Any]]) -> dict[str, Any]:
-	"""步骤 data 的分页证据：与 CLI 信封同词汇（Issue #2670）。
+	"""步骤 data 的分页证据：与 CLI 信封同词汇、同实现（Issue #2670 / #2900）。
 
-	平台只给真正的布尔 ``hasMore`` 才认定有 / 没有下一页；缺失或类型漂移
-	（字符串 ``"true"``、数字 ``1``）都是 ``null``，不能据此停止翻页。
+	直接复用 ``services.pagination.list_pagination``：平台返回有效 ``page`` 时
+	以平台为准（并钳制到可信上限），否则回显钳制后的请求页；``has_more`` 只认
+	真正的布尔 ``hasMore``，缺失或类型漂移（字符串 ``"true"``、数字 ``1``）都是
+	``null``，不能据此停止翻页；``total`` 是本次返回条数。
+
+	此前这里是固定回显请求页的本地副本，平台纠正页码后向导仍报请求页，与 CLI
+	信封产生两套证据（Issue #2900）。
 	"""
-	raw_has_more = data.get("hasMore") if isinstance(data, dict) else None
-	has_more = raw_has_more if isinstance(raw_has_more, bool) else None
-	return {
-		"page": page,
-		"has_more": has_more,
-		"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
-		"total": len(items),
-		"total_kind": "returned_page_count",
-	}
+	return list_pagination(data, page=page, rows=items)
 
 
 def _optional_str(value: Any) -> str | None:
@@ -3101,14 +3099,15 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 				(value for key in ("friendList", "result", "list") if isinstance((value := friend_data.get(key)), list)),
 				[],
 			)
+			# total 按实际提取出的联系人行计数；非对象元素与 CLI `friend_items`
+			# 一样被过滤，不能虚增本页条数（Issue #2900）。
+			extracted = [item for item in friend_items if isinstance(item, dict)]
 			# 与 CLI `hr last-messages` 同口径：分页证据来自沟通列表页，而不是
 			# 逐个会话的最近消息响应（Issue #2672）。
-			pagination = _pagination_evidence(friend_data, page, friend_items)
-			sources = friend_sources([item for item in friend_items if isinstance(item, dict)])
+			pagination = _pagination_evidence(friend_data, page, extracted)
+			sources = friend_sources(extracted)
 			friend_ids = []
-			for item in friend_items:
-				if not isinstance(item, dict):
-					continue
+			for item in extracted:
 				fid = friend_id_for(item)
 				if fid is not None and fid not in friend_ids:
 					friend_ids.append(fid)

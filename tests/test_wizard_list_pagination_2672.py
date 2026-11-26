@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from boss_agent_cli.output import Logger
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 
 _FRIEND_PAGE = {
@@ -211,3 +212,58 @@ def test_candidate_chat_history_missing_has_more_is_unknown(tmp_path, payload):
 
 	assert data["pagination"]["has_more"] is None
 	assert data["pagination"]["has_more_source"] == "unknown"
+
+
+def test_recruiter_chat_prefers_platform_page(tmp_path):
+	"""平台纠正页码时向导与 CLI 信封一致采信平台值（Issue #2900）。"""
+	payload = {
+		"page": 7,
+		"hasMore": True,
+		"friendList": [{"friendId": 101, "name": "甲"}, {"friendId": 102, "name": "乙"}],
+	}
+	platform = _RecruiterPlatform(friend_payload=payload)
+
+	data = _run(_recruiter_context(tmp_path, platform), "recruiter_chat", {"page": 3})
+
+	assert platform.friend_calls == [3]
+	assert data["pagination"] == {
+		"page": 7,
+		"has_more": True,
+		"has_more_source": "platform_hasMore",
+		"total": 2,
+		"total_kind": "returned_page_count",
+	}
+
+
+@pytest.mark.parametrize("platform_page", [0, -1, True, "3", 10**9])
+def test_recruiter_chat_falls_back_to_request_page_on_drifted_platform_page(tmp_path, platform_page):
+	"""平台 page 不是可信整数时回显请求页，不能把它原样写进证据。"""
+	platform = _RecruiterPlatform(
+		friend_payload={"page": platform_page, "hasMore": False, "friendList": []},
+	)
+
+	data = _run(_recruiter_context(tmp_path, platform), "recruiter_chat", {"page": 4})
+
+	assert data["pagination"]["page"] == 4
+	assert data["pagination"]["has_more"] is False
+
+
+def test_recruiter_chat_clamps_untrusted_request_page(tmp_path):
+	"""没有平台 page 时回显的请求页也要钳制，避免 page + 1 拼出无界整数。"""
+	platform = _RecruiterPlatform(friend_payload={"hasMore": False, "friendList": []})
+
+	data = _run(_recruiter_context(tmp_path, platform), "recruiter_chat", {"page": 2_000_000})
+
+	assert data["pagination"]["page"] == MAX_TRUSTED_PAGE
+
+
+def test_last_messages_total_counts_extracted_contact_rows(tmp_path):
+	"""非对象元素不计入 total，与 CLI 的 friend_items 过滤口径一致（Issue #2900）。"""
+	payload = {"friendList": [{"friendId": 101, "name": "甲"}, "drifted"], "hasMore": False}
+	platform = _RecruiterPlatform(friend_payload=payload)
+
+	data = _run(_recruiter_context(tmp_path, platform), "recruiter_last_messages", {"page": 2})
+
+	assert data["friend_ids"] == [101]
+	assert data["pagination"]["total"] == 1
+	assert data["pagination"]["has_more"] is False

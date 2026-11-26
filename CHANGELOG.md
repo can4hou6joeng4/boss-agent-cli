@@ -8,6 +8,7 @@
 
 - `hr request-resume` 在写前读取 / 浏览器会话建立 / 聊天页脚本发送前失败时不再误报 `ACTION_UNCONFIRMED`：复合动作由客户端在写入边界标注 `request_sent=false`，命令与向导只消费显式证据，分别输出 `INVALID_PARAM` / `BROWSER_NAV_TIMEOUT` / `CDP_UNAVAILABLE` / `RECRUITER_CHAT_TAB_REQUIRED`；写后失败仍按结果未知保护（Issue #2898）。
 - `hr resume --friend-id` 漏加 `--exchange` 时在提示与下一步命令中点明该开关，不再只让人补查看简历的 geek_id / job-id / security-id（Issue #2899）。
+- `hr chat` / `hr last-messages` 的分页 `total` 改为按实际提取出的联系人行计数（`friendList` / `result` / `list` 三种容器均识别），整页记录不再报成 `null`；向导步骤的分页证据改为复用与 CLI 相同的共享实现，平台纠正页码时采信平台值并钳制不可信页码（Issue #2900）。
 
 ## [3.4.238] - 2026-11-26
 
