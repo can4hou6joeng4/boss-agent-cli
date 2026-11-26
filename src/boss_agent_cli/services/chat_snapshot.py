@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.services.chat_utils import contact_identity
+from boss_agent_cli.services.chat_utils import contact_identity, stable_uid
 from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
 from boss_agent_cli.services.json_files import (
 	degrade_unserializable_records,
@@ -90,6 +90,19 @@ def _read_complete_marker(snapshot_path: str) -> bool:
 	return isinstance(data, dict) and data.get("complete") is True
 
 
+def _current_diff_identity(item: dict[str, Any]) -> str:
+	"""当前记录的跨天身份：显式写了 uid 却没有可用值时不再回退 security_id。
+
+	``commands/chat`` 写出的每条记录都带 ``uid`` 键（缺失时为空串），而
+	security_id 每次请求轮换；把它当稳定键会让同一个人在相邻两天被判成
+	「新增 + 消失」，未读增量也丢失（Issue #2887）。没有 uid 键的历史 /
+	旧格式记录仍交给 ``contact_identity`` 的 security_id 回退兼容。
+	"""
+	if "uid" in item:
+		return stable_uid(item.get("uid"))
+	return contact_identity(item)
+
+
 def save_snapshot_and_diff(
 	snapshot_dir: str,
 	friends: list[dict[str, Any]],
@@ -120,7 +133,7 @@ def save_snapshot_and_diff(
 	# 有条目因缺少身份被丢弃时不能声称完整（Issue #2179）：既不推断「已消失」，
 	# 也不把 complete=true 写进当日快照——否则次日会把这份不完整快照当基线。
 	current_complete = (
-		complete and not dropped_entries and all(contact_identity(item) for item in usable_friends)
+		complete and not dropped_entries and all(_current_diff_identity(item) for item in usable_friends)
 	)
 
 	# 读、合并和写入共用一把锁，避免并发导出覆盖另一页联系人（#1356）。
@@ -140,8 +153,8 @@ def save_snapshot_and_diff(
 		}
 	prev_friends, baseline_complete = previous
 
-	# 用稳定标识（uid 优先）做 key 对比
-	curr_map = {contact_identity(item): item for item in merged if contact_identity(item)}
+	# 用稳定标识（uid 优先）做 key 对比；当前记录即使缺 uid 也不回退轮换令牌。
+	curr_map = {_current_diff_identity(item): item for item in merged if _current_diff_identity(item)}
 	prev_map = {contact_identity(item): item for item in prev_friends if contact_identity(item)}
 	curr_ids = set(curr_map)
 	prev_ids = set(prev_map)

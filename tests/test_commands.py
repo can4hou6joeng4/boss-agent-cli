@@ -1953,8 +1953,8 @@ def test_chat_snapshot_diff(mock_auth_cls, mock_client_cls, tmp_path):
 	snapshot_dir.mkdir(parents=True)
 	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 	prev_snapshot = [
-		{"name": "张HR", "brand_name": "阿里", "security_id": "sec_张HR",
-		 "unread": 0, "last_time": "昨天"},
+		{"name": "张HR", "brand_name": "阿里", "uid": "uid_张HR",
+		 "security_id": "sec_张HR", "unread": 0, "last_time": "昨天"},
 	]
 	with open(snapshot_dir / f"{yesterday}.json", "w") as f:
 		json.dump(prev_snapshot, f)
@@ -1962,12 +1962,14 @@ def test_chat_snapshot_diff(mock_auth_cls, mock_client_cls, tmp_path):
 	# 现在 API 返回多了一条
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
 	_ctx_mock(mock_client_cls)
+	# 跨天 diff 必须靠稳定 uid；security_id 每次请求轮换（Issue #2887）。
+	zhangs = _make_friend_item("张HR", "阿里", 1, now_ms)
+	zhangs["uid"] = "uid_张HR"
+	new_hr = _make_friend_item("新HR", "字节", 1, now_ms)
+	new_hr["uid"] = "uid_新HR"
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
-			"result": [
-				_make_friend_item("张HR", "阿里", 1, now_ms),
-				_make_friend_item("新HR", "字节", 1, now_ms),
-			],
+			"result": [zhangs, new_hr],
 		},
 	}
 	out_file = str(tmp_path / "chat.md")
