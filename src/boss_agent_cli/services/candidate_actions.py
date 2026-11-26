@@ -282,12 +282,15 @@ def run_candidate_action(
 		result = send()
 	except BaseException as exc:
 		if candidate_action_provably_unsent(exc):
-			# 释放本身也可能写失败（database is locked / 磁盘满）：不能让它替换
-			# 原始异常，否则命令层会把「请求未发出」报成结果未知，丢掉真正的
-			# 恢复动作（重新登录 / 修代理，Issue #2315）。释放失败只记 note。
+			# 释放本身也可能写失败（database is locked / 磁盘满）。派发前的
+			# 认证 / 代理 / 传输失败保留原始异常与具体恢复动作（Issue #2315）；
+			# 平台已明确拒绝的 typed 错误则必须转成不可重试的本地状态错误，
+			# 否则照原提示重试会撞上尚未释放的 pending（Issue #2944）。
 			try:
 				release_candidate_action(cache, job_id, action, account=account)
 			except Exception as release_exc:
+				if getattr(exc, "platform_rejected", None) is True:
+					raise CandidateActionReleaseFailed(action, release_exc) from release_exc
 				exc.add_note(f"释放候选人动作预约失败: {type(release_exc).__name__}: {release_exc}")
 		raise
 	outcome = classify(result) if classify is not None else "success"
