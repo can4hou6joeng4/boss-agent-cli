@@ -746,24 +746,35 @@ class WorkflowRunner:
 			except ChatTabCdpUnreachable as exc:
 				# 脚本未发送，动作没有平台写入：按可重试的 CDP 不可用收口，
 				# 不进入「结果未知」分支（Issue #1455）。
-				recoverable, recovery = error_contract_for_code("CDP_UNAVAILABLE")
-				error = WorkflowActionError(
-					"CDP_UNAVAILABLE",
-					f"CDP 调试端点不可达，聊天页动作尚未发送: {exc}",
-					recoverable=recoverable,
-					recovery_action=recovery,
-				)
+				# 但只有异常类型、没有 request_sent=False 证据时不能覆盖已落盘的
+				# 写标记：那可能是一次已经发出、结果未知的写（Issue #2904）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error("CDP_UNAVAILABLE", write_marker)
+				else:
+					recoverable, recovery = error_contract_for_code("CDP_UNAVAILABLE")
+					error = WorkflowActionError(
+						"CDP_UNAVAILABLE",
+						f"CDP 调试端点不可达，聊天页动作尚未发送: {exc}",
+						recoverable=recoverable,
+						recovery_action=recovery,
+					)
 			except RecruiterChatTabRequired as exc:
 				# 招聘者聊天页不存在，脚本未发送。与 CLI 的 display 分支同码：
 				# 不能落成可重试的 NETWORK_ERROR，更不能按结果未知拦住恢复
-				# （Issue #2898）。
-				recoverable, recovery = error_contract_for_code("RECRUITER_CHAT_TAB_REQUIRED")
-				error = WorkflowActionError(
-					"RECRUITER_CHAT_TAB_REQUIRED",
-					str(exc),
-					recoverable=recoverable,
-					recovery_action=recovery,
-				)
+				# （Issue #2898）。有写标记且无显式未发出证据时仍须 fail-closed
+				# （Issue #2904）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error("RECRUITER_CHAT_TAB_REQUIRED", write_marker)
+				else:
+					recoverable, recovery = error_contract_for_code("RECRUITER_CHAT_TAB_REQUIRED")
+					error = WorkflowActionError(
+						"RECRUITER_CHAT_TAB_REQUIRED",
+						str(exc),
+						recoverable=recoverable,
+						recovery_action=recovery,
+					)
 			except BrowserSourceUnavailable as exc:
 				# 策略表的 doctor / status --live 读的是 <data_dir> 里的登录态与风险锁，
 				# 这里补上本次运行的数据目录与平台（Issue #980）。
