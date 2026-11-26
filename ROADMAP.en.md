@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.235 (2026-11-26): Contact lookup now uses the same securityId rules as write requests and includes job IDs in page signatures (Issue #2883).
+
 v3.4.234 (2026-11-26): Request budget records dispatch time after local preparation, so setup work no longer shortens request intervals (Issue #2880).
 
 v3.4.233 (2026-11-26): Search next-page hints are replayable and identical on cache hits; stats counts share one read snapshot (Issue #2874 #2875 #2876).
