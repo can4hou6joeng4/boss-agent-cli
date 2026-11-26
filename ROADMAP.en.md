@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.230 (2026-11-26): AI commands validate declared top-level model output field types and return a retryable parse error on drift (Issue #2865).
+
 v3.4.229 (2026-11-26): Blank local AI model names are rejected before any request and status now matches usability (Issues #2862, #2863).
 
 v3.4.228 (2026-11-26): AI config display now shares endpoint syntax validation with execution, and malformed model output fields return a retryable parse error (Issues #2858, #2859).
