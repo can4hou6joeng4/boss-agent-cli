@@ -561,8 +561,8 @@ def _privacy_preflight(data_dir: Path, targets: list[tuple[str, Path]]) -> list[
 	"""只读预检隐私清理目标，返回不可处理项。
 
 	不创建、不删除任何路径。符号链接（目标本身或祖先）按「跳过并报告」处理，
-	属于可安全完成的目标；其余已存在目标要求父目录可写，目录自身还要可写
-	（``shutil.rmtree`` 需要先删掉子项）。
+	属于可安全完成的目标；其余已存在目标要求父目录可写，整棵真实目录树都要
+	可写、可进入且可枚举（``shutil.rmtree`` 需要先删掉子项），不跟随嵌套链接。
 	"""
 	problems: list[dict[str, str]] = []
 	for target, path in targets:
@@ -583,8 +583,28 @@ def _privacy_preflight(data_dir: Path, targets: list[tuple[str, Path]]) -> list[
 		if not _is_writable(path.parent):
 			problems.append({"target": target, "path": str(path), "reason": "父目录不可写"})
 			continue
-		if stat.S_ISDIR(mode) and not _is_writable(path):
-			problems.append({"target": target, "path": str(path), "reason": "目录不可写"})
+		if not stat.S_ISDIR(mode):
+			continue
+		directories = [path]
+		while directories:
+			directory = directories.pop()
+			if not _is_writable(directory):
+				problems.append({"target": target, "path": str(directory), "reason": "目录不可写或不可进入"})
+				continue
+			try:
+				items = list(directory.iterdir())
+			except OSError as exc:
+				problems.append({"target": target, "path": str(directory), "reason": f"无法枚举目录: {exc}"})
+				continue
+			for item in items:
+				try:
+					item_mode = _lstat_mode(item)
+				except OSError as exc:
+					problems.append({"target": target, "path": str(item), "reason": f"无法读取路径状态: {exc}"})
+					continue
+				# 只按 lstat 类型递归真实目录，目录链接和悬空链接都不进入。
+				if item_mode is not None and stat.S_ISDIR(item_mode):
+					directories.append(item)
 	db_path = data_dir / "cache" / "boss_agent.db"
 	# 文件只需要写权限；X_OK 对普通文件恒为假，不能复用目录的 W_OK|X_OK 判断。
 	try:
