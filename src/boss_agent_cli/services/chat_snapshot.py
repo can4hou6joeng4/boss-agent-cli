@@ -153,9 +153,12 @@ def save_snapshot_and_diff(
 		}
 	prev_friends, baseline_complete = previous
 
-	# 用稳定标识（uid 优先）做 key 对比；当前记录即使缺 uid 也不回退轮换令牌。
+	# 用稳定标识（uid 优先）做 key 对比；当前和基线记录显式写了 uid 却为空时
+	# 都不回退轮换令牌，否则同一联系人在基线里会多出一个无法被当前记录匹配的
+	# 身份键，次日被误报「已消失」（Issue #2929）。完全没有 uid 键的历史记录
+	# 仍由 _current_diff_identity 回退到 security_id 兼容旧格式。
 	curr_map = {_current_diff_identity(item): item for item in merged if _current_diff_identity(item)}
-	prev_map = {contact_identity(item): item for item in prev_friends if contact_identity(item)}
+	prev_map = {_current_diff_identity(item): item for item in prev_friends if _current_diff_identity(item)}
 	curr_ids = set(curr_map)
 	prev_ids = set(prev_map)
 
@@ -249,7 +252,8 @@ def _merge_and_write(
 			# 整数上限；RecursionError 覆盖深嵌套。坏快照按没有历史处理。
 			pass
 
-	# 用当前数据更新（新数据优先）
+	# 用当前数据更新（新数据优先）。这里仍按 contact_identity 保留缺 uid 的
+	# 观察行：它们不能作为跨天身份，但同日分页合并不能丢数据（Issue #1791）。
 	for item in friends:
 		key = contact_identity(item)
 		if key:
