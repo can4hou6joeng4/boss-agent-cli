@@ -99,6 +99,10 @@ def _collect_stats(db_path: Path, days: int) -> dict[str, Any]:
 	conn = sqlite3.connect(str(db_path))
 	try:
 		try:
+			# 漏斗与窗口必须来自同一读取快照：默认每条 SELECT 各自取最新提交
+			# 状态，并发写入夹在两次查询之间会给出「窗口数 > 累计数」这种
+			# 不可能的组合，并据此误报下一步建议（Issue #2876）。
+			conn.execute("BEGIN")
 			greeted_total = _count_records(conn, "greet_records")
 			applied_total = _count_records(conn, "apply_records")
 			shortlist_total = _count_records(conn, "shortlist_records")
@@ -112,6 +116,8 @@ def _collect_stats(db_path: Path, days: int) -> dict[str, Any]:
 			if is_cache_busy_error(exc) or is_cache_local_io_error(exc):
 				raise
 			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
+		finally:
+			conn.rollback()
 	finally:
 		conn.close()
 
