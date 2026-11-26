@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.247 (2026-11-26): Chat-snapshot cross-day diff no longer treats explicit empty-uid baseline rows as stable identities via rotated `security_id`, so present contacts are not reported as removed (Issue #2929).
+
 v3.4.246 (2026-11-26): A successful friend-list page without a list container is no longer treated as a complete empty page; aggregation keeps paging or reports truncation explicitly (Issue #2927).
 
 v3.4.245 (2026-11-26): wizard status hints skip drifted container-shaped internal run identifiers instead of generating unusable `crawl resume` / `wizard --status` commands (Issue #2924).
