@@ -741,6 +741,37 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			},
 		),
 		ToolDefinition(
+			name="boss_resume_init",
+			description="从默认模板初始化一份本地简历；同名简历已存在时拒绝，不覆盖现有内容。只写本机，不访问平台。",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "简历名称（省略时为 default）"},
+					"template": {
+						"type": "string",
+						"enum": ["default"],
+						"default": "default",
+						"description": "模板名称；当前仅提供 default",
+					},
+				},
+				"required": [],
+			},
+		),
+		ToolDefinition(
+			name="boss_resume_delete",
+			description=(
+				"删除一份本地简历及其职位关联；不可恢复，只影响本机文件。"
+				"删除前先用 boss_resume_list 核对简历名称。"
+			),
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "要删除的简历名称"},
+				},
+				"required": ["name"],
+			},
+		),
+		ToolDefinition(
 			name="boss_ai_analyze_jd",
 			description="分析职位描述并评估简历匹配度，输出匹配分数和差距分析",
 			input_schema={
@@ -894,6 +925,15 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				},
 				"required": [],
 			},
+		),
+		ToolDefinition(
+			name="boss_favorites_sync",
+			description=(
+				"把 BOSS 职位收藏同步到本地候选池：远端只读拉取，本地按 job_id upsert 并刷新访问 ID。"
+				"分页受安全上限约束，data.pages_scanned / truncated 报告完整性，"
+				"重复页仍声明有后续时计数只覆盖已扫描前缀。"
+			),
+			input_schema={"type": "object", "properties": {}, "required": []},
 		),
 		ToolDefinition(
 			name="boss_shortlist_add",

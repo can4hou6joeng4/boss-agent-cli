@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- MCP 工具目录新增 `boss_favorites_sync`、`boss_resume_init`、`boss_resume_delete`：仅使用 MCP 的宿主可以同步职位收藏、创建与删除本地简历；本地维护工具中断后的恢复指引先核对本机状态，不再把 Agent 引向不存在的平台写入（Issue #2975）。
+
 ### Fixed
 
 - `crawl shortlist` 从本地断点导入候选池时，空串或纯空白的访问标识 / 职位 ID 与 `shortlist add` 同口径计入 `skipped_count`，不再写入无法使用的主键，也不会占住唯一键挡住同一职位的有效记录（Issue #2984）。

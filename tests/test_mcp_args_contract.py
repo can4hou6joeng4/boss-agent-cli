@@ -26,6 +26,7 @@ from boss_agent_cli.commands import clean as clean_cmd_module
 from boss_agent_cli.commands import detail as detail_cmd_module
 from boss_agent_cli.commands import digest as digest_cmd_module
 from boss_agent_cli.commands import export as export_cmd_module
+from boss_agent_cli.commands import favorites as favorites_cmd_module
 from boss_agent_cli.commands import greet as greet_cmd_module
 from boss_agent_cli.commands import mark as mark_cmd_module
 from boss_agent_cli.commands import me as me_cmd_module
@@ -33,6 +34,7 @@ from boss_agent_cli.commands import pipeline as pipeline_cmd_module
 from boss_agent_cli.commands import stats as stats_cmd_module
 from boss_agent_cli.commands import preset as preset_cmd_module
 from boss_agent_cli.commands import recommend as recommend_cmd_module
+from boss_agent_cli.commands import resume_cmd as resume_cmd_module
 from boss_agent_cli.commands import search as search_cmd_module
 from boss_agent_cli.commands import shortlist as shortlist_cmd_module
 from boss_agent_cli.commands import status as status_cmd_module
@@ -344,6 +346,11 @@ _LOCAL_SINGLE_COMMAND_TOOLS = {
 	"boss_preset_add": (preset_cmd_module.preset_add_cmd, {}, set()),
 	"boss_watch_add": (watch_cmd_module.watch_add_cmd, {}, set()),
 	"boss_shortlist_add": (shortlist_cmd_module.shortlist_add_cmd, {}, set()),
+	# 本地维护入口（Issue #2975）：同步 / 初始化 / 删除均无 CLI 侧可选参数
+	# 被有意隐藏，参数面与 CLI 完全一致。
+	"boss_favorites_sync": (favorites_cmd_module.favorites_sync_cmd, {}, set()),
+	"boss_resume_init": (resume_cmd_module.resume_init_cmd, {}, set()),
+	"boss_resume_delete": (resume_cmd_module.resume_delete_cmd, {}, set()),
 	"boss_shortlist_annotate": (
 		shortlist_cmd_module.shortlist_annotate_cmd,
 		{"add_tag": "add_tags", "remove_tag": "remove_tags"},

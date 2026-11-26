@@ -26,6 +26,8 @@ _ENUM_KEYS: frozenset[str] = frozenset(
 		"lang",
 		"tone",
 		"type",
+		# resume init 的 --template 目前仅接受 default；显式空串原样下发由 CLI 拒绝。
+		"template",
 		# preset / watch / batch-greet 的筛选键是 Click Choice（Issue #1180）。
 		"industry",
 		"scale",
@@ -570,6 +572,19 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "resume_show":
 		return _literal_positionals(["resume", "show", arguments["name"]], start=2)
 
+	if name == "resume_init":
+		args = ["resume", "init"]
+		# 键存在且不为 None 就原样下发：显式空串在 CLI 会被按 INVALID_PARAM
+		# 拒绝，真值判断会把它换成默认简历名，调用方以为指定名称已生效。
+		if arguments.get("name") is not None:
+			args.extend(_option_pair("--name", str(arguments["name"])))
+		if arguments.get("template") is not None:
+			args.extend(_option_pair("--template", str(arguments["template"])))
+		return args
+
+	if name == "resume_delete":
+		return _literal_positionals(["resume", "delete", arguments["name"]], start=2)
+
 	if name == "ai_analyze_jd":
 		return _literal_positionals(
 			["ai", "analyze-jd", arguments["jd_text"], *_option_pair("--resume", arguments["resume"])],
@@ -643,6 +658,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if arguments.get("page") is not None:
 			args.extend(_option_pair("--page", str(arguments["page"])))
 		return args
+
+	if name == "favorites_sync":
+		return ["favorites", "sync"]
 
 	if name == "history":
 		args = ["history"]
