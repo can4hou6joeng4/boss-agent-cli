@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.248 (2026-11-26): The `boss export` fast path no longer treats a fully drifted `jobList` as a complete empty page; later pages are still scanned and budget exhaustion is marked as truncated (Issue #2932).
+
 v3.4.247 (2026-11-26): Chat-snapshot cross-day diff no longer treats explicit empty-uid baseline rows as stable identities via rotated `security_id`, so present contacts are not reported as removed (Issue #2929).
 
 v3.4.246 (2026-11-26): A successful friend-list page without a list container is no longer treated as a complete empty page; aggregation keeps paging or reports truncation explicitly (Issue #2927).
