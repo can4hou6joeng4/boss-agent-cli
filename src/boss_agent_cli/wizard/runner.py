@@ -56,6 +56,9 @@ WorkflowEvent = Callable[[str, str, Mapping[str, Any] | None], None]
 #: 命中即停止、且不允许重试的账号 / 环境风控码。
 _RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK"})
 
+#: 认证失败可能发生在写请求已经发出之后，不能仅凭错误码判定可重放。
+_AUTH_FAILURE_CODES = frozenset({"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"})
+
 #: 带 ``replay_safe: false`` 时必须阻断重放的步骤状态。``waiting_input``
 #: 也可能带着写前标记（旧数据 / 手工漂移）：执行器自身会清空它，但读到就不能放行。
 _REPLAY_BLOCKING_STATUSES = frozenset({
@@ -215,7 +218,7 @@ def _search_pipeline_error(
 			recovery_action=recovery_action,
 		)
 	message = platform_error_message(code, exc.message, "搜索结果获取失败")
-	if code in {"AUTH_EXPIRED", "AUTH_REQUIRED", "TOKEN_REFRESH_FAILED"}:
+	if code in _AUTH_FAILURE_CODES:
 		recoverable, _ = error_contract_for_code(code)
 		return WorkflowActionError(
 			code,
@@ -634,6 +637,16 @@ class WorkflowRunner:
 					except WorkflowActionError as exc:
 						if not exc.recoverable or not exc.auto_retry or not exc.replay_safe or attempt >= max_retries:
 							raise
+						# 认证失败可能发生在写请求已经发出之后；没有显式「未发出」
+						# 证据时不能清标记自动重试，否则同一写请求会被派发两次
+						# （Issue #2913）。限流等平台明确拒绝仍按既有契约重放。
+						write_marker = (
+							self._persisted_write_marker(run_id, step_name)
+							if exc.code in _AUTH_FAILURE_CODES
+							else None
+						)
+						if write_marker is not None:
+							raise self._unconfirmed_error(exc.code, write_marker) from exc
 						attempt += 1
 						control.raise_if_requested()
 						# 动作明确报告了可以重放的失败：这次尝试在写请求前预先落盘的「结果未知」
@@ -667,7 +680,7 @@ class WorkflowRunner:
 				)
 			except WorkflowActionError as exc:
 				if (
-					exc.code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}
+					exc.code in _AUTH_FAILURE_CODES
 					and exc.recoverable
 					and exc.replay_safe
 					and exc.recovery_action == error_contract_for_code(exc.code)[1]
@@ -1055,7 +1068,7 @@ class WorkflowRunner:
 			# 认证类失败是写后也可能出现的响应（登录态在派发后才失效），不能
 			# 凭错误码就判定可重放；其他平台明确拒绝的码（如 RATE_LIMITED）
 			# 仍按既有契约放行恢复（Issue #2910）。
-			if error.replay_safe and error.code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}:
+			if error.replay_safe and error.code in _AUTH_FAILURE_CODES:
 				write_marker = self._persisted_write_marker(run_id, step_name)
 				if write_marker is not None:
 					error = self._unconfirmed_error(error.code, write_marker)
