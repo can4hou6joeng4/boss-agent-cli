@@ -102,16 +102,16 @@ def test_find_friend_by_security_id_returns_raw_error_response_without_unwrappin
 
 
 def test_find_friend_by_security_id_terminates_on_repeated_page_signature():
+	"""重复页仍声明有后续时按遍历不完整报错，不能误报联系人不存在（Issue #2916）。"""
 	pages = [
 		{"data": {"friendList": [{"securityId": "sec_a"}], "hasMore": True}},
 		{"data": {"friendList": [{"securityId": "sec_a"}], "hasMore": True}},
 	]
 	platform, calls = _platform_from_pages(pages)
 
-	friend_item, error_response = find_friend_by_security_id(platform, "sec_missing", start_page=3, max_pages=5)
+	with pytest.raises(FriendLookupLimitExceeded, match="重复页"):
+		find_friend_by_security_id(platform, "sec_missing", start_page=3, max_pages=5)
 
-	assert friend_item is None
-	assert error_response is None
 	assert calls == [3, 4]
 
 

@@ -2,7 +2,9 @@
 
 from types import SimpleNamespace
 
-from boss_agent_cli.services.contact_lookup import find_friend, friend_security_id
+import pytest
+
+from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend, friend_security_id
 
 
 def _platform_from_pages(pages):
@@ -64,11 +66,24 @@ def test_same_contact_on_different_jobs_does_not_stop_paging():
 
 
 def test_genuine_repeated_page_signature_still_stops():
-	"""uid 与职位 ID 都相同的重复页仍要早停，防止无界翻页。"""
+	"""uid 与职位 ID 都相同的重复页仍要早停，但不能误报联系人不存在。"""
 	platform, calls = _platform_from_pages([
 		_page([{"uid": 1, "encryptJobId": "j1", "securityId": "sid_a"}], has_more=True),
 		_page([{"uid": 1, "encryptJobId": "j1", "securityId": "sid_b"}], has_more=True),
 		_page([{"uid": 2, "securityId": "sid_target"}]),
+	])
+
+	with pytest.raises(FriendLookupLimitExceeded, match="重复页"):
+		find_friend(platform, "2")
+
+	assert calls == [1, 2]
+
+
+def test_repeated_last_page_can_still_be_a_definitive_not_found():
+	"""重复页显式声明没有后续时仍按遍历完成处理。"""
+	platform, calls = _platform_from_pages([
+		_page([{"uid": 1, "encryptJobId": "j1", "securityId": "sid_a"}], has_more=True),
+		_page([{"uid": 1, "encryptJobId": "j1", "securityId": "sid_b"}]),
 	])
 
 	friend, error = find_friend(platform, "2")
