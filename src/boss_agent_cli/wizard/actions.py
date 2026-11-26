@@ -35,6 +35,7 @@ from boss_agent_cli.platforms.factory import build_platform_instance, build_recr
 from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
 	CandidateActionNotRecorded,
+	CandidateActionReleaseFailed,
 	candidate_action_provably_unsent,
 	exception_reports_request_unsent,
 	run_candidate_action,
@@ -990,6 +991,7 @@ def _unwrap(
 		recovery_action=recovery,
 		details=details if isinstance(details, dict) and details else None,
 		replay_safe=replay_safe,
+		platform_rejected=write and replay_safe and code not in RISK_ERROR_CONTRACTS,
 	)
 
 
@@ -1369,6 +1371,24 @@ def _raise_local_state_write_failed(message: str, details: dict[str, Any]) -> No
 	)
 
 
+def _raise_candidate_release_failed(
+	context: ActionContext, label: str, details: dict[str, Any]
+) -> NoReturn:
+	"""平台明确拒绝，但预约没释放：不可重试，避免下一次撞 ACTION_UNCONFIRMED。"""
+	if context.workflow_control is not None:
+		# 请求没有被平台接受，撤销预落的「结果未知」标记（与派发前失败同口径）。
+		context.workflow_control.clear_write()
+	raise WorkflowActionError(
+		"LOCAL_STATE_WRITE_FAILED",
+		f"平台未接受本次{label}，但本地预约未释放；修复本地缓存后再重试",
+		recoverable=False,
+		recovery_action="先确认数据目录可写（磁盘空间、缓存目录权限），再重新执行同一条命令；本次请求未被平台接受",
+		details={"request_sent": False, "recorded": False, **details},
+		replay_safe=False,
+		auto_retry=False,
+	)
+
+
 def _raise_candidate_action_blocked(
 	context: ActionContext, blocked: CandidateActionBlocked, *, check_command: str
 ) -> NoReturn:
@@ -1417,6 +1437,13 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				_raise_local_state_write_failed(
 					"投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
 					{"security_id": security_id, "job_id": job_id, "applied": True, "recorded": False},
+				)
+			except CandidateActionReleaseFailed:
+				# 平台明确拒绝，但 pending 没释放；照原提示重试会撞结果未知（Issue #2944）。
+				_raise_candidate_release_failed(
+					context,
+					"投递/立即沟通",
+					{"security_id": security_id, "job_id": job_id, "lid": lid},
 				)
 			except BaseException as exc:
 				# 派发前失败：撤销 _write_call 预落的「结果未知」写标记，让 --resume
@@ -1468,6 +1495,11 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				_raise_local_state_write_failed(
 					"已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
 					{"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
+				)
+			except CandidateActionReleaseFailed:
+				# 平台明确拒绝，但 pending 没释放；照原提示重试会撞结果未知（Issue #2944）。
+				_raise_candidate_release_failed(
+					context, "打招呼", {"security_id": security_id, "job_id": job_id}
 				)
 			except BaseException as exc:
 				# 派发前失败：撤销 _write_call 预落的「结果未知」写标记，让 --resume

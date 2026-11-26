@@ -25,6 +25,7 @@ from click.testing import CliRunner
 import pytest
 
 from boss_agent_cli.api.models import employment_type_from_raw, safe_text
+from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthRequired
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.main import cli
@@ -37,7 +38,7 @@ from boss_agent_cli.services.candidate_actions import (
 )
 from boss_agent_cli.services.chat_export import render_export
 from boss_agent_cli.services.job_card import build_job_from_card
-from boss_agent_cli.wizard.actions import DEFAULT_ACTIONS, ActionContext
+from boss_agent_cli.wizard.actions import DEFAULT_ACTIONS, ActionContext, _unwrap
 from boss_agent_cli.wizard.runner import WorkflowActionError
 
 
@@ -126,6 +127,100 @@ def test_retryable_release_failure_becomes_local_state_error(tmp_path: Path) -> 
 	assert isinstance(caught.value.cause, sqlite3.OperationalError)
 	assert caught.value.__cause__ is caught.value.cause
 	assert _claim_state(tmp_path, "job-1", "greet") == "pending"
+
+
+def test_typed_rejection_release_failure_becomes_release_failed(tmp_path: Path) -> None:
+	"""平台明确拒绝的 typed 异常释放失败，不能继续报可重试（Issue #2944）。"""
+	with pytest.raises(WorkflowActionError) as rejection:
+		_unwrap(_RejectingPlatform(), {"code": 429}, "demo rejection", write=True)
+	rejected = rejection.value
+
+	def send() -> Any:
+		raise rejected
+
+	with CacheStore(_db(tmp_path)) as cache:
+		with patch.object(
+			cache,
+			"release_candidate_action",
+			side_effect=sqlite3.OperationalError("database is locked"),
+		):
+			with pytest.raises(CandidateActionReleaseFailed) as caught:
+				run_candidate_action(cache, security_id="sec-1", job_id="job-1", action="apply", send=send)
+
+	assert isinstance(caught.value.cause, sqlite3.OperationalError)
+	assert _claim_state(tmp_path, "job-1", "apply") == "pending"
+
+
+@pytest.mark.parametrize("kind", ["auth", "budget", "circuit-breaker"])
+def test_predispatch_release_failure_keeps_original_recovery(tmp_path: Path, kind: str) -> None:
+	"""派发前失败释放失败时仍保留认证、预算与停止开关错误（Issue #2315 #2944）。"""
+	original: Exception
+	if kind == "auth":
+		original = AuthRequired("demo auth failure")
+	elif kind == "budget":
+		original = RequestBudgetExceeded("demo budget exhausted")
+	else:
+		original = WorkflowActionError("CIRCUIT_BREAKER_OPEN", "demo stopped", auto_retry=False)
+
+	def send() -> Any:
+		raise original
+
+	with CacheStore(_db(tmp_path)) as cache:
+		with patch.object(
+			cache,
+			"release_candidate_action",
+			side_effect=sqlite3.OperationalError("database is locked"),
+		):
+			with pytest.raises(type(original)) as caught:
+				run_candidate_action(cache, security_id="sec-1", job_id="job-1", action="greet", send=send)
+
+	assert caught.value is original
+	assert "释放候选人动作预约失败" in "\n".join(caught.value.__notes__)
+
+
+@pytest.mark.parametrize("action", ["apply", "greet"])
+def test_wizard_rejection_release_failure_is_not_retryable(tmp_path: Path, action: str) -> None:
+	"""向导 action 把预约释放失败收口成不可重放的 LOCAL_STATE_WRITE_FAILED（Issue #2944）。"""
+	platform = MagicMock()
+	platform.__enter__.return_value = platform
+	platform.is_success.return_value = False
+	platform.parse_error.return_value = ("RATE_LIMITED", "demo rate limited")
+	getattr(platform, action).return_value = {"code": 429}
+	control = MagicMock()
+	cache = MagicMock()
+	cache.__enter__.return_value = cache
+	cache.is_applied.return_value = False
+	cache.is_greeted.return_value = False
+	cache.claim_candidate_action.return_value = None
+	cache.release_candidate_action.side_effect = sqlite3.OperationalError("database is locked")
+	context = ActionContext(
+		data_dir=tmp_path,
+		platform="zhipin",
+		role="candidate",
+		logger=Logger(),
+		candidate_factory=lambda *args: platform,
+		workflow_control=control,
+	)
+	with (
+		patch.object(ActionContext, "auth", return_value=MagicMock()),
+		patch("boss_agent_cli.wizard.actions.account_scope", return_value="demo-account"),
+		patch("boss_agent_cli.wizard.actions.CacheStore", return_value=cache),
+		patch("boss_agent_cli.wizard.actions.AutomationStore.stop_reason_for", return_value=None),
+	):
+		with pytest.raises(WorkflowActionError) as caught:
+			DEFAULT_ACTIONS[f"candidate_{action}"](
+				context, {"security_id": "demo-sec", "job_id": "job-1"}, {}
+			)
+
+	assert caught.value.code == "LOCAL_STATE_WRITE_FAILED"
+	assert caught.value.recoverable is False
+	assert caught.value.replay_safe is False
+	assert caught.value.details is not None
+	assert caught.value.details["request_sent"] is False
+	assert caught.value.auto_retry is False
+	control.clear_write.assert_called_once()
+	assert "核对" not in caught.value.recovery_action
+	assert "platform_rejected" not in caught.value.to_dict()
 
 
 def _cli_platform(code: str = "RATE_LIMITED") -> MagicMock:

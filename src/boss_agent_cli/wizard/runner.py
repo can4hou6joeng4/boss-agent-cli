@@ -88,6 +88,7 @@ class WorkflowActionError(Exception):
 		details: dict[str, Any] | None = None,
 		replay_safe: bool = True,
 		auto_retry: bool = True,
+		platform_rejected: bool = False,
 	) -> None:
 		super().__init__(message)
 		self.code = code
@@ -103,6 +104,9 @@ class WorkflowActionError(Exception):
 		# recoverable 表示修正后可重新执行；auto_retry=False 的确定性失败
 		# （如本地配置损坏）不进入同一次运行的自动重试循环（Issue #1525）。
 		self.auto_retry = auto_retry
+		# 只由写响应解包设置，供预约释放失败分类；本地停止不能凭错误码冒充平台拒绝。
+		# 这是本次调用的内部证据，不写入对外信封或断点（Issue #2944）。
+		self.platform_rejected = platform_rejected
 
 	def to_dict(self) -> dict[str, Any]:
 		result: dict[str, Any] = {
