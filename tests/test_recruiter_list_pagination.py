@@ -217,3 +217,57 @@ def test_list_pagination_handles_non_mapping_payload():
 		"total": None,
 		"total_kind": "returned_page_count",
 	}
+
+
+@pytest.mark.parametrize("container", ["friendList", "result", "list"])
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chat_total_counts_every_list_container(mock_auth_cls, mock_platform_cls, container):
+	"""平台把列表放在 result / list 时 total 不能是 null（Issue #2900）。"""
+	platform = _platform(mock_platform_cls)
+	data = {container: [{"friendId": 12345, "name": "候选人B"}], "hasMore": False}
+	platform.friend_list.return_value = {"code": 200, "data": data}
+	result = CliRunner().invoke(cli, ["--json", "hr", "chat", "--page", "2", "--summary-limit", "0"])
+	assert result.exit_code == 0
+	payload = json.loads(result.output)
+	_assert_pagination(payload, expected=False, total=1)
+
+
+@pytest.mark.parametrize("container", ["friendList", "result", "list"])
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_last_messages_total_counts_every_list_container(mock_auth_cls, mock_platform_cls, container):
+	"""沟通列表的容器键与提取逻辑共用一份，total 才会等于实际返回条数（Issue #2900）。"""
+	platform = _platform(mock_platform_cls)
+	data = {container: [{"friendId": 12345, "name": "候选人B"}], "hasMore": False}
+	platform.friend_list.return_value = {"code": 200, "data": data}
+	platform.last_messages.return_value = {"code": 200, "data": {"lastMessageList": []}}
+	result = CliRunner().invoke(cli, ["--json", "hr", "last-messages", "--page", "2", "--limit", "5"])
+	assert result.exit_code == 0
+	payload = json.loads(result.output)
+	_assert_pagination(payload, expected=False, total=1)
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chat_empty_container_reports_zero_total(mock_auth_cls, mock_platform_cls):
+	"""空列表也是命中：total 是 0，不能因为 falsy 跳到下一个键变成 null。"""
+	platform = _platform(mock_platform_cls)
+	platform.friend_list.return_value = {"code": 200, "data": {"result": [], "hasMore": False}}
+	result = CliRunner().invoke(cli, ["--json", "hr", "chat", "--page", "2", "--summary-limit", "0"])
+	assert result.exit_code == 0
+	payload = json.loads(result.output)
+	_assert_pagination(payload, expected=False, total=0)
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chat_total_counts_extracted_rows_only(mock_auth_cls, mock_platform_cls):
+	"""total 与 friend_items 实际提取的行同源：非对象元素不计入（Issue #2900）。"""
+	platform = _platform(mock_platform_cls)
+	data = {"friendList": [{"friendId": 12345, "name": "候选人B"}, "drifted"], "hasMore": False}
+	platform.friend_list.return_value = {"code": 200, "data": data}
+	result = CliRunner().invoke(cli, ["--json", "hr", "chat", "--page", "2", "--summary-limit", "0"])
+	assert result.exit_code == 0
+	payload = json.loads(result.output)
+	_assert_pagination(payload, expected=False, total=1)
