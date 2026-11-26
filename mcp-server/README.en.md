@@ -1,6 +1,6 @@
 # boss-agent-cli MCP Server
 
-Expose the full candidate, recruiter, local, AI, and workflow surface of `boss-agent-cli` to Claude Desktop, Cursor, and other MCP-compatible hosts. Historical assisted/research settings have identical capability access; missing platform implementations still return `NOT_SUPPORTED`.
+Connect candidate, recruiter, local, AI, and workflow capabilities of `boss-agent-cli` to Claude Desktop, Cursor, and other MCP-compatible hosts through registered MCP tools. MCP `tools/list` defines the callable surface. Historical assisted/research settings have identical capability access; missing platform implementations still return `NOT_SUPPORTED`.
 
 Related docs:
 - [Agent Quickstart](../docs/agent-quickstart.en.md)
@@ -50,6 +50,12 @@ Add the server in Cursor Settings -> MCP Servers:
 ## Available tools
 
 The current MCP server exposes **80 implemented tools**.
+
+### Capability scope and recovery hints
+
+Call `boss_schema` with `{"format":"mcp-tools"}` to inspect tool schemas; the `native` format describes the full CLI command surface and `wizard_catalog`. CLI subcommands and MCP tools do not correspond one for one: local resumes currently have `boss_resume_list` / `boss_resume_show`, while `resume init` / `resume delete` and `favorites sync` require the CLI.
+
+The envelope's `hints.next_actions` contains follow-up CLI commands, which cannot be called directly as MCP tool names. A host using only MCP should look for an equivalent tool or a registered `boss_wizard` goal first; when none exists, explain the required CLI step without claiming it has completed. `hints.operator_actions` remains for human instructions such as scanning a QR code or operating a browser.
 
 ### Shared workflow
 
@@ -101,6 +107,20 @@ The current MCP server exposes **80 implemented tools**.
 | `boss_crawl_shortlist` | Import one run's jobs into the local shortlist without a platform call |
 
 Fine-grained crawl tools read or import existing tasks; `boss_wizard` goals `crawl_start/crawl_resume/crawl_stop` can start, resume, or stop the shared workflow. The default Hook is `none`; local Hook directories must contain `SHA256SUMS`. This project does not redistribute third-party scripts.
+
+After the operator explicitly decides to resume an existing crawl, call `boss_wizard` with these arguments, replacing `<crawl_run_id>` with the crawl task ID used by `boss_crawl_status`:
+
+```json
+{
+  "action": "run",
+  "role": "candidate",
+  "platform": "zhipin",
+  "goal": "crawl_resume",
+  "inputs": {"run_id": "<crawl_run_id>"}
+}
+```
+
+Here, `inputs.run_id` identifies the crawl task; the top-level `run_id` for `action="resume"` identifies a wizard workflow. Keep these IDs distinct. If platform risk stopped the task, follow the error envelope's recovery guidance and let the operator explicitly resume only after the risk has cleared.
 
 ### User and resume
 

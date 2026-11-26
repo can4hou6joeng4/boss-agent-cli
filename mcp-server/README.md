@@ -1,6 +1,6 @@
 # boss-agent-cli MCP Server
 
-将 boss-agent-cli 的完整候选者、招聘者、本地、AI 和 workflow 能力接入 Claude Desktop / Cursor 等客户端。历史 assisted/research 配置拥有相同能力访问；平台缺失实现仍返回 `NOT_SUPPORTED`。
+通过已注册的 MCP 工具，将 boss-agent-cli 的候选者、招聘者、本地、AI 和 workflow 能力接入 Claude Desktop / Cursor 等客户端。具体可调用范围以 MCP `tools/list` 为准。历史 assisted/research 配置拥有相同能力访问；平台缺失实现仍返回 `NOT_SUPPORTED`。
 
 相关文档：
 - [Agent Quickstart](../docs/agent-quickstart.md)
@@ -75,6 +75,12 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 当前 MCP Server 暴露 **80 个已实现工具**。
 
+### 能力范围与恢复指引
+
+调用 `boss_schema` 时传入 `{"format":"mcp-tools"}` 可查看工具 schema；`native` 格式描述完整 CLI 命令与 `wizard_catalog`。CLI 子命令与 MCP 工具并非逐项对应：例如本地简历目前只有 `boss_resume_list` / `boss_resume_show`，`resume init` / `resume delete` 与 `favorites sync` 仍需通过 CLI 执行。
+
+信封中的 `hints.next_actions` 是后继 CLI 命令，不能直接当作 MCP 工具名调用。仅使用 MCP 的宿主应先查找等价工具或已登记的 `boss_wizard` goal；没有等价入口时，明确告知需要执行的 CLI 步骤，不要声称已完成。`hints.operator_actions` 则保留给扫码、浏览器操作等真人指引。
+
 ### 共享 workflow
 
 | 工具 | 说明 |
@@ -125,6 +131,20 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 | `boss_crawl_shortlist` | 将一个 run 的职位导入本地候选池，不请求平台 |
 
 细粒度 crawl tools 用于读取或导入已有任务；`boss_wizard` 的 `crawl_start/crawl_resume/crawl_stop` goal 可启动、恢复或停止共享 workflow。默认 Hook 为 `none`；本地 Hook 目录必须包含 `SHA256SUMS`，项目不发布第三方脚本。
+
+操作者明确决定恢复已有采集任务后，可调用 `boss_wizard` 并传入以下参数，将 `<crawl_run_id>` 替换为 `boss_crawl_status` 对应的采集任务 ID：
+
+```json
+{
+  "action": "run",
+  "role": "candidate",
+  "platform": "zhipin",
+  "goal": "crawl_resume",
+  "inputs": {"run_id": "<crawl_run_id>"}
+}
+```
+
+这里的 `inputs.run_id` 是采集任务 ID；`action="resume"` 的顶层 `run_id` 则用于恢复向导 workflow，两者不能混用。若任务因平台风控停止，应先遵循错误信封的恢复指引，待风险解除后再由操作者显式恢复。
 
 ### 用户与简历
 
