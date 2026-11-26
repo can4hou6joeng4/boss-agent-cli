@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.228] - 2026-11-26
+
 ### Fixed
 
 - `boss ai config` 回显的 `resolved_base_url` 与执行路径同口径：手工写进配置的非法地址（缺 scheme、非 http(s)、带 query / fragment）现在报 `CONFIG_INVALID` 并给出修复命令，不再把一个执行时必然失败的地址标成生效端点（Issue #2858）。
