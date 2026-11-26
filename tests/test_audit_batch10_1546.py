@@ -102,7 +102,7 @@ def test_open_cache_db_keeps_busy_and_local_io_errors(monkeypatch, tmp_path, mes
 	monkeypatch.setattr(clean_mod.sqlite3, "connect", _boom)
 
 	with pytest.raises(sqlite3.OperationalError):
-		clean_mod._open_cache_db(tmp_path / "boss_agent.db")
+		clean_mod._open_cache_db(tmp_path / "boss_agent.db", root=tmp_path)
 
 
 def test_open_cache_db_still_maps_corruption(tmp_path):
@@ -110,7 +110,7 @@ def test_open_cache_db_still_maps_corruption(tmp_path):
 	corrupt.write_bytes(b"not a sqlite database")
 
 	with pytest.raises(CacheDatabaseInvalid):
-		clean_mod._open_cache_db(corrupt)
+		clean_mod._open_cache_db(corrupt, root=tmp_path)
 
 
 def test_clean_reports_busy_cache_instead_of_corruption(tmp_path, monkeypatch):
