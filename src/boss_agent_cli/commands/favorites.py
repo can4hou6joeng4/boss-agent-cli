@@ -155,7 +155,8 @@ def collect_favorites_items(
 			# 翻满上限后还会误报「收藏太多」（Issue #1857）。
 			raise FavoritesResponseInvalid("职位收藏响应格式无效：cardList 元素不是对象")
 
-		identities = [str(item.get("encryptJobId") or "") for item in dict_items]
+		identities = [_text(item.get("encryptJobId")).strip() for item in dict_items]
+		# 类型漂移或纯空白 ID 与缺失同口径，不能 str() 后充当重复页证据（Issue #2954）。
 		# 卡片缺少 encryptJobId 时签名恒为空，无法判断是否重复页；此时继续聚合，
 		# 避免把缺字段的新页面当成重复页丢掉（终止交给 hasMore / max_pages）。
 		if any(identities):

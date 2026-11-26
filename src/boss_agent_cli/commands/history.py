@@ -111,7 +111,7 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 	hints = {"next_actions": next_actions}
 	if has_more is None:
 		hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"]
-	elif at_page_limit:
+	elif has_more is True and at_page_limit:
 		# 上限页再 +1 的提示自己就过不了 --page 校验（Issue #2012）：
 		# 告诉 Agent 已到可信上限，而不是给一条不可执行的命令。
 		hints["operator_actions"] = [
