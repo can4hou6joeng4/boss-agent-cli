@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- `clean` 打开共享缓存库前检查数据目录以下的所有祖先链接，搜索缓存、历史记录和采集清理不再经 `cache` 目录链接改写目录外的数据库（Issue #2946）。
+- `clean --privacy` 在开始删除前递归检查真实目录树的权限和可枚举性，嵌套目录不可处理时保留登录会话及其他本地数据，并报告具体失败路径（Issue #2947）。
 - `crawl status` 在任务不存在或断点损坏时给出的重建提示补齐必填 `--city`，Agent 可直接回放（Issue #2941）。
 - 向导 / MCP 的 `candidate_exchange` 不再把显式空串或 `null` 的交换类型当成缺省手机号，改为在写请求前报 `INVALID_PARAM`，与 CLI `--type ""` 同口径（Issue #2943）。
 - 向导求职者写动作遇到「平台明确拒绝、本地预约释放失败」时改报不可重试的 `LOCAL_STATE_WRITE_FAILED`，不再提示重试后撞上 `ACTION_UNCONFIRMED`；派发前失败的原有恢复动作保持不变（Issue #2944）。

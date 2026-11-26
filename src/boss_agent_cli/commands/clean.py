@@ -65,7 +65,7 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 	# _clean_search_cache 打开库时按同一口径报错。
 	db_path = data_dir / "cache" / "boss_agent.db"
 	if privacy and _cache_db_present(db_path):
-		_open_cache_db(db_path).close()
+		_open_cache_db(db_path, root=data_dir).close()
 
 	# 隐私清理的只读预检必须发生在任何删除之前：否则登录态先被删掉，随后
 	# 在某个目录链接 / 不可写目录上失败，用户既看不到已完成项，也无法判断
@@ -385,16 +385,20 @@ def _cache_db_present(db_path: Path) -> bool:
 	return True
 
 
-def _open_cache_db(db_path: Path) -> sqlite3.Connection:
+def _open_cache_db(db_path: Path, *, root: Path) -> sqlite3.Connection:
 	"""打开缓存库，并把内容损坏的 sqlite3.DatabaseError 归一成 CacheDatabaseInvalid。
 
 	clean 直接操作 SQLite，不经过 CacheStore 的启动校验；库文件损坏时若把
 	DatabaseError 抛给顶层，只会得到 traceback 而不是信封。锁冲突与本地 IO
 	错误不是内容损坏，原样上抛交给 main 分流成 CACHE_BUSY / LOCAL_IO_ERROR。
 
-	打开前确认是普通文件：符号链接（含悬空链接）会让 SQLite 在链接目标处
-	创建或改写数据目录之外的文件，clean 的 DELETE / VACUUM 不能写穿链接。
+	打开前确认是普通文件，且数据目录以下没有祖先链接：符号链接（含悬空链接）
+	会让 SQLite 在链接目标处创建或改写数据目录之外的文件，clean 的 DELETE /
+	VACUUM 不能写穿链接（Issue #2946）。root 本身仍允许是用户选择的目录链接。
 	"""
+	link = _first_symlink_component(root, db_path)
+	if link is not None:
+		raise OSError(errno.EINVAL, "缓存库路径包含符号链接，拒绝打开", str(link))
 	try:
 		mode = db_path.lstat().st_mode
 	except FileNotFoundError:
@@ -438,7 +442,7 @@ def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tu
 	if not _cache_db_present(db_path):
 		return 0, 0
 
-	conn = _open_cache_db(db_path)
+	conn = _open_cache_db(db_path, root=data_dir)
 	try:
 		try:
 			if not _table_exists(conn, "search_cache"):
@@ -557,8 +561,8 @@ def _privacy_preflight(data_dir: Path, targets: list[tuple[str, Path]]) -> list[
 	"""只读预检隐私清理目标，返回不可处理项。
 
 	不创建、不删除任何路径。符号链接（目标本身或祖先）按「跳过并报告」处理，
-	属于可安全完成的目标；其余已存在目标要求父目录可写，目录自身还要可写
-	（``shutil.rmtree`` 需要先删掉子项）。
+	属于可安全完成的目标；其余已存在目标要求父目录可写，整棵真实目录树都要
+	可写、可进入且可枚举（``shutil.rmtree`` 需要先删掉子项），不跟随嵌套链接。
 	"""
 	problems: list[dict[str, str]] = []
 	for target, path in targets:
@@ -579,8 +583,28 @@ def _privacy_preflight(data_dir: Path, targets: list[tuple[str, Path]]) -> list[
 		if not _is_writable(path.parent):
 			problems.append({"target": target, "path": str(path), "reason": "父目录不可写"})
 			continue
-		if stat.S_ISDIR(mode) and not _is_writable(path):
-			problems.append({"target": target, "path": str(path), "reason": "目录不可写"})
+		if not stat.S_ISDIR(mode):
+			continue
+		directories = [path]
+		while directories:
+			directory = directories.pop()
+			if not _is_writable(directory):
+				problems.append({"target": target, "path": str(directory), "reason": "目录不可写或不可进入"})
+				continue
+			try:
+				items = list(directory.iterdir())
+			except OSError as exc:
+				problems.append({"target": target, "path": str(directory), "reason": f"无法枚举目录: {exc}"})
+				continue
+			for item in items:
+				try:
+					item_mode = _lstat_mode(item)
+				except OSError as exc:
+					problems.append({"target": target, "path": str(item), "reason": f"无法读取路径状态: {exc}"})
+					continue
+				# 只按 lstat 类型递归真实目录，目录链接和悬空链接都不进入。
+				if item_mode is not None and stat.S_ISDIR(item_mode):
+					directories.append(item)
 	db_path = data_dir / "cache" / "boss_agent.db"
 	# 文件只需要写权限；X_OK 对普通文件恒为假，不能复用目录的 W_OK|X_OK 判断。
 	try:
@@ -891,7 +915,7 @@ def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
 	db_path = data_dir / "cache" / "boss_agent.db"
 	rows_removed = 0
 	if _cache_db_present(db_path):
-		conn = _open_cache_db(db_path)
+		conn = _open_cache_db(db_path, root=data_dir)
 		try:
 			if _table_exists(conn, "crawl_runs"):
 				row = conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()
@@ -913,7 +937,7 @@ def _clean_table(data_dir: Path, table: str, *, dry_run: bool) -> tuple[int, int
 	if not _cache_db_present(db_path):
 		return 0, 0
 
-	conn = _open_cache_db(db_path)
+	conn = _open_cache_db(db_path, root=data_dir)
 	try:
 		if not _table_exists(conn, table):
 			return 0, 0
