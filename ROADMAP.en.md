@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.237 (2026-11-26): Private directory tightening no longer follows symlinks, new parents use 0700, and output paths reject non-UTF-8 names early (Issue #2892).
+
 v3.4.236 (2026-11-26): Unread and identity rules aligned across chat export and snapshots; links in nested message bodies are now extracted (Issue #2886, #2887).
 
 v3.4.235 (2026-11-26): Contact lookup now uses the same securityId rules as write requests and includes job IDs in page signatures (Issue #2883).

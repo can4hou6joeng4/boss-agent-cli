@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.237] - 2026-11-26
+
 ### Fixed
 
 - 私有目录权限收紧不再跟随符号链接，`write_private_bytes` 新建的各级父目录均为 0700；`prepare_output_path` 与路径预检共用 UTF-8 文件名守卫（Issue #2892）。
