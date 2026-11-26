@@ -98,6 +98,25 @@ def _resume_filename_too_long(name: str) -> bool:
 	return units + len(_RESUME_FILENAME_SUFFIX) > _RESUME_FILENAME_MAX_UNITS
 
 
+def resume_name_input_error(name: str) -> tuple[str, str] | None:
+	"""简历名不能作为读取参数使用的原因，返回 ``(message, recovery_action)``。
+
+	空名与超长名不可能对应任何本地简历文件。``resume`` 命令组已按
+	``INVALID_PARAM`` 拒绝（Issue #2959），但 ``ai`` / ``agent`` / wizard 仍
+	直接访问路径：``ENAMETOOLONG`` 被报成「简历损坏」，消息里带出本机绝对
+	路径，指引里的 ``resume delete <超长名>`` 自己也会被拒（Issue #2969）。
+	判定不访问文件系统，所有入口在构造路径 / 读取文件之前调用。
+	"""
+	if not name.strip():
+		return ("简历名称不能为空", "补上简历名称后重试")
+	if _resume_filename_too_long(name):
+		return (
+			"简历名称过长：拼成 .json 后超过文件系统文件名上限，无法保存或读取",
+			"缩短简历名称后重试",
+		)
+	return None
+
+
 def _unsafe_resume_name_reason(name: str) -> str | None:
 	"""名称不能安全落盘时返回给用户看的原因（Issue #1507）。
 

@@ -925,7 +925,7 @@ SCHEMA_DATA = {
 					"--company": {"type": "string", "default": "", "description": "公司名称"},
 					"--city": {"type": "string", "default": "", "description": "城市"},
 					"--salary": {"type": "string", "default": "", "description": "薪资"},
-					"--source": {"type": "string", "default": None, "description": "来源，如 search/recommend/show/manual；省略时新记录记为 manual，重复加入保留原来源"},
+					"--source": {"type": "string", "default": None, "description": "来源，如 search/recommend/show/manual；省略时新记录记为 manual，重复加入保留原来源；不能为空白"},
 					"--lid": {"type": "string", "default": "", "description": "与 security_id 同一列表项的访问上下文（可选；不推断有效期）"},
 					"--tags": {"type": "string", "default": "", "description": "本地标签，逗号分隔"},
 					"--note": {"type": "string", "default": "", "description": "本地备注"},

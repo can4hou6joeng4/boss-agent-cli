@@ -118,7 +118,7 @@ from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
-from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.resume.store import ResumeStore, resume_name_input_error
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
@@ -1801,6 +1801,17 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 	# 空白简历名在 CLI 由 `_load_resume_text` 报 INVALID_PARAM，不能落到
 	# RESUME_NOT_FOUND 把参数错误伪装成「简历不存在」（Issue #2523）。
 	resume_name = _required_nonblank_value(inputs, "resume")
+	# 超长名同口径，且必须早于路径读取：ENAMETOOLONG 会被报成「简历损坏」，
+	# 指引里的 resume delete 也无法执行（Issue #2969）。
+	resume_name_error = resume_name_input_error(resume_name)
+	if resume_name_error is not None:
+		message, recovery = resume_name_error
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			message,
+			recoverable=True,
+			recovery_action=f"{recovery}；用 {_hint_command(context, 'resume list')} 查看已有简历",
+		)
 	resume, load_error = ResumeStore(context.data_dir / "resumes").get_with_error(resume_name)
 	if resume is None and load_error is not None:
 		# 文件存在但读不出来：报「不存在」会让 Agent 去 resume init，又被同名
