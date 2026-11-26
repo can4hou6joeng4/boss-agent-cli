@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.246] - 2026-11-26
+
 ### Fixed
 
 - 沟通列表成功响应缺少 `result` / `friendList` 列表容器时不再被当成完整空页：翻页聚合继续取后续页或显式标记 `truncated`，`pipeline` / `digest` 不再静默丢数据（Issue #2927）。
