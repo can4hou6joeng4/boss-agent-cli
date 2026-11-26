@@ -223,7 +223,7 @@ Follow-up commands in `hints.next_actions`, TTY `next_steps`, and command-bearin
 
 The `hints.next_actions` from `favorites` and `shortlist` preserve the original `--data-dir` and platform. Paging through favorites, syncing them, then listing or comparing the shortlist uses the same account and local directory. Recovery commands for invalid `shortlist` parameters also retain the directory. The removal hint after adding an entry and the recreation hint for a missing entry quote both identifiers as shell arguments, so they can be pasted directly.
 
-`boss shortlist add <sid> <jid> --lid <lid>` saves access context from the same list item as `sid`; `list` / `compare` return it, and crawl and favorites imports retain the matching context while favorites previews remain redacted. `lid` is optional. Storage does not establish current validity, a lifetime, or identity across accounts.
+`boss shortlist add <sid> <jid> --lid <lid>` saves access context from the same list item as `sid`; `list` / `compare` return it, and crawl and favorites imports retain the matching context while favorites previews remain redacted. `lid` is optional. Storage does not establish current validity, a lifetime, or identity across accounts. When `--source` is omitted, a new record is stored as `manual`; re-adding the same job keeps the existing source, and only an explicit `--source` overwrites it.
 
 `boss shortlist annotate` requires at least one non-empty `--add-tag` / `--remove-tag` or `--note`; blank tags and a blank `--tag` return `INVALID_PARAM` instead of silently becoming "no filter" or `updated: true`. `--note ""` still clears the note.
 

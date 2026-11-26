@@ -10,6 +10,7 @@
 - `history` 在可信页码上限处仅当平台明确还有下一页时显示上限指引，末页不再误报「平台仍报告有更多记录」（Issue #2955）。
 - 沟通列表重复页仍声明有后续时，聚合结果保留早停但标记为不完整，`pipeline` / `follow-up` / `digest` 与向导步骤不再把前缀当全量；Markdown 日报提示改为描述扫描不完整，而非误称页数上限（Issue #2956）。
 - `resume` 对拼成 `<name>.json` 后超过文件系统文件名上限的名称按 `INVALID_PARAM` 拒绝，不再把 ENAMETOOLONG 误报成简历损坏或本地磁盘错误；`resume import` 的 JSON `name` 同样提示名称过长（Issue #2959）。
+- `shortlist add` 省略 `--source` 时不再用默认 `manual` 覆盖既有来源：新记录仍记为 `manual`，重复加入保留原来源，显式传入才覆盖；收藏 / 采集导入后的轮换标识刷新不再因一次手工重加而失效（Issue #2960）。
 
 ## [3.4.251] - 2026-11-27
 
