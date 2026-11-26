@@ -7,6 +7,7 @@
 ### Fixed
 
 - 向导的 `ChatTabCdpUnreachable` / `RecruiterChatTabRequired` 分支不再仅凭异常类型放行重放：没有 `request_sent=false` 显式证据且已有写前标记时保留结果未知与核对指引，有证据时仍按原错误码恢复重跑（Issue #2904）。
+- `hr resume` 查看简历参数齐全却同时传了 `--friend-id` 时不再静默忽略该选项：成功信封的 `hints` 明确说明它未用于交换，并给出 `hr resume --friend-id <friend_id> --exchange` 后继命令（Issue #2905）。
 
 ## [3.4.239] - 2026-11-26
 

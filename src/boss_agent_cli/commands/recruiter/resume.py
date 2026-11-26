@@ -120,8 +120,18 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			return
 
 		next_actions = [hint_command(ctx, "hr applications")]
+		hints: dict[str, list[str]] = {"next_actions": next_actions}
+		if friend_id is not None and not exchange_contact:
+			# --friend-id 只服务于交换路径：参数齐全时也不能静默吞掉它。
+			# 保持查看简历的成功契约，但把真正的后续动作递给 Agent / 真人
+			# （Issue #2905）。
+			exchange_hint = hint_command(ctx, f"hr resume --friend-id {friend_id} --exchange")
+			next_actions.insert(0, exchange_hint)
+			hints["operator_actions"] = [
+				f"本次只查看了简历，--friend-id {friend_id} 未用于交换联系方式；如需交换请执行 {exchange_hint}"
+			]
 		handle_output(
 			ctx, "recruiter-resume", data,
 			render=lambda d: render_resume(d, title="hr resume", next_steps=next_actions),
-			hints={"next_actions": next_actions},
+			hints=hints,
 		)
