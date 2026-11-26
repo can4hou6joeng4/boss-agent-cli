@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.248] - 2026-11-26
+
 ### Fixed
 
 - `boss export` 快路径不再把元素全漂移的 `jobList` 当完整空页；后续页继续翻取，预算耗尽时明确标记 `truncated`（Issue #2932）。
