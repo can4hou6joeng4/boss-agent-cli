@@ -86,6 +86,10 @@ def _strict_resolved_base_url(ctx: click.Context, store: Any) -> str | None:
 		config = store.load_config()
 		provider = ai_text_setting(config, "ai_provider")
 		base_url = ai_text_setting(config, "ai_base_url")
+		# 类型漂移（Issue #1967）与 URL 语法漂移都要在回显前拒绝：执行路径的
+		# _create_ai_service() 会先 normalize_base_url()，坏地址在真实调用时报
+		# CONFIG_INVALID，配置查看却回显成「生效端点」（Issue #2858）。
+		base_url = normalize_base_url(base_url) if base_url else None
 	except AIConfigValueError as exc:
 		_ai_config_invalid(ctx, exc)
 		raise
@@ -375,6 +379,31 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 		ctx.exit(1)
 		return None
 	return cast("dict[str, Any]", parsed)
+
+
+def _fill_and_validate_ai_result(ctx: click.Context, result: dict[str, Any], defaults: dict[str, Any]) -> bool:
+	"""补齐缺省字段并校验已知字段类型（Issue #2859）。
+
+	``setdefault`` 只填缺失键：模型把 ``results`` 写成字符串、把
+	``greeting_opener`` 写成数字时，错误形状会以 ``ok=true`` 出信封，下游
+	Agent 直接迭代/展示时才会崩。与顶层非对象同口径按 ``AI_PARSE_ERROR``
+	返回可重试错误，不把坏值伪装成合法结果。
+	"""
+	for key, default in defaults.items():
+		result.setdefault(key, default)
+		value = result[key]
+		if isinstance(value, type(default)):
+			continue
+		handle_error_output(
+			ctx, "ai",
+			code="AI_PARSE_ERROR",
+			message=f"AI 返回结果字段 {key} 必须是 {type(default).__name__}（收到 {type(value).__name__}）",
+			recoverable=True,
+			recovery_action="重试（模型输出不稳定时可能发生）",
+		)
+		ctx.exit(1)
+		return False
+	return True
 
 
 def _fit_missing_detail_item(ctx: click.Context, item: dict[str, Any]) -> dict[str, Any]:
@@ -860,7 +889,8 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 	if result is None:
 		return
 
-	result.setdefault("results", [])
+	if not _fill_and_validate_ai_result(ctx, result, {"results": []}):
+		return
 	result["missing"] = missing
 	result["summary"] = {
 		"analyzed": len(jobs),
@@ -1077,9 +1107,10 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 	if result is None:
 		return
 
-	result.setdefault("keyword_groups", [])
-	result.setdefault("patterns", [])
-	result.setdefault("search_suggestions", [])
+	if not _fill_and_validate_ai_result(ctx, result, {
+		"keyword_groups": [], "patterns": [], "search_suggestions": [],
+	}):
+		return
 	handle_output(
 		ctx,
 		"ai-suggest-keywords",
@@ -1241,9 +1272,10 @@ def ai_cover_letter_cmd(
 	if result is None:
 		return
 
-	result.setdefault("greeting_opener", "")
-	result.setdefault("cover_letter", "")
-	result.setdefault("highlights", [])
+	if not _fill_and_validate_ai_result(ctx, result, {
+		"greeting_opener": "", "cover_letter": "", "highlights": [],
+	}):
+		return
 	handle_output(
 		ctx, "ai-cover-letter", result,
 		render=lambda d: render_ai_result(d, title="ai-cover-letter"),
