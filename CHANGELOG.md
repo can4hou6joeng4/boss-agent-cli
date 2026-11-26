@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.249] - 2026-11-26
+
 ### Fixed
 
 - `boss doctor` 在已有本地风险锁时不再把 `login` / `status --live` 等必然被锁拒绝的命令写进 `hints.next_actions`，真人解锁步骤前置（Issue #2935）。

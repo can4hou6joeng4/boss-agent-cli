@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.249 (2026-11-26): `boss doctor` no longer suggests login / status follow-ups that a local risk lock will reject; manual unlock steps come first (Issue #2935).
+
 v3.4.248 (2026-11-26): The `boss export` fast path no longer treats a fully drifted `jobList` as a complete empty page; later pages are still scanned and budget exhaustion is marked as truncated (Issue #2932).
 
 v3.4.247 (2026-11-26): Chat-snapshot cross-day diff no longer treats explicit empty-uid baseline rows as stable identities via rotated `security_id`, so present contacts are not reported as removed (Issue #2929).
