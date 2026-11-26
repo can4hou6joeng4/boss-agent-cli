@@ -1122,6 +1122,17 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			errors.append(f"{key} 另有 {len(invalid) - _MAX_ELEMENT_TYPE_ERRORS} 个元素类型错误")
 		if not isinstance(items, dict):
 			return errors
+		if item_type == "string" and prop.get("uniqueItems") is True:
+			# 目前仅 selectors / requested_steps 声明字符串去重（Issue #2976）。
+			# 类型错误先报；重复项最多报一条，避免错误数随数组大小增长。
+			seen: set[str] = set()
+			for index, item in enumerate(value):
+				if not isinstance(item, str):
+					continue
+				if item in seen:
+					errors.append(f"{key}[{index}] 与前面的元素重复")
+					break
+				seen.add(item)
 		item_min_length = items.get("minLength")
 		item_minimum = items.get("minimum")
 		item_maximum = items.get("maximum")

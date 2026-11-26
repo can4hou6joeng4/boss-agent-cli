@@ -127,11 +127,14 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"inputs": {"type": "object", "description": "goal 所需的 JSON 参数"},
 					"requested_steps": {
 						"type": "array",
-						"items": {"type": "string"},
+						"items": {"type": "string", "minLength": 1},
 						# 空数组会在 plan 层被折叠成全量步骤（含真实写操作），
 						# 与「不传」语义不同，必须在入口拒绝（Issue #1236）。
 						"minItems": 1,
-						"description": "可选的 goal 内步骤子集；省略表示执行全部步骤，空数组非法",
+						# 空串与重复步骤会被 plan 层按 INVALID_PARAM 拒绝（Issue #2976）：
+						# schema 必须提前声明同一约束，宿主才能在发送前拦下。
+						"uniqueItems": True,
+						"description": "可选的 goal 内步骤子集；省略表示执行全部步骤，空数组非法，元素不能为空串或重复",
 					},
 					"run_id": {"type": "string", "description": "resume/status/stop 的显式 workflow run_id"},
 					"timeout": {
