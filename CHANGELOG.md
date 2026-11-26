@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- MCP 工具目录新增 `boss_resume_clone`、`boss_resume_diff`、`boss_resume_link`、`boss_resume_applications`：仅使用 MCP 的宿主可以复制简历版本、对比两份本地简历、把职位关联到简历并查询关联记录；四个入口都只操作本机，`clone` / `link` 的中断恢复指引先核对本地状态，不产生平台写入（Issue #2988）。
+
 ## [3.5.0] - 2026-11-27
 
 ### Added

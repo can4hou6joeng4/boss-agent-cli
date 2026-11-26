@@ -223,6 +223,8 @@ _READ_ONLY_TOOL_NAMES = frozenset({
 	"boss_export",
 	"boss_resume_list",
 	"boss_resume_show",
+	"boss_resume_diff",
+	"boss_resume_applications",
 	"boss_watch_list",
 	"boss_preset_list",
 	"boss_shortlist_list",
@@ -309,6 +311,12 @@ _LOCAL_RESUME_DELETE_INTERRUPT_RECOVERY = (
 _LOCAL_FAVORITES_SYNC_INTERRUPT_RECOVERY = (
 	"同步已中断；本地候选池可能已部分更新，重新执行会按当前收藏继续 upsert；平台侧只读"
 )
+_LOCAL_RESUME_CLONE_INTERRUPT_RECOVERY = (
+	"复制已中断；目标简历可能已写入。先运行 boss_resume_list 核对，再决定是否重试；不产生平台写入"
+)
+_LOCAL_RESUME_LINK_INTERRUPT_RECOVERY = (
+	"职位关联已中断；本机关联表可能已写入。先用 boss_resume_applications 核对，再决定是否重试；不产生平台写入"
+)
 
 
 def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
@@ -316,6 +324,10 @@ def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
 		return _LOCAL_RESUME_INIT_INTERRUPT_RECOVERY
 	if args[:2] == ("resume", "delete"):
 		return _LOCAL_RESUME_DELETE_INTERRUPT_RECOVERY
+	if args[:2] == ("resume", "clone"):
+		return _LOCAL_RESUME_CLONE_INTERRUPT_RECOVERY
+	if args[:2] == ("resume", "link"):
+		return _LOCAL_RESUME_LINK_INTERRUPT_RECOVERY
 	if args[:2] == ("favorites", "sync"):
 		return _LOCAL_FAVORITES_SYNC_INTERRUPT_RECOVERY
 	if args and args[0] == "wizard" and _option_value(args, "--stop") is not None:

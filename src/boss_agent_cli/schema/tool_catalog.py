@@ -772,6 +772,62 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			},
 		),
 		ToolDefinition(
+			name="boss_resume_clone",
+			description=(
+				"把一份本地简历复制成新版本；目标名称已存在时拒绝，不覆盖现有内容。"
+				"只写本机文件，不访问平台。"
+			),
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "源简历名称"},
+					"new_name": {"type": "string", "minLength": 1, "description": "新简历名称"},
+				},
+				"required": ["name", "new_name"],
+			},
+		),
+		ToolDefinition(
+			name="boss_resume_diff",
+			description="对比两份本地简历的字段差异，返回字段级差异列表；只读本机文件，不访问平台。",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name1": {"type": "string", "minLength": 1, "description": "第一份简历名称"},
+					"name2": {"type": "string", "minLength": 1, "description": "第二份简历名称"},
+				},
+				"required": ["name1", "name2"],
+			},
+		),
+		ToolDefinition(
+			name="boss_resume_link",
+			description=(
+				"把职位关联到本地简历，写本机关联表，不产生平台请求；"
+				"之后可用 boss_resume_applications 查看关联与状态。"
+			),
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "简历名称"},
+					"security_id": {"type": "string", "minLength": 1, "description": "职位访问标识（从搜索结果获取）"},
+					"job_id": {"type": "string", "minLength": 1, "description": "职位 ID（从搜索结果获取）"},
+					"title": {"type": "string", "description": "职位名称（可选，仅用于本地展示）"},
+					"company": {"type": "string", "description": "公司名称（可选，仅用于本地展示）"},
+				},
+				"required": ["name", "security_id", "job_id"],
+			},
+		),
+		ToolDefinition(
+			name="boss_resume_applications",
+			description="查看指定本地简历关联的所有职位及状态；只读本机关联表，不访问平台。",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "简历名称"},
+				},
+				"required": ["name"],
+			},
+		),
+		ToolDefinition(
 			name="boss_ai_analyze_jd",
 			description="分析职位描述并评估简历匹配度，输出匹配分数和差距分析",
 			input_schema={

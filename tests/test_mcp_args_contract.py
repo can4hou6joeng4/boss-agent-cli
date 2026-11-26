@@ -351,6 +351,12 @@ _LOCAL_SINGLE_COMMAND_TOOLS = {
 	"boss_favorites_sync": (favorites_cmd_module.favorites_sync_cmd, {}, set()),
 	"boss_resume_init": (resume_cmd_module.resume_init_cmd, {}, set()),
 	"boss_resume_delete": (resume_cmd_module.resume_delete_cmd, {}, set()),
+	# 简历版本与职位关联（Issue #2988）：clone / diff / link / applications
+	# 同样只在 MCP 侧做位置参数与选项映射，不隐藏 CLI 参数。
+	"boss_resume_clone": (resume_cmd_module.resume_clone_cmd, {}, set()),
+	"boss_resume_diff": (resume_cmd_module.resume_diff_cmd, {}, set()),
+	"boss_resume_link": (resume_cmd_module.resume_link_cmd, {}, set()),
+	"boss_resume_applications": (resume_cmd_module.resume_applications_cmd, {}, set()),
 	"boss_shortlist_annotate": (
 		shortlist_cmd_module.shortlist_annotate_cmd,
 		{"add_tag": "add_tags", "remove_tag": "remove_tags"},

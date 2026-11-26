@@ -585,6 +585,27 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "resume_delete":
 		return _literal_positionals(["resume", "delete", arguments["name"]], start=2)
 
+	if name == "resume_clone":
+		return _literal_positionals(
+			["resume", "clone", arguments["name"], arguments["new_name"]], start=2, count=2
+		)
+
+	if name == "resume_diff":
+		return _literal_positionals(
+			["resume", "diff", arguments["name1"], arguments["name2"]], start=2, count=2
+		)
+
+	if name == "resume_link":
+		args = ["resume", "link", arguments["name"], arguments["security_id"], arguments["job_id"]]
+		if arguments.get("title") is not None:
+			args.extend(_option_pair("--title", str(arguments["title"])))
+		if arguments.get("company") is not None:
+			args.extend(_option_pair("--company", str(arguments["company"])))
+		return _literal_positionals(args, start=2, count=3)
+
+	if name == "resume_applications":
+		return _literal_positionals(["resume", "applications", arguments["name"]], start=2)
+
 	if name == "ai_analyze_jd":
 		return _literal_positionals(
 			["ai", "analyze-jd", arguments["jd_text"], *_option_pair("--resume", arguments["resume"])],
