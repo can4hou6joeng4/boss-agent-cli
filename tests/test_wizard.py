@@ -4739,7 +4739,8 @@ def test_classify_action_error_keeps_action_unconfirmed_no_retry_contract():
 	mapped, recoverable, recovery = _classify_action_error("ACTION_UNCONFIRMED", "任意文案")
 	assert mapped == "ACTION_UNCONFIRMED"
 	assert recoverable is False
-	assert "boss hr chatmsg" in recovery
+	assert "hr chatmsg" not in recovery
+	assert "核对" in recovery
 	assert "稍后重试" not in recovery
 
 

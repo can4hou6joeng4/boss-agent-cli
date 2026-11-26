@@ -140,7 +140,7 @@ RECOVERY_LABELS = {
 	"AUTH_EXPIRED": "请重新登录当前平台，然后选择“恢复已有任务”。",
 	"AI_API_ERROR": "检查网络连接与 AI 密钥配置后重试。",
 	"AI_NOT_CONFIGURED": "先执行 boss ai config --provider <provider> --model <model> --api-key <key> 完成配置。",
-	"ACTION_UNCONFIRMED": "动作可能已生效：先用 boss hr chatmsg <friend_id> 核实，不要直接重试。",
+	"ACTION_UNCONFIRMED": "动作可能已生效：先在平台官方页面核对本次操作，不要直接重试。",
 	"CIRCUIT_BREAKER_OPEN": "人工核对未确认动作后执行 boss agent run --resume 关闭熔断，再由操作者显式重试；不要自动重发。",
 	"ALREADY_APPLIED": "该职位已投递过：用 boss me --section deliver 查看投递记录，或用 boss chat 跟进。",
 	"ALREADY_GREETED": "已打过招呼：用 boss chat 查看会话，或返回重新搜索换一批职位。",

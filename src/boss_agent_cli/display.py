@@ -323,6 +323,22 @@ def contact_refresh_command_for_ctx(ctx: Any) -> str:
 	return boss_command_for_ctx(ctx, command, include_data_dir=True)
 
 
+def unconfirmed_write_contract_for_ctx(ctx: Any) -> tuple[str, dict[str, list[str]]]:
+	"""ACTION_UNCONFIRMED 的恢复指引：按角色给出可执行的核对命令。
+
+	登记表只保留角色中立文案；求职者只能核对自己的会话 / 投递，招聘者才用
+	``hr chatmsg <friend_id>``。共享错误出口在回填或改写登记表文案时都走这里，
+	避免未来新增的写命令漏掉角色覆盖（Issue #2921）。
+	"""
+	role = ctx.obj.get("role") if ctx and getattr(ctx, "obj", None) else None
+	command = "hr chatmsg <friend_id>" if role == "recruiter" else "chat"
+	check_command = boss_command_for_ctx(ctx, command, include_data_dir=True)
+	return (
+		f"动作可能已生效：先用 {check_command} 核对平台记录，不要自动重试",
+		{"next_actions": [check_command]},
+	)
+
+
 def auth_required_hints(ctx: Any) -> dict[str, list[str]]:
 	"""登录类错误附带的下一步：命令给 Agent 执行，说明给真人扫码。"""
 	login_action = login_action_for_ctx(ctx)
@@ -470,6 +486,10 @@ def platform_error_contract(
 		# 列表的下一步，而不是让 Agent 重放同一条命令或让用户提 issue（#1485）。
 		chat_command = contact_refresh_command_for_ctx(ctx)
 		return recoverable, f"用 {chat_command} 核对联系人标识后重试", {"next_actions": [chat_command]}
+	if code == "ACTION_UNCONFIRMED":
+		# 写请求结果未知：登记表文案不区分角色，出口必须按当前角色注入核对命令。
+		recovery_action, hints = unconfirmed_write_contract_for_ctx(ctx)
+		return recoverable, recovery_action, hints
 	if recovery_action:
 		# 登记表是通用示例；诊断类命令（doctor / crawl status / resume list）读的
 		# 是本次运行的数据目录（Issue #1092）。
@@ -618,7 +638,13 @@ def handle_error_output(
 	if recoverable is None:
 		recoverable = registered_recoverable
 	if recovery_action is None:
-		recovery_action = registered_recovery_action
+		if code == "ACTION_UNCONFIRMED":
+			# 持久化失败记录的错误码回填也要按当前角色生成核对命令，不能把
+			# 招聘者专属命令交给求职者（Issue #2921）。
+			recovery_action, role_hints = unconfirmed_write_contract_for_ctx(ctx)
+			hints = {**role_hints, **(hints or {})}
+		else:
+			recovery_action = registered_recovery_action
 	# 调用方可能已经通过 platform_error_contract 之类把登记表原文改写成本次目录；
 	# 两种形态都算「仍是登记表契约」，认证分支不能因此丢掉扫码提示。
 	registered_variants = {registered_recovery_action}
@@ -632,6 +658,9 @@ def handle_error_output(
 		# 登记表是无运行上下文的示例；只补齐通用登录动作，不覆盖写操作的人工核对要求。
 		recovery_action = login_action_for_ctx(ctx)
 		hints = {**auth_required_hints(ctx), **(hints or {})}
+	elif code == "ACTION_UNCONFIRMED" and recovery_action in registered_variants:
+		recovery_action, role_hints = unconfirmed_write_contract_for_ctx(ctx)
+		hints = {**role_hints, **(hints or {})}
 	elif recovery_action and recovery_action == registered_recovery_action:
 		# 仍是登记表原文：doctor / resume list / crawl status 读的是本次运行的数据
 		# 目录，透传出参会让真人与 Agent 去默认目录找（Issue #1092）。
