@@ -68,7 +68,7 @@ from boss_agent_cli.display import (
 	shell_argument,
 )
 from boss_agent_cli.resume.models import resume_to_text
-from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.resume.store import ResumeStore, resume_name_input_error
 from boss_agent_cli.commands._text_guard import blank_option_names, reject_unencodable_params
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.text_files import is_utf8_encodable
@@ -177,14 +177,18 @@ def crawl_cmd(
 	"""新建或读取 crawl 结果，导入候选池并执行 ai fit。"""
 	# 空简历名是合法 argv，但先跑完采集再报「简历 '' 不存在」既浪费请求也看不出
 	# 是漏填了名字；与 resume 命令组同口径，在入口按 INVALID_PARAM 拒绝（Issue #1369）。
-	if not resume_name.strip():
+	# 超长名同口径：直接访问路径会让 ENAMETOOLONG 被报成「简历损坏」并带出本机
+	# 绝对路径（Issue #2969）。
+	resume_name_error = resume_name_input_error(resume_name)
+	if resume_name_error is not None:
+		message, recovery = resume_name_error
 		list_cmd = _crawl_hint_command(ctx, "resume list")
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="INVALID_PARAM",
-			message="简历名称不能为空",
-			recovery_action=f"补上简历名称后重试；用 {list_cmd} 查看已有简历",
+			message=message,
+			recovery_action=f"{recovery}；用 {list_cmd} 查看已有简历",
 			hints={"next_actions": [list_cmd]},
 		)
 		return

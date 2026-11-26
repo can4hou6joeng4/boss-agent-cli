@@ -221,7 +221,7 @@ boss crawl stop <run_id>
 
 `favorites` 与 `shortlist` 的 `hints.next_actions` 保留原 `--data-dir` 与平台：从收藏预览继续翻页、同步，再读取或比较候选池时，始终使用同一账号与本地目录。`shortlist` 参数错误时的恢复命令也保留目录；加入后的删除提示和缺失条目的重建提示会对两个标识按 shell 参数转义，可直接复制执行。
 
-`boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。`--source` 省略时新记录记为 `manual`；重复加入同一职位时保留已有来源，显式传入 `--source` 才会覆盖。
+`boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。`--source` 省略时新记录记为 `manual`；重复加入同一职位时保留已有来源，显式传入 `--source` 才会覆盖。空白 `--source`（空串或只含空白）按 `INVALID_PARAM` 拒绝，避免把未设值的脚本变量写成一条来源。
 
 `boss shortlist annotate` 至少需要一个非空 `--add-tag` / `--remove-tag` 或 `--note`；空标签与空 `--tag` 会返回 `INVALID_PARAM`，不会静默变成「没有过滤」或 `updated: true`。`--note ""` 仍表示清空备注。
 
@@ -333,7 +333,7 @@ boss hr download-resume <friend_id> --message-id <attachment_mid> --output ./res
 
 > 支持 Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 等最新模型，详见 [推荐模型与入口](integrations/ai-models.md)。
 
-简历名是自由文本，可含空格、引号与 shell 元字符。所有以简历名为参数的后继提示（`resume show` / `edit` / `export` / `delete`，含错误消息正文）都按 POSIX shell 规则转义，`shlex.split` 后还原为同一个名字；`resume list` 与 `resume show` / `clone` 遇到损坏文件返回 `RESUME_FILE_INVALID`，给出的 `resume delete` 提示同样可直接复制执行。
+简历名是自由文本，可含空格、引号与 shell 元字符。所有以简历名为参数的后继提示（`resume show` / `edit` / `export` / `delete`，含错误消息正文）都按 POSIX shell 规则转义，`shlex.split` 后还原为同一个名字；`resume list` 与 `resume show` / `clone` 遇到损坏文件返回 `RESUME_FILE_INVALID`，给出的 `resume delete` 提示同样可直接复制执行。空名以及拼成 `<name>.json` 后超过文件系统文件名上限的名称，在 `resume`、`ai`、`agent crawl` 与向导入口都按 `INVALID_PARAM` 拒绝，不会先访问路径再把 ENAMETOOLONG 报成「简历损坏」或带出本机绝对路径。
 
 本地简历全部存放在 `--data-dir` 的 `resumes/` 下，因此简历族的后继与恢复提示都显式携带该目录：`resume init` / `list` / `show` / `edit` / `delete` / `export` / `import` / `clone` / `diff` / `link` / `applications` 的 `hints.next_actions`、终端 `next_steps`、错误的 `recovery_action`，以及损坏文件的 `operator_actions` 都指回产生这份简历的目录；`resume link` 后继的 `apply`、取参用的 `search` 与 `init` 后的 `me` 也在同一目录。换一个工作目录照抄提示时，仍操作同一份简历与职位关联，而不会在默认目录另建一份或读取另一个账号的缓存。
 

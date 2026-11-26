@@ -45,7 +45,7 @@ from boss_agent_cli.display import (
 	shell_argument,
 )
 from boss_agent_cli.resume.models import resume_to_text
-from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.resume.store import ResumeStore, resume_name_input_error
 from boss_agent_cli.services.json_files import path_mode
 
 
@@ -214,20 +214,26 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 
 
 def _load_resume_text(ctx: click.Context, resume_name: str) -> str | None:
-	"""加载简历纯文本；不存在、文件损坏或名称为空时输出对应错误。
+	"""加载简历纯文本；不存在、文件损坏或名称为空 / 过长时输出对应错误。
 
 	损坏与缺失必须分开报：坏文件不报 ``RESUME_NOT_FOUND``，否则 Agent 照
 	``resume list`` 只看得到空列表、``resume init`` 又被同名文件挡住
 	（``RESUME_ALREADY_EXISTS``），恢复链断在这里（Issue #1369）。
+
+	空名与超长名在访问路径前按 INVALID_PARAM 拒绝：直接读路径会让
+	ENAMETOOLONG 被兜成「简历损坏」，消息带出本机绝对路径，指引里的
+	``resume delete`` 也无法执行（Issue #2969）。
 	"""
-	if not resume_name.strip():
+	name_error = resume_name_input_error(resume_name)
+	if name_error is not None:
+		message, recovery = name_error
 		list_cmd = _hint_command(ctx, "resume list")
 		handle_error_output(
 			ctx,
 			"ai",
 			code="INVALID_PARAM",
-			message="简历名称不能为空",
-			recovery_action=f"补上简历名称后重试；用 {list_cmd} 查看已有简历",
+			message=message,
+			recovery_action=f"{recovery}；用 {list_cmd} 查看已有简历",
 			hints={"next_actions": [list_cmd]},
 		)
 		ctx.exit(1)

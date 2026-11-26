@@ -122,6 +122,24 @@ def shortlist_add_cmd(
 			hints={"next_actions": [search_cmd]},
 		)
 		return
+	# 空白 --source 是「没设值」的脚本变量，不是一条来源：落库后 list/compare
+	# 显示为空白来源，且 #2960 的保留语义会让它永久粘在记录上（Issues #2960 #2970）。
+	# 与 `shortlist compare --tag ""` 等空白参数同口径，在写盘前按 INVALID_PARAM
+	# 拒绝；省略 --source 才是「未指定」。
+	if source is not None and not source.strip():
+		list_cmd = _hint_command(ctx, "shortlist list")
+		handle_error_output(
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="--source 不能为空或只含空白字符",
+			recovery_action=(
+				"省略 --source 表示未指定来源（新记录记为 manual，重复加入保留原来源），"
+				f"或传入非空来源后重试；用 {list_cmd} 查看已有条目"
+			),
+			hints={"next_actions": [list_cmd]},
+		)
+		return
 	if not _reject_unencodable_fields(
 		ctx,
 		(

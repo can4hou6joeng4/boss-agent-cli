@@ -30,6 +30,7 @@ from boss_agent_cli.resume.store import (
 	ResumeStore,
 	_portable_filename,
 	_resume_filename_too_long,
+	resume_name_input_error,
 )
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.json_files import path_mode
@@ -89,27 +90,20 @@ def _require_resume_name(ctx: click.Context, name: str) -> bool:
 	`resume init --name ""` / `resume clone <源> ""` 里都是 INVALID_PARAM。
 	拼成 ``<name>.json`` 后超过文件系统文件名上限的名称同样不可能有对应文件：
 	直接访问只会得到 ENAMETOOLONG，再被误报成 RESUME_FILE_INVALID 或
-	LOCAL_IO_ERROR（Issue #2959）。
+	LOCAL_IO_ERROR（Issue #2959）。判定与 ai / agent / wizard 入口共享同一份
+	``resume_name_input_error``，避免新入口再次漏掉（Issue #2969）。
 	"""
+	error = resume_name_input_error(name)
+	if error is None:
+		return True
+	message, recovery = error
 	list_cmd = _hint_command(ctx, "resume list")
-	if name.strip():
-		if not _resume_filename_too_long(name):
-			return True
-		handle_error_output(
-			ctx,
-			"resume",
-			code="INVALID_PARAM",
-			message="简历名称过长：拼成 .json 后超过文件系统文件名上限，无法保存或读取",
-			recovery_action=f"缩短简历名称后重试；用 {list_cmd} 查看已有简历",
-			hints={"next_actions": [list_cmd]},
-		)
-		return False
 	handle_error_output(
 		ctx,
 		"resume",
 		code="INVALID_PARAM",
-		message="简历名称不能为空",
-		recovery_action=f"补上简历名称后重试；用 {list_cmd} 查看已有简历",
+		message=message,
+		recovery_action=f"{recovery}；用 {list_cmd} 查看已有简历",
 		hints={"next_actions": [list_cmd]},
 	)
 	return False

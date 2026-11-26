@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `boss_shortlist_add` 的工具 schema 不再声明 `source` 默认 `manual`，与 `SCHEMA_DATA` / CLI 的「省略时新记录记为 manual、重复加入保留原来源」一致；宿主按 schema 注入默认值不再覆盖候选池里的既有来源（Issue #2968）。
+- 超长简历名在 `ai`、`agent crawl` 与向导 `ai_assist` 入口按 `INVALID_PARAM` 拒绝，不再把 ENAMETOOLONG 报成 `RESUME_FILE_INVALID`、带出本机绝对路径或给出必然被拒的 `resume delete` 恢复命令；判定下沉到 `resume/store.py` 共享（Issue #2969）。
+- `shortlist add` 拒绝空白 `--source`（空串或只含空白），不再把未设值的脚本变量写成一条来源并被后续省略参数永久保留；省略 `--source` 仍是「未指定来源」（Issue #2970）。
+
 ## [3.4.252] - 2026-11-27
 
 ### Fixed
