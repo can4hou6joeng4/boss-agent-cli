@@ -13,6 +13,7 @@ from boss_agent_cli.services.candidate_actions import (
 	CandidateActionNotRecorded,
 	CandidateActionReleaseFailed,
 	candidate_action_provably_unsent,
+	candidate_release_recovery_action,
 	classify_platform_response,
 	cli_error_details,
 	outcome_unknown_cause,
@@ -139,24 +140,31 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对投递状态；不要自动重发本次投递"]},
 				)
 				return
-			except CandidateActionReleaseFailed:
-				# 平台拒绝了本次投递（未产生记录），但本地 pending 预约没删掉。
-				# 直接重试会被预约拦住：报本地状态错误，提示先修缓存再重试。
+			except CandidateActionReleaseFailed as release_failed:
+				# 本次投递未产生平台记录（平台明确拒绝，或请求可证明未发出），
+				# 但本地 pending 预约没删掉。直接重试会被预约拦住：报本地状态
+				# 错误，恢复指引先清理本地预约（Issues #2944 #2971）。
+				recovery = candidate_release_recovery_action(
+					release_failed.claim_reference, lambda command: _hint_command(ctx, command)
+				)
 				handle_error_output(
 					ctx,
 					"apply",
 					code="LOCAL_STATE_WRITE_FAILED",
-					message="平台未接受本次投递，但本地预约未释放；修复本地缓存后再重试",
+					message="本次投递未产生平台记录，但本地预约未释放；清理本地预约后再重试",
 					recoverable=False,
-					recovery_action="先确认数据目录可写（磁盘空间、缓存目录权限），再重新执行同一条投递命令",
+					recovery_action=recovery,
 					details={
 						"security_id": security_id,
 						"job_id": job_id,
 						"lid": lid,
 						"request_sent": False,
 						"recorded": False,
+						"replay_safe": False,
+						"release_error": type(release_failed.cause).__name__,
+						"claim_reference": release_failed.claim_reference,
 					},
-					hints={"operator_actions": ["检查磁盘空间与 ~/.boss-agent 目录权限；本次投递没有被平台接受，修好后可重试"]},
+					hints={"operator_actions": [recovery]},
 				)
 				return
 			except Exception as exc:

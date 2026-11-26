@@ -46,9 +46,33 @@ from boss_agent_cli.display import (
 	default=False,
 	help="用户确认官方目标业务页恢复后显式清除 BOSS 本地风控锁；不解除服务器风险",
 )
+@click.option(
+	"--pending-claims",
+	"pending_claims",
+	default=None,
+	metavar="REFERENCE",
+	help="按释放失败信封中的 claim_reference 清除该次 greet/apply 预约；不清除其他预约",
+)
 @click.pass_context
-def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool, days: int, risk_lock: bool) -> None:
+def clean_cmd(
+	ctx: click.Context,
+	dry_run: bool,
+	clean_all: bool,
+	privacy: bool,
+	days: int,
+	risk_lock: bool,
+	pending_claims: str | None,
+) -> None:
 	"""清理过期缓存和临时文件。"""
+	if pending_claims is not None and (
+		len(pending_claims) != 32 or any(c not in "0123456789abcdef" for c in pending_claims)
+	):
+		handle_error_output(
+			ctx, "clean", code="INVALID_PARAM",
+			message="--pending-claims 必须是释放失败信封中的 32 位 claim_reference",
+			recovery_action="从 LOCAL_STATE_WRITE_FAILED 信封复制完整 claim_reference；不要猜测其他预约的标识",
+		)
+		return
 	data_dir = ctx.obj["data_dir"]
 	results: list[dict[str, Any]] = []
 	total_freed = 0
@@ -233,6 +257,14 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 			results.append(_clean_result("职位描述缓存", freed, count))
 			total_freed += freed
 
+		# 7) 仅清除释放失败信封指定的预约。每次预约的随机标识独立，旧指引
+		# 不能删除新建预约；其他在途 / 结果未知预约与 sent 行始终保留。
+		if pending_claims is not None:
+			current_target = "未完成的动作预约"
+			freed, count = _clean_pending_action_claims(data_dir, pending_claims, dry_run=dry_run)
+			results.append(_clean_result("未完成的动作预约", freed, count))
+			total_freed += freed
+
 	except CacheDatabaseInvalid as exc:
 		# 缓存库损坏是确定性本地失败；已完成项照样带回（Issue #1831）。
 		_emit_clean_partial_failure(
@@ -304,6 +336,8 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 			clean_args.append("--all")
 		if privacy:
 			clean_args.append("--privacy")
+		if pending_claims is not None:
+			clean_args.extend(("--pending-claims", pending_claims))
 		clean_args.extend(("--days", str(days)))
 		if risk_lock:
 			clean_args.append("--risk-lock")
@@ -897,6 +931,34 @@ def _clean_apply_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 def _clean_location_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	"""清理招聘者工作地点发送记录。"""
 	return _clean_table(data_dir, "recruiter_location_records", dry_run=dry_run)
+
+
+def _clean_pending_action_claims(data_dir: Path, reference: str, *, dry_run: bool) -> tuple[int, int]:
+	"""仅清除指定版本的 pending 预约，其他账号、动作与后续新预约均保留。
+
+	恢复标识只在已证明未发送且释放失败时输出；历史预约不补发标识。
+	"""
+	db_path = data_dir / "cache" / "boss_agent.db"
+	if not _cache_db_present(db_path):
+		return 0, 0
+	conn = _open_cache_db(db_path, root=data_dir)
+	try:
+		if not _table_exists(conn, "candidate_action_claims"):
+			return 0, 0
+		columns = {row[1] for row in conn.execute("PRAGMA table_info(candidate_action_claims)")}
+		if "recovery_id" not in columns:
+			return 0, 0
+		where = "status = 'pending' AND action IN ('greet', 'apply') AND recovery_id = ?"
+		if dry_run:
+			row = conn.execute(f"SELECT COUNT(*) FROM candidate_action_claims WHERE {where}", (reference,)).fetchone()
+			count = int(row[0])
+		else:
+			cursor = conn.execute(f"DELETE FROM candidate_action_claims WHERE {where}", (reference,))
+			count = cursor.rowcount
+			conn.commit()
+		return count * 100, count
+	finally:
+		conn.close()
 
 
 def _clean_job_desc_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:

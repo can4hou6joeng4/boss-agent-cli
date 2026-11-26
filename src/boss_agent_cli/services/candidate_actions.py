@@ -68,17 +68,46 @@ class CandidateActionNotRecorded(Exception):
 
 
 class CandidateActionReleaseFailed(Exception):
-	"""平台明确拒绝本次请求，但释放本地预约失败。
+	"""请求可证明未发出或平台明确拒绝，但释放本地预约失败。
 
-	请求本身可以重试（限流 / 参数 / 登录态），但 pending 行仍在：直接重试会
-	撞上 ``ACTION_UNCONFIRMED``。命令层必须输出不可重试的本地状态错误，说明
-	「平台未接受本次请求，但本地预约未释放」，而不是结果未知（Issue #2315）。
+	请求本身可以重试（限流 / 参数 / 登录态 / 预算停止），但 pending 行仍在：
+	直接重试会撞上 ``ACTION_UNCONFIRMED``。命令层必须输出不可重试的本地状态
+	错误，说明「本次请求未产生平台记录，但本地预约未释放」，而不是结果未知
+	（Issues #2315 #2944 #2971）。
 	"""
 
-	def __init__(self, action: CandidateAction, cause: BaseException) -> None:
+	def __init__(self, action: CandidateAction, cause: BaseException, claim_reference: str | None = None) -> None:
 		super().__init__(str(cause) or type(cause).__name__)
 		self.action = action
 		self.cause = cause
+		self.claim_reference = claim_reference
+
+
+def candidate_release_reference(
+	cache: CacheStore, job_id: str, action: CandidateAction, *, account: str = ""
+) -> str | None:
+	"""只为已证明未发送且释放失败的预约获取恢复标识；读取失败时禁止猜测。"""
+	try:
+		reference = cache.candidate_action_release_reference(job_id, action, account=account)
+	except Exception:
+		return None
+	if isinstance(reference, str) and len(reference) == 32 and all(c in "0123456789abcdef" for c in reference):
+		return reference
+	return None
+
+
+def candidate_release_recovery_action(reference: str | None, hint_command: Callable[[str], str]) -> str:
+	"""恢复只针对当前预约；标识拿不到时保留 pending，交给人工维护。"""
+	if reference is None:
+		return (
+			"先确认数据目录可写（磁盘空间、缓存目录权限）；本地预约标识无法读取，"
+			"请备份缓存后联系维护者处理该预约，勿删除整库或直接重发"
+		)
+	clean_cmd = hint_command(f"clean --pending-claims {reference}")
+	return (
+		"先确认数据目录可写（磁盘空间、缓存目录权限），"
+		f"再用 {clean_cmd} 清除本次残留预约，然后显式重新执行未完成的动作"
+	)
 
 
 def reserve_candidate_action(
@@ -282,16 +311,17 @@ def run_candidate_action(
 		result = send()
 	except BaseException as exc:
 		if candidate_action_provably_unsent(exc):
-			# 释放本身也可能写失败（database is locked / 磁盘满）。派发前的
-			# 认证 / 代理 / 传输失败保留原始异常与具体恢复动作（Issue #2315）；
-			# 平台已明确拒绝的 typed 错误则必须转成不可重试的本地状态错误，
-			# 否则照原提示重试会撞上尚未释放的 pending（Issue #2944）。
+			# 释放本身也可能写失败（database is locked / 磁盘满）。无论原始异常
+			# 是平台明确拒绝（Issue #2944）还是派发前的认证 / 预算 / 代理失败
+			# （Issue #2315），只要预约没删掉，照原错误的恢复动作重试都会撞上
+			# 残留的 pending 并落成不可恢复的 ACTION_UNCONFIRMED。统一转成不可
+			# 重试的本地状态错误，让恢复指引先清理本地预约（Issue #2971）。
 			try:
 				release_candidate_action(cache, job_id, action, account=account)
 			except Exception as release_exc:
-				if getattr(exc, "platform_rejected", None) is True:
-					raise CandidateActionReleaseFailed(action, release_exc) from release_exc
-				exc.add_note(f"释放候选人动作预约失败: {type(release_exc).__name__}: {release_exc}")
+				raise CandidateActionReleaseFailed(
+					action, release_exc, candidate_release_reference(cache, job_id, action, account=account)
+				) from release_exc
 		raise
 	outcome = classify(result) if classify is not None else "success"
 	if outcome == "success":
@@ -306,6 +336,8 @@ def run_candidate_action(
 		except Exception as exc:
 			# 平台没接受请求，但 pending 行还在：直接重试会被预约拦住。报明确的
 			# 本地状态错误，而不是让下一次调用落成 ACTION_UNCONFIRMED。
-			raise CandidateActionReleaseFailed(action, exc) from exc
+			raise CandidateActionReleaseFailed(
+				action, exc, candidate_release_reference(cache, job_id, action, account=account)
+			) from exc
 	# outcome == "unknown"：保留 pending，后续调用按结果未知处理。
 	return result

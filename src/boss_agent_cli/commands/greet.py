@@ -44,6 +44,8 @@ from boss_agent_cli.services.candidate_actions import (
 	CandidateActionNotRecorded,
 	CandidateActionReleaseFailed,
 	candidate_action_provably_unsent,
+	candidate_release_recovery_action,
+	candidate_release_reference,
 	classify_platform_response,
 	cli_error_details,
 	outcome_unknown_cause,
@@ -194,17 +196,29 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str | 
 					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对是否已打过招呼；不要自动重发本次招呼"]},
 				)
 				return
-			except CandidateActionReleaseFailed:
-				# 平台拒绝了本次招呼（未产生记录），但本地 pending 预约没删掉。
-				# 直接重试会被预约拦住：报本地状态错误，提示先修缓存再重试。
+			except CandidateActionReleaseFailed as release_failed:
+				# 本次招呼未产生平台记录（平台明确拒绝，或请求可证明未发出），
+				# 但本地 pending 预约没删掉。直接重试会被预约拦住：报本地状态
+				# 错误，恢复指引先清理本地预约（Issues #2944 #2971）。
+				recovery = candidate_release_recovery_action(
+					release_failed.claim_reference, lambda command: _hint_command(ctx, command)
+				)
 				handle_error_output(
 					ctx, "greet",
 					code="LOCAL_STATE_WRITE_FAILED",
-					message="平台未接受本次打招呼，但本地预约未释放；修复本地缓存后再重试",
+					message="本次招呼未产生平台记录，但本地预约未释放；清理本地预约后再重试",
 					recoverable=False,
-					recovery_action="先确认数据目录可写（磁盘空间、缓存目录权限），再重新执行同一条打招呼命令",
-					details={"security_id": security_id, "job_id": job_id, "request_sent": False, "recorded": False},
-					hints={"operator_actions": ["检查磁盘空间与 ~/.boss-agent 目录权限；本次招呼没有被平台接受，修好后可重试"]},
+					recovery_action=recovery,
+					details={
+						"security_id": security_id,
+						"job_id": job_id,
+						"request_sent": False,
+						"recorded": False,
+						"replay_safe": False,
+						"release_error": type(release_failed.cause).__name__,
+						"claim_reference": release_failed.claim_reference,
+					},
+					hints={"operator_actions": [recovery]},
 				)
 				return
 			except Exception as exc:
@@ -482,15 +496,17 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			# 收尾，否则下一次执行会撞上残留预约（Issue #2964）。
 			release_error: Exception | None = None
 			release_failed_item: JobItem | None = None
+			release_failed_reference: str | None = None
 
 			def _release_or_stop(item: JobItem) -> bool:
 				"""释放当前候选人的预约；失败时让批次按本地状态错误收尾。"""
-				nonlocal release_error, release_failed_item
+				nonlocal release_error, release_failed_item, release_failed_reference
 				try:
 					release_candidate_action(cache, item.job_id, "greet", account=account)
 				except Exception as exc:
 					release_error = exc
 					release_failed_item = item
+					release_failed_reference = candidate_release_reference(cache, item.job_id, "greet", account=account)
 					return False
 				return True
 
@@ -638,13 +654,25 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
 								# request_sent=False / 通道不可用 / 派发前失败可以证明未发出，撤销
 								# 预约；风控与超时可能已产生写入，保留 pending 按结果未知处理。
+								stop_code = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
 								if candidate_action_provably_unsent(e) and not _release_or_stop(item):
 									# 请求可以证明未发出，但预约没删掉：下一次执行会被
 									# pending 挡住，报本地状态错误而不是原始停止原因。
+									# 已尝试的候选人必须出现在 failed 里，与其他三个释放点
+									# 同形（Issue #2972）。
+									results.append({
+										"security_id": item.security_id,
+										"job_id": item.job_id,
+										"title": item.title,
+										"company": item.company,
+										"status": "failed",
+										"error": stop_code,
+										"details": {"release_failed": True},
+									})
 									stopped_reason = "LOCAL_STATE_WRITE_FAILED"
 									break
 								stop_error = e
-								stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
+								stopped_reason = stop_code
 								logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
 								break
 							error_msg = str(e)
@@ -790,14 +818,18 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			if release_error is not None:
 				# 平台未接受本次招呼（或请求可证明未发出），但本地预约没有释放：
 				# 报不可重试的本地状态错误，而不是结果未知。否则 Agent 会按「结果
-				# 可能已生效」去核对，照指引重试又会撞上残留的 pending（Issue #2964）。
+				# 可能已生效」去核对，照指引重试又会撞上残留的 pending（Issues
+				# #2964 #2971）。
 				data["stopped_reason"] = "LOCAL_STATE_WRITE_FAILED"
+				recovery = candidate_release_recovery_action(
+					release_failed_reference, lambda command: _hint_command(ctx, command)
+				)
 				handle_error_output(
 					ctx, "batch-greet",
 					code="LOCAL_STATE_WRITE_FAILED",
 					message="本次招呼未产生平台记录，但本地预约未释放；已停止剩余候选人",
 					recoverable=False,
-					recovery_action="先确认数据目录可写（磁盘空间、缓存目录权限），再对未完成的候选人重新执行批量打招呼命令",
+					recovery_action=recovery,
 					details={
 						**data,
 						"request_sent": False,
@@ -807,12 +839,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 							release_failed_item.to_dict() if release_failed_item is not None else None
 						),
 						"release_error": type(release_error).__name__,
+						"claim_reference": release_failed_reference,
 					},
-					hints={
-						"operator_actions": [
-							"检查磁盘空间与 ~/.boss-agent 目录权限；本次招呼未被平台接受，修好后只对未完成的候选人重新执行",
-						]
-					},
+					hints={"operator_actions": [recovery]},
 				)
 				return
 

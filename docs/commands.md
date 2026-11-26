@@ -346,11 +346,13 @@ AI 命令同样读取 `--data-dir` 中的 AI 配置、`resumes/`、候选池与�
 | 命令 | 说明 |
 |------|------|
 | `boss config list/set/reset` | 配置管理 |
-| `boss clean` | 清理缓存；`--all` 清理全部缓存（含搜索缓存、打招呼/投递记录、招聘者打招呼记录、职位描述缓存和工作地点发送记录）；`--risk-lock` 在用户确认官方目标业务页恢复后显式清除本地风险锁，`--dry-run` 不解除锁，不宣称平台解封 |
+| `boss clean` | 清理缓存；`--all` 清理全部缓存（含搜索缓存、打招呼/投递记录、招聘者打招呼记录、职位描述缓存和工作地点发送记录）；`--risk-lock` 在用户确认官方目标业务页恢复后显式清除本地风险锁，`--dry-run` 不解除锁，不宣称平台解封；`--pending-claims <reference>` 按释放失败信封中的标识清除本次 greet/apply 预约 |
 | `boss stats` | 投递转化漏斗统计（greeted/applied/shortlist） |
 | `boss export <query>` | 导出结果（CSV/JSON/HTML，支持 `--url` 网页筛选；`--welfare` / `--active` 与 `search` 同口径，逐个查详情后过滤） |
 
 `clean --dry-run` 返回的执行提示会去掉 `--dry-run`，保留本次 `--data-dir`、`--all` / `--privacy` 与 `--days`；路径会正确转义，照提示执行时仍操作预演的数据目录与清理范围。清理后的登录、自检提示也沿用该目录。带 `--risk-lock` 的预演只在 `hints.operator_actions` 提供保留范围的人工执行命令。
+
+`clean --pending-claims <reference>` 只清除释放失败信封中 `error.details.claim_reference` 指定的本次 greet/apply 预约；该标识仅在请求可证明未发出或平台明确拒绝、但本地预约释放失败时返回。其他账号、其他动作、在途或结果未知的预约以及成功记录均保留。每次新建预约使用不同标识，因此旧指引无法删除后续新预约；该选项不并入 `--all`。`--dry-run` 只预览指定预约，执行指引保留标识与数据目录。若本地状态无法读取而拿不到标识，信封会要求备份缓存并联系维护者，不提供批量清理或直接重发指引。
 
 `config list` / `get` / `set` / `reset` 的后继命令与 `INVALID_PARAM` 恢复提示保留本次 `--data-dir` 与平台：未知配置项、非法取值与写入成功后的 `config get` / `config list` / `config set` 示例都携带经过 shell 参数转义的绝对目录，照抄即读写同一份 `config.json`，不会在默认目录另建配置。TTY 的「下一步」列表按字面渲染命令文本，目录含 `[bold]` 等 Rich 标签时不会被改写或中断输出。
 

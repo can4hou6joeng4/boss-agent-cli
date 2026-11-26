@@ -752,6 +752,7 @@ class CacheStore:
 				security_id TEXT NOT NULL DEFAULT '',
 				status TEXT NOT NULL,
 				updated_at REAL NOT NULL,
+				recovery_id TEXT NOT NULL DEFAULT '',
 				PRIMARY KEY (account, job_id, action)
 			);
 			CREATE TABLE IF NOT EXISTS shortlist_records (
@@ -858,6 +859,17 @@ class CacheStore:
 		self._migrate_crawl_runs()
 		self._migrate_crawl_jobs()
 		self._migrate_dedupe_keys()
+		self._migrate_candidate_action_claims()
+
+	def _migrate_candidate_action_claims(self) -> None:
+		"""为新预约保存独立恢复标识；历史 pending 不具备可自动清理的证据。"""
+		columns = {row[1] for row in self._conn.execute("PRAGMA table_info(candidate_action_claims)")}
+		if "recovery_id" in columns:
+			return
+		with self._migration_write_transaction():
+			columns = {row[1] for row in self._conn.execute("PRAGMA table_info(candidate_action_claims)")}
+			if "recovery_id" not in columns:
+				self._conn.execute("ALTER TABLE candidate_action_claims ADD COLUMN recovery_id TEXT NOT NULL DEFAULT ''")
 
 	@contextmanager
 	def _migration_write_transaction(self) -> Iterator[None]:
@@ -2142,9 +2154,9 @@ class CacheStore:
 		with self._conn:
 			cursor = self._conn.execute(
 				"INSERT OR IGNORE INTO candidate_action_claims "
-				"(account, job_id, action, security_id, status, updated_at) "
-				"VALUES (?, ?, ?, ?, 'pending', ?)",
-				(_text_key(account), _text_key(job_id), action, _text_key(security_id), time.time()),
+				"(account, job_id, action, security_id, status, updated_at, recovery_id) "
+				"VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+				(_text_key(account), _text_key(job_id), action, _text_key(security_id), time.time(), secrets.token_hex(16)),
 			)
 			if cursor.rowcount:
 				return None
@@ -2189,6 +2201,17 @@ class CacheStore:
 				(_text_key(account), _text_key(job_id), action),
 			)
 			return bool(cursor.rowcount)
+
+	def candidate_action_release_reference(
+		self, job_id: str, action: Literal["greet", "apply"], *, account: str = ""
+	) -> str | None:
+		"""仅在调用方已证明未发送且释放失败时取恢复标识，不公开枚举 pending。"""
+		row = self._conn.execute(
+			"SELECT recovery_id FROM candidate_action_claims "
+			"WHERE account = ? AND job_id = ? AND action = ? AND status = 'pending'",
+			(_text_key(account), _text_key(job_id), action),
+		).fetchone()
+		return str(row[0]) if row is not None and row[0] else None
 
 	def is_shortlisted(self, security_id: str, job_id: str) -> bool:
 		row = self._conn.execute(

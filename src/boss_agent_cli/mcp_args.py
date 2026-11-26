@@ -517,6 +517,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--all")
 		if arguments.get("days") is not None:
 			args.extend(_option_pair("--days", str(arguments["days"])))
+		if "pending_claims" in arguments:
+			args.extend(_option_pair("--pending-claims", str(arguments["pending_claims"])))
 		return args
 
 	if name == "digest":
