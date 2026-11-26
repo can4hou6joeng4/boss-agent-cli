@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- AI 结果的终端渲染统一走 `cell_text`：`None` 显示 `-`，数组 / 对象按可读文本展示，不再泄漏 Python repr；`--json` 信封中的原始值保持不变（Issue #2915）。
+
 ## [3.4.242] - 2026-11-26
 
 ### Fixed
