@@ -38,7 +38,7 @@ Historical `operating_mode=assisted|research` configuration remains compatible, 
 - **Terminal wizard**: run `boss` or `boss wizard`, select a role, platform, and goal, then resume the same workflow through JSON, run IDs, or MCP
 - **Local shortlist & stats**: inspect details, read web favorited jobs with validity status and sync only active entries, organize candidates with local tags and notes, compare jobs offline, and see funnel stats — `shortlist` `stats` `watch` `preset` `favorites`
 - **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, schema_version, command, data, pagination, error, hints}` seven-key envelope, `boss schema` is the capability source of truth, and an **MCP server with 83 tools** exposes the implemented tool capabilities
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, schema_version, command, data, pagination, error, hints}` seven-key envelope, `boss schema` is the capability source of truth, and an **MCP server with 87 tools** exposes the implemented tool capabilities
 - **Recruiter workflow**: confirm recruiter identity, then candidate search, recommendations, first contact (without changing read status), resumes, chats, replies, and job management — `hr whoami/candidates/recommendations/greet/location/applications/resume/chat/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
 - **Platform layer**: live `Platform` / `RecruiterPlatform` registries behind the global `--platform` option; `zhipin` (BOSS Zhipin) is the only registered platform
 
@@ -89,7 +89,7 @@ boss --platform zhipin search "Python"     # zhipin is the default, so --platfor
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
 ```json
-// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 83 tools
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 87 tools
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
