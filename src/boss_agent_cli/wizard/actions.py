@@ -738,11 +738,12 @@ def _exchange_type(inputs: Mapping[str, Any]) -> int:
 	wizard inputs 来自 ``--input-json`` / MCP，不经过 Click 的 ``Choice``，catalog
 	也只检查必填项。原先除 ``wechat`` 外的任何值都会静默按手机号处理（`"wecaht"`、
 	`"PHONE"`、`"phone "`），发出与用户意图不同的隐私授权请求（Issue #905）。
-	未提供类型时按 schema 默认 ``phone``。
+	未提供类型时按 schema 默认 ``phone``；显式空串 / ``null`` 与 CLI 的
+	``--type ""`` 同口径，必须报参数错误，绝不能静默按默认发出授权请求（Issue #2943）。
 	"""
-	raw = inputs.get("type")
-	if raw is None or raw == "":
+	if "type" not in inputs:
 		return 1
+	raw = inputs["type"]
 	if raw == "wechat":
 		return 2
 	if raw == "phone":

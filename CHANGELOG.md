@@ -7,6 +7,7 @@
 ### Fixed
 
 - `crawl status` 在任务不存在或断点损坏时给出的重建提示补齐必填 `--city`，Agent 可直接回放（Issue #2941）。
+- 向导 / MCP 的 `candidate_exchange` 不再把显式空串或 `null` 的交换类型当成缺省手机号，改为在写请求前报 `INVALID_PARAM`，与 CLI `--type ""` 同口径（Issue #2943）。
 
 ## [3.4.250] - 2026-11-27
 

@@ -703,9 +703,9 @@ def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):
 	]
 
 
-@pytest.mark.parametrize("value", ["wecaht", "PHONE", "phone ", "wx", 2])
+@pytest.mark.parametrize("value", ["wecaht", "PHONE", "phone ", "wx", 2, "", None])
 def test_candidate_exchange_rejects_unknown_type(tmp_path, value):
-	"""非法交换类型不能静默按手机号发出请求（Issue #905）。"""
+	"""非法交换类型不能静默按手机号发出请求（Issue #905 #2943）。"""
 	platform = _FakeCandidatePlatform()
 	context = _action_context(tmp_path, candidate=platform)
 
@@ -715,6 +715,16 @@ def test_candidate_exchange_rejects_unknown_type(tmp_path, value):
 	assert exc_info.value.code == "INVALID_PARAM"
 	assert "wechat" in str(exc_info.value)
 	assert platform.calls == []
+
+
+def test_candidate_exchange_defaults_to_phone_when_type_omitted(tmp_path):
+	"""完全省略 type 才使用 schema 默认值（Issue #2943）。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	DEFAULT_ACTIONS["candidate_exchange"](context, {"security_id": "10001"}, {})
+
+	assert ("exchange_contact", "sid_current", "10001", "联系人甲", 1) in platform.calls
 
 
 def test_local_and_ai_actions_return_structured_recovery(tmp_path):
