@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.3] - 2026-11-27
+
 ### Fixed
 
 - MCP `boss_hr_accept_resume` / `boss_hr_download_resume` 的宿主超时覆盖命令内部固定请求：同意附件简历按 3 次（历史、好友详情、同意 POST）、下载按 4 次（再含预览检查与附件下载）估算，`accept-resume --dry-run` 不请求平台，仍用默认 120s（Issue #3009）。
