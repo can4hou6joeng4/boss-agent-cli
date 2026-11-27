@@ -6,7 +6,7 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 from boss_agent_cli.services.candidate_actions import cli_error_details
-from boss_agent_cli.services.contact_lookup import friend_display_name
+from boss_agent_cli.services.contact_lookup import friend_display_name, friend_security_id
 from boss_agent_cli.services.labels import (
 	LABEL_MAP as _LABEL_MAP,
 	LABEL_NAMES as _LABEL_NAMES,
@@ -118,13 +118,12 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			handle_platform_error_output(ctx, "mark", platform, resp, fallback_message=f"{action_text}标签失败")
 			return
 
-		# 只认字符串并与 _contact_lookup 同口径：类型漂移成对象 / 布尔时
-		# str() 会把 Python repr 当 security_id 回显，Agent 会拿它继续调用
-		# detail / apply 等命令（Issue #1812、#2138）。
-		raw_security_id = friend_item.get("securityId") or friend_item.get("security_id")
+		# 与 chat / wizard 共用 services.contact_lookup 的同一份实现：camelCase
+		# 为真值但不可用（容器 / 数字 / 纯空白）时继续读合法的 snake_case 回退，
+		# 不能把 Python repr 当 security_id 回显（Issue #1812、#2138、#2723、#3079）。
 		data = {
 			"uid": friend_id,
-			"security_id": raw_security_id.strip() if isinstance(raw_security_id, str) else "",
+			"security_id": friend_security_id(friend_item),
 			"name": friend_name,
 			"label": label_name,
 			"action": action_text,
