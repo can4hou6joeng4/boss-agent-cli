@@ -4,9 +4,12 @@
 
 ## [Unreleased]
 
+## [3.9.14] - 2026-11-27
+
 ### Fixed
 
 - 向导 / MCP 的招聘者写动作命中停止开关时，`CIRCUIT_BREAKER_OPEN` 的恢复命令补上 `--role recruiter`：照抄 `agent run --resume` 不再落到默认候选人角色读取另一套本地状态；求职者角色输出不变（Issue #3061）。
+- 向导 TTY 的 `CIRCUIT_BREAKER_OPEN` 失败面板改为采用动作层的完整恢复指引，不再用静态文案覆盖掉 `--role recruiter`；静态兜底路径按当前运行角色生成，候选人不会被误切到招聘者（Issue #3063）。
 
 ## [3.9.13] - 2026-11-27
 

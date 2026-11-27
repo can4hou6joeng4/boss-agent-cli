@@ -173,7 +173,10 @@ _RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_L
 
 #: 动作层已经给出带数据目录的完整恢复句子的错误码（Issue #1090）。静态文案的
 #: 命令家族可能不同（例如 watch 失败却提示 preset remove），此时动态版本更准确。
-_DYNAMIC_RECOVERY_CODES = frozenset({"ACTION_UNCONFIRMED", "SAVED_SEARCH_INVALID", "CRAWL_BUSY"})
+#: 熔断恢复还要保留动作层按运行角色生成的 --role recruiter（Issue #3063）。
+_DYNAMIC_RECOVERY_CODES = frozenset(
+	{"ACTION_UNCONFIRMED", "SAVED_SEARCH_INVALID", "CRAWL_BUSY", "CIRCUIT_BREAKER_OPEN"}
+)
 _CONTEXT_AWARE_COMMAND = re.compile(r"""boss(?: --platform \S+)? --data-dir """)
 
 #: 静态恢复文案里的默认命令示例；有运行上下文时由调用方替换成带 ``--data-dir``
