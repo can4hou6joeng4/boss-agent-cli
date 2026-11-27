@@ -82,6 +82,27 @@ EXPORT_TRUNCATED_STOP_REASONS: frozenset[str] = frozenset(
 )
 
 
+#: 截断结果给真人的说明；CLI `export` 与向导导出面板共用，避免同一份
+#: stop_reason 在两个入口得到不同解释（Issue #3054）。
+TRUNCATED_OPERATOR_ACTION = (
+	"本次导出扫描到内部页数上限，结果可能不完整；请缩小筛选条件后重试，或用 --url 精确筛选"
+)
+# 活跃度筛选在列表字段即可判定时会提前停止（不再为多翻页逐个查详情）；
+# 没取满 --count 时结果同样不完整，需要单独的说明，不能套用页数上限文案
+# （Issue #2710）。
+ACTIVE_TRUNCATED_OPERATOR_ACTION = (
+	"本次导出在活跃度筛选可判定的范围内提前停止，结果可能不完整；"
+	"可减小 --count、放宽 --active 档位或去掉 --active 后重试"
+)
+
+
+def truncation_operator_action(stop_reason: str) -> str:
+	"""截断结果的真人说明：活跃度提前停止与页数预算耗尽要分开解释。"""
+	if stop_reason == "active_target_reached":
+		return ACTIVE_TRUNCATED_OPERATOR_ACTION
+	return TRUNCATED_OPERATOR_ACTION
+
+
 def export_stop_reason(raw: str) -> str:
 	"""把管线终止原因映射成 export 信封词汇；未知原因原样返回。"""
 	return EXPORT_STOP_REASON_ALIASES.get(raw, raw)

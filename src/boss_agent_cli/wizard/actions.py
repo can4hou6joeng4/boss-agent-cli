@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
 from boss_agent_cli.api._base_client import parameter_status_code
+from boss_agent_cli.api.cdp_risk_lock import unlock_operator_actions
 from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
 from boss_agent_cli.api.models import (
 	dict_items,
@@ -2923,6 +2924,16 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 					"或用 boss crawl start <query> 新建任务"
 				),
 			) from exc
+	# 风控暂停时 CLI `boss crawl status` 只给人工解锁步骤，不放 resume 到
+	# next_actions：风险锁会先于浏览器构造阻断恢复，直接照 resume 重试只会
+	# 再次撞锁（Issue #3053，与 #1405 同口径）。
+	if data.get("status") == "risk_stopped":
+		checkpoint = data.get("checkpoint")
+		resume_command = checkpoint.get("resume_command") if isinstance(checkpoint, Mapping) else None
+		operator_actions = list(unlock_operator_actions(_hint_command(context, "clean --risk-lock")))
+		if isinstance(resume_command, str) and resume_command:
+			operator_actions.append(f"完成人工恢复后，显式执行 {resume_command} 从原断点继续")
+		return StepResult(data, operator_actions=tuple(operator_actions))
 	# 执行器已退出 / 排队超时的任务只轮询状态永远等不到结果：与 `boss crawl status`
 	# 一样把后台恢复作为下一步，数据里的 executor_active 供调用方判定（Issue #2479）。
 	# 已受理的停止请求还没被消费时改为按断点结算 stop：resume --background 会先
@@ -3032,9 +3043,17 @@ def _crawl_stop(context: ActionContext, inputs: Mapping[str, Any], prior: Mappin
 		if final_status is None:
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}")
 		raise _crawl_run_finished_error(context, run_id, final_status)
+	# 与 CLI `boss crawl stop` 的 next_actions 同口径：停止请求被受理或按
+	# 断点结算后，都要用 crawl status 确认最终进度（Issue #3053）。
+	status_command = _hint_command(context, f"crawl status {shell_argument(run_id)}")
 	if settle_reason is not None:
-		return StepResult({"run_id": run_id, "status": "stopped", "stale_recovered": True})
-	return StepResult({"run_id": run_id, "status": "stop_requested"})
+		return StepResult(
+			{"run_id": run_id, "status": "stopped", "stale_recovered": True},
+			next_action=status_command,
+		)
+	return StepResult(
+		{"run_id": run_id, "status": "stop_requested"}, next_action=status_command
+	)
 
 
 def _recruiter_call(

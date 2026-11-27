@@ -32,6 +32,7 @@ from boss_agent_cli.services.job_export import (
 	public_html_export_item_from_job,
 	redact_export_item,
 	render_html_export,
+	truncation_operator_action,
 	write_export_file,
 	write_html_export,
 )
@@ -57,22 +58,10 @@ from boss_agent_cli.search_filters import (
 from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 
-_TRUNCATED_OPERATOR_ACTION = (
-	"本次导出扫描到内部页数上限，结果可能不完整；请缩小筛选条件后重试，或用 --url 精确筛选"
-)
-# 活跃度筛选在列表字段即可判定时会提前停止（不再为多翻页逐个查详情）；
-# 没取满 --count 时结果同样不完整，需要单独的说明，不能套用页数上限文案
-# （Issue #2710）。
-_ACTIVE_TRUNCATED_OPERATOR_ACTION = (
-	"本次导出在活跃度筛选可判定的范围内提前停止，结果可能不完整；"
-	"可减小 --count、放宽 --active 档位或去掉 --active 后重试"
-)
-
 
 def _truncation_note(stop_reason: str) -> str:
-	if stop_reason == "active_target_reached":
-		return _ACTIVE_TRUNCATED_OPERATOR_ACTION
-	return _TRUNCATED_OPERATOR_ACTION
+	"""截断说明与向导导出面板共用 services/job_export 的唯一文案（Issue #3054）。"""
+	return truncation_operator_action(stop_reason)
 
 
 #: 管线终止原因 → export 既有 stop_reason 词汇（Issue #2706）。
