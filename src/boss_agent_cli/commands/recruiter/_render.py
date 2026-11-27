@@ -64,6 +64,19 @@ def friend_list_rows(data: Any) -> list[dict[str, Any]]:
 	return rows
 
 
+def _active_text(item: dict[str, Any]) -> Any:
+	"""活跃列：优先平台文案；缺失时把数字时间戳格式化成可读时间。
+
+	``activeTime`` 是毫秒时间戳，直接交给单元格会把 13 位毫秒数打给真人
+	（Issue #3045）。与聊天时间列共用 ``format_chat_time``：``activeTimeDesc``
+	存在时原样显示，缺失时按 ``MM-DD HH:MM`` 展示，坏值由渲染层显示 ``-``。
+	"""
+	desc = _first_value(item, "activeTimeDesc")
+	if desc is not None:
+		return desc
+	return format_chat_time(item.get("activeTime"))
+
+
 def candidate_list_rows(data: Any) -> list[dict[str, Any]]:
 	"""候选人 / 推荐牛人列表：姓名、意向职位、城市、经验、学历、活跃度。"""
 	rows: list[dict[str, Any]] = []
@@ -75,7 +88,7 @@ def candidate_list_rows(data: Any) -> list[dict[str, Any]]:
 				"city": _first_value(item, "city", "cityName"),
 				"experience": _first_value(item, "workYearDesc", "experience"),
 				"education": _first_value(item, "degreeCategory", "degreeName", "education"),
-				"active": _first_value(item, "activeTimeDesc", "activeTime"),
+				"active": _active_text(item),
 			}
 		)
 	return rows
