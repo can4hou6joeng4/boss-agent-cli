@@ -450,6 +450,8 @@ def test_doctor_command(mock_auth_cls, mock_probe_cdp, mock_httpx_get, mock_extr
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["command"] == "doctor"
+	# 守卫：doctor 必须真的使用隔离数据目录，否则本机风险锁会再次改变 hints（Issue #3027）。
+	assert Path(parsed["data"]["data_dir"]).resolve() == Path(data_dir).resolve()
 	assert parsed["data"]["check_count"] >= 8
 	assert "checks" in parsed["data"]
 	assert any(item["name"] == "network" for item in parsed["data"]["checks"])
@@ -478,6 +480,8 @@ def test_doctor_with_partial_token_quality_warn(mock_auth_cls, mock_probe_cdp, m
 		result = runner.invoke(cli, ["--data-dir", data_dir, "doctor"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
+	# 守卫：doctor 必须真的使用隔离数据目录，否则本机风险锁会再次改变 hints（Issue #3027）。
+	assert Path(parsed["data"]["data_dir"]).resolve() == Path(data_dir).resolve()
 	quality = next(item for item in parsed["data"]["checks"] if item["name"] == "auth_token_quality")
 	assert quality["status"] == "warn"
 	assert "stoken 缺失" in quality["detail"]
