@@ -17,6 +17,7 @@ from rich.table import Table
 from boss_agent_cli import display
 from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.services.chat_utils import message_text_value
+from boss_agent_cli.services.job_export import truncation_operator_action
 from boss_agent_cli.services.recruiter_chat_summary import message_text as last_message_text
 from boss_agent_cli.services.recruiter_last_messages import as_friend_int, friend_id_for
 from boss_agent_cli.wizard.catalog import GOALS
@@ -222,6 +223,30 @@ def step_label(value: Any) -> str:
 
 def status_label(value: Any) -> str:
 	return STATUS_LABELS.get(_safe_text(value), "状态未知")
+
+
+#: 采集任务自己的状态词表；不能复用向导 run 的 STATUS_LABELS——查询型
+#: action 一返回 run 就是 completed，与采集任务状态无关（Issue #3053）。
+_CRAWL_STATUS_LABELS = {
+	"queued": "排队中",
+	"running": "正在运行",
+	"completed": "已完成",
+	"stopped": "已停止",
+	"stop_requested": "停止请求已受理",
+	"risk_stopped": "风控暂停",
+	"budget_stopped": "预算已用完",
+	"throttle_stopped": "节流等待超时",
+	"failed": "执行失败",
+}
+
+
+def crawl_status_label(value: Any) -> str:
+	"""采集状态的可读标签；未知值回退到向导状态词表。"""
+	text = _safe_text(value)
+	label = _CRAWL_STATUS_LABELS.get(text)
+	if label is not None:
+		return label
+	return status_label(text)
 
 
 def error_message(code: str, message: str | None = None) -> str:
@@ -642,7 +667,9 @@ def render_run(
 					]
 				)
 		next_action = _safe_text(last.get("next_action"))
-		if next_action:
+		# 风险路径的 operator_actions 已含「命令行恢复：<cmd>」：不能再追加
+		# 一遍，否则同一命令连打两次（Issue #3053）。
+		if next_action and not any(next_action in line for line in action_lines):
 			lines.append(f"命令行恢复：{display.escape_markup(next_action)}")
 		display.console.print(Panel("\n".join(lines), title="等待继续", border_style="yellow"))
 		return
@@ -1140,9 +1167,31 @@ def _render_management_result(
 			table.add_column("v", style="bold")
 			table.add_row("事项", goal_label(run.get("role"), goal))
 			table.add_row("格式", display.escape_markup(_safe_text(data.get("format")) or "—"))
-			table.add_row("条数", display.escape_markup(_count_text(data.get("count"), str(len(items)))))
+			count_value = _safe_count(data.get("count"))
+			requested = _safe_count(data.get("requested"))
+			if count_value is None:
+				# 非数值 count 是外部漂移值：保留字面量并转义展示（Issue #2252），
+				# 不能换成 items 长度把证据吞掉。
+				count_text = _count_text(data.get("count"), str(len(items)))
+			else:
+				count_text = _count_text(count_value, str(len(items)))
+				if requested is not None and requested > count_value:
+					# 没取满请求条数时把请求量一起列出：真人才分得清「平台只有这些」
+					# 与「被预算截断」（Issue #3054）。
+					count_text = f"{count_text} / 请求 {requested}"
+			table.add_row("条数", display.escape_markup(count_text))
 			table.add_row("文件", display.escape_markup(_safe_text(data.get("path")) or "—"))
-			display.console.print(Panel(table, title="导出完成", border_style="green"))
+			truncated = data.get("truncated") is True
+			if truncated:
+				note = truncation_operator_action(_safe_text(data.get("stop_reason")))
+				table.add_row("说明", f"[yellow]{display.escape_markup(note)}[/yellow]")
+			display.console.print(
+				Panel(
+					table,
+					title="导出结果被截断" if truncated else "导出完成",
+					border_style="yellow" if truncated else "green",
+				)
+			)
 			return True
 		count = len(items)
 		if count == 0:
@@ -1438,10 +1487,17 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		_safe_text(data.get("live_crawl_status")) or _safe_text(data.get("status")) or _safe_text(last.get("status"))
 	)
 	jobs_seen = _safe_count(data.get("jobs_seen"))
+	# 向导 run 的 completed 只说明本次动作返回了：crawl_status / crawl_stop 是
+	# 查询型动作，采集任务可能仍在运行或被风控暂停（Issue #3053）。只有
+	# crawl_start / crawl_resume 的 run 完成才等价于采集结束；旧 run 没有
+	# data.status 时仍靠这条兜底。
 	completed_like = (
 		str(crawl_status) == "completed"
 		or run.get("effective_completed") is True
-		or _safe_text(run.get("status")) == "completed"
+		or (
+			goal in {"crawl_start", "crawl_resume"}
+			and _safe_text(run.get("status")) == "completed"
+		)
 	)
 	jobs_seen_text = _count_text(jobs_seen, "0")
 	success = completed_like and jobs_seen is not None and jobs_seen > 0
@@ -1452,9 +1508,7 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		headline.append("● ", style="bold green")
 		headline.append(f"{jobs_seen_text} 个职位", style="bold cyan")
 	else:
-		status_text = "已完成" if str(crawl_status) == "completed" else status_label(crawl_status)
-		if str(crawl_status) == "risk_stopped":
-			status_text = "风控暂停"
+		status_text = "已完成" if str(crawl_status) == "completed" else crawl_status_label(crawl_status)
 		headline.append("● ", style="bold yellow")
 		headline.append(status_text, style="bold yellow")
 		if jobs_seen is not None:
@@ -1478,10 +1532,14 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		meta.add_row(label, value)
 
 	row("事项", f"[bold]{goal_label(run.get('role'), goal)}[/bold]")
-	wf_status = _safe_text(run.get("display_status")) or _safe_text(run.get("status"))
-	if run.get("effective_completed") is True:
-		wf_status = "completed"
-	status_display = status_label(wf_status)
+	# 采集状态优先：查询型 run 的「已完成」不是采集结果（Issue #3053）。
+	if crawl_status:
+		status_display = crawl_status_label(crawl_status)
+	else:
+		wf_status = _safe_text(run.get("display_status")) or _safe_text(run.get("status"))
+		if run.get("effective_completed") is True:
+			wf_status = "completed"
+		status_display = status_label(wf_status)
 	if success:
 		row("状态", f"[bold green]{status_display}[/bold green]")
 	elif str(crawl_status) == "risk_stopped":
@@ -1526,6 +1584,13 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	if error_text and str(crawl_status) != "completed":
 		row("说明", f"[yellow]{display.escape_markup(error_text)}[/yellow]")
 
+	# 风控解锁等人工步骤由 action 以 operator_actions 声明；查询型 run 不是
+	# waiting_input，不会走「等待继续」面板，这里必须自己渲染（Issue #3053）。
+	raw_operator_actions = last.get("operator_actions")
+	if not isinstance(raw_operator_actions, (list, tuple)):
+		raw_operator_actions = []
+	operator_lines = [text for item in raw_operator_actions if (text := _safe_text(item))]
+
 	# Secondary ids, dim — debugging aids.
 	id_bits = []
 	run_id_text = _safe_text(run.get("run_id"))
@@ -1540,17 +1605,25 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	footer_hint: Text | None = None
 	if success:
 		footer_hint = Text("选「浏览职位列表」分页查看  ·  单条可看本地摘要或在线详情", style="dim")
-	elif _safe_text(run.get("status")) == "waiting_input" and str(crawl_status) != "completed":
+	# 查询型 action（crawl_status）的 run 一返回就是 completed，next_action
+	# 不能只在 waiting_input 时读取，否则 running_stale 的 resume 指引会丢
+	# （Issue #3053）。
+	next_action = _safe_text(last.get("next_action"))
+	if not next_action and _safe_text(run.get("status")) == "waiting_input":
 		checkpoint = data.get("checkpoint")
-		next_action = _safe_text(last.get("next_action")) or _safe_text(
-			checkpoint.get("resume_command") if isinstance(checkpoint, Mapping) else None
-		)
-		if next_action:
-			row("下一步", f"[bold]{display.escape_markup(next_action)}[/bold]")
+		next_action = _safe_text(checkpoint.get("resume_command") if isinstance(checkpoint, Mapping) else None)
+	if next_action and str(crawl_status) != "completed":
+		row("下一步", f"[bold]{display.escape_markup(next_action)}[/bold]")
 
 	# ── Preview under meta: Markdown-style pipe table ───────────────
 	preview_rows = _preview_jobs_from_data(data, limit=5) if with_preview else []
 	parts: list[Any] = [headline, Text(""), meta]
+
+	if operator_lines:
+		parts.append(Text(""))
+		parts.append(Text("人工处理", style="bold"))
+		# 命令里内嵌 --data-dir（用户可控路径）：整行按 Text 组装，不解析 markup。
+		parts.extend(Text(line, style="yellow") for line in operator_lines)
 
 	if preview_rows:
 		shown = len(preview_rows)
@@ -1579,7 +1652,14 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		else (
 			"yellow"
 			if _safe_text(run.get("status")) == "waiting_input"
-			or str(crawl_status) in {"risk_stopped", "budget_stopped", "throttle_stopped", "stopped"}
+			or str(crawl_status)
+			in {
+				"risk_stopped",
+				"budget_stopped",
+				"throttle_stopped",
+				"stopped",
+				"stop_requested",
+			}
 			else "cyan"
 		)
 	)
