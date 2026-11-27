@@ -18,7 +18,7 @@ from boss_agent_cli.display import (
 	render_message_panel,
 	render_next_steps,
 )
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance, rows_from_first
 
 
 def _render_job_detail(data: dict[str, Any], *, next_steps: list[str]) -> None:
@@ -72,8 +72,10 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 				if isinstance(raw_total, int) and not isinstance(raw_total, bool) and raw_total >= 0
 				else None
 			)
-			rows = data.get("data")
-			row_count = len(rows) if isinstance(rows, list) else 0
+			# 与 render_job_list 共用候选键：平台改用 jobList / items 时 total
+			# 仍与本次实际渲染的行数一致（Issue #3034）。
+			rows = rows_from_first(data, "jobList", "items", "list", "data")
+			row_count = len(rows) if rows is not None else 0
 			pagination: dict[str, Any] = {
 				"page": current_page,
 				"has_more": has_more,

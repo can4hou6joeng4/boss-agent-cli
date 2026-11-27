@@ -15,6 +15,7 @@ from boss_agent_cli.display import (
 	render_next_steps,
 	render_sectioned_record,
 )
+from boss_agent_cli.services.pagination import rows_from_first
 from boss_agent_cli.services.recruiter_chat_summary import (
 	friend_items,
 	format_chat_time,
@@ -34,17 +35,13 @@ def _first_value(item: dict[str, Any], *keys: str) -> Any:
 
 
 def _dict_rows(data: Any, *keys: str) -> list[dict[str, Any]]:
-	"""从平台响应里取对象列表；字段缺失或类型漂移时返回空列表。"""
-	value: Any = None
-	if isinstance(data, list):
-		value = data
-	elif isinstance(data, dict):
-		for key in keys:
-			candidate = data.get(key)
-			if isinstance(candidate, list):
-				value = candidate
-				break
-	if not isinstance(value, list):
+	"""从平台响应里取对象列表；字段缺失或类型漂移时返回空列表。
+
+	与命令层的 ``pagination.total`` 共用 ``rows_from_first``，保证总数是本次
+	实际渲染的行数（Issue #3034）。
+	"""
+	value = data if isinstance(data, list) else rows_from_first(data, *keys)
+	if value is None:
 		return []
 	return [item for item in value if isinstance(item, dict)]
 
