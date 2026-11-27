@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.15 (2026-11-28): local recovery contract consistency — recovery commands follow the candidate or recruiter command family, while shared wizard and automation entries retain their runtime role; an event-log failure preserves the successful stop-latch persistence status and reports the log error separately; cached search pagination totals are recomputed from the returned page (Issues #3065, #3067, #3069).
+
 v3.9.14 (2026-11-27): recovery-hint role consistency — wizard / MCP recruiter write actions now include `--role recruiter` in `agent run --resume` when the stop latch is open, and the TTY failure panel uses the action's full recovery text instead of dropping the role under the default candidate profile (Issues #3061, #3063).
 
 v3.9.13 (2026-11-27): wizard and recruiter display consistency — crawl panels no longer report running or risk-stopped tasks as completed, export truncation evidence and recovery guidance stay visible, `hr chatmsg` direction shows sender names, and `hr location` / `hr request-resume` breaker recovery commands carry `--role recruiter` (Issues #3053, #3054, #3057, #3058).
