@@ -19,6 +19,7 @@ from boss_agent_cli.services.pagination import dict_rows_from
 from boss_agent_cli.services.recruiter_chat_summary import (
 	friend_items,
 	format_chat_time,
+	message_items,
 	message_text,
 	message_time,
 	unread_count,
@@ -109,9 +110,12 @@ def _direction(item: dict[str, Any]) -> str:
 
 
 def message_rows(data: Any) -> list[dict[str, Any]]:
-	"""聊天记录：方向、内容与时间。"""
+	"""聊天记录：方向、内容与时间。
+
+	与 ``hr chatmsg`` 的 ``pagination.total`` 共用 ``message_items``（Issue #3038）。
+	"""
 	rows: list[dict[str, Any]] = []
-	for item in _dict_rows(data, "messageList", "msgList", "messages", "list", "result"):
+	for item in message_items(data):
 		rows.append(
 			{
 				"direction": _direction(item),

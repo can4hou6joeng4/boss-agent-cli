@@ -7,6 +7,7 @@
 ### Fixed
 
 - `hr applications` / `hr recommendations` / `hr jobs list` / `hr candidates` 的 `pagination.total` 与终端渲染共用同一份行提取口径：`null` 等非对象元素不再被计为一行，平台把载荷换成顶层列表时 `total` 不再是 `null`，`hr candidates` 也识别 items/list/result 替代容器；平台载荷仍原样透传（Issue #3037）。
+- `hr chatmsg` 的 `pagination.total` 与终端渲染共用同一份消息容器提取：`msgList` / `list` / `result` 载荷不再出现「屏幕有消息、total 为 0」，`historyMsgList` 载荷两侧都按 1 条展示与计数；平台载荷仍原样透传（Issue #3038）。
 
 ## [3.9.9] - 2026-11-27
 
