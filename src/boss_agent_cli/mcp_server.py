@@ -33,11 +33,13 @@ from mcp.types import (
 )
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
+from boss_agent_cli.display import RISK_ERROR_CONTRACTS
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
 from boss_agent_cli.output import envelope_error, json_safe_value, serialization_failure_envelope
 from boss_agent_cli.schema.tool_policy import READ_ONLY_TOOL_NAMES as _READ_ONLY_TOOL_NAMES
 from boss_agent_cli.schema.tool_policy import static_read_only
+from boss_agent_cli.services.contact_lookup import MAX_FRIEND_LOOKUP_PAGES
 from boss_agent_cli.services.friend_list_pages import MAX_FRIEND_LIST_PAGES
 from boss_agent_cli.search_filters import detail_filter_max_pages, resolve_active_level
 
@@ -448,6 +450,13 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 	返回 None 表示这条命令不做参数估算（保持默认 120s 超时）。
 	"""
 	command = args[0]
+	if command in {"chatmsg", "chat-summary", "mark", "exchange"}:
+		if command == "chatmsg" and _option_value(args, "--friend-uid") is not None:
+			# 显式稳定 uid 直接读取历史，不扫描联系人列表。
+			return 1
+		# 先逐页找联系人，再读历史或派发一次操作。漏算查找会在默认节流下
+		# 提前杀掉健康调用；页数与查找服务共用常量，仍受 900s 封顶（Issue #3001）。
+		return min(MAX_FRIEND_LOOKUP_PAGES + 1, _MAX_ESTIMATED_REQUESTS)
 	if command == "favorites" and len(args) > 1 and args[1] == "sync":
 		# 收藏同步逐页拉取且没有可拆分的分页参数：只按默认 120s 估算，收藏较多的
 		# 账号必然在同步中途被掐断（本地可能已部分 upsert）。直接给满估算封顶，
@@ -814,6 +823,12 @@ def _interrupted_failure(
 	except (ValueError, RecursionError):
 		# ValueError 已覆盖 JSONDecodeError / UnicodeDecodeError 与超长整数。
 		checkpoint_result = None
+	if isinstance(checkpoint_result, dict) and _is_cli_envelope(checkpoint_result, None):
+		child_error = checkpoint_result.get("error")
+		if isinstance(child_error, dict) and child_error.get("code") in RISK_ERROR_CONTRACTS:
+			# 清理阶段已经收到风控终止信封：保留人工恢复动作、hints 与断点，
+			# 不能用可重试的超时 / 取消覆盖平台硬边界（Issue #3000）。
+			return checkpoint_result
 	return _cli_failure(
 		args,
 		code,

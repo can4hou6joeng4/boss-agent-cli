@@ -4,6 +4,10 @@ from boss_agent_cli.services.chat_utils import stable_uid
 from boss_agent_cli.services.friend_list_pages import friend_list_page_has_content, friend_list_page_items
 
 
+# 联系人扫描与 MCP 超时估算共用同一页数上限（Issue #3001）。
+MAX_FRIEND_LOOKUP_PAGES = 50
+
+
 def friend_security_id(item: Mapping[str, Any]) -> str:
 	"""读取本次列表返回的 securityId；类型漂移按缺失处理。
 
@@ -77,7 +81,7 @@ def find_friend(
 	identifier: str | int,
 	*,
 	start_page: int = 1,
-	max_pages: int = 50,
+	max_pages: int = MAX_FRIEND_LOOKUP_PAGES,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
 	"""分页遍历沟通列表，按 ``uid`` 或 ``security_id`` 查找联系人。
 
