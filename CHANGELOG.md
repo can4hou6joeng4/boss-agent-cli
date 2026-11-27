@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- 自动化闩锁状态按权威 `stop.json` 判定：`state.json` 快照写入失败（如指向普通文件的符号链接）时，`risk_latch_persisted` 不再把已经打开的停止闩锁误报成 false，`state.json` 的失败原因仍保留在 `risk_latch_error`（Issue #3077）。
 - `chat` 与 `chatmsg --raw` 的联系人标识 / 展示字段按可用类型归一：`name` / `title` / `brand_name` / `last_msg` / `last_time` 只接受非空字符串，`uid` / `security_id` / `job_id` 拒绝容器 / 布尔 / falsy 漂移值并继续读合法回退；CSV 的 `unread` 与 Markdown / HTML 共用同一归一，`initiated_by` 为 `null` 时按「未知」分组（Issue #3075）。
 
 ## [3.9.16] - 2026-11-28
