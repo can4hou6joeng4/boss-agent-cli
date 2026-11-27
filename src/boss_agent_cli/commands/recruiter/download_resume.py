@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 
+from boss_agent_cli.api._base_client import PlatformResponseInvalid, PlatformStatusRejected
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.models import platform_data_dict
 from boss_agent_cli.api.request_budget import is_request_stop
@@ -174,6 +175,12 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 				hints=risk_hints,
 			)
 			return
+		except (PlatformResponseInvalid, PlatformStatusRejected):
+			# 写前只读与预览检查的确定性失败：同一响应重试必然复现。交给
+			# handle_auth_errors 按 INTERNAL_ERROR / INVALID_PARAM 收口，不能
+			# 兜成可重试的 NETWORK_ERROR 让 Agent 无界重试
+			# （Issues #1368 #2567 #3024）。
+			raise
 		except sqlite3.DatabaseError:
 			# 请求预算库损坏 / 被同名目录占位是确定性本地故障：预算库在发出任何
 			# 请求之前就被打开，重试永远同一结果。交给 handle_auth_errors 按
