@@ -85,6 +85,10 @@ def last_is_self(item: dict[str, Any], friend_id: int | None) -> bool | None:
 	if isinstance(flag, bool):
 		return flag
 	from_id = _as_int(last_info(item).get("fromId"))
+	if from_id is None:
+		# 最近消息也兼容 from/to 消息对象；候选人来信没有发送状态（Issue #3003）。
+		sender = item.get("from")
+		from_id = _as_int(sender.get("uid")) if isinstance(sender, dict) else None
 	if from_id is None or friend_id is None:
 		return None
 	return from_id != friend_id
