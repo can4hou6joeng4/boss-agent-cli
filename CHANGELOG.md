@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 代理绕过列表的域名匹配与 httpx 对齐：`NO_PROXY=api.test` 现在同时生成 `api.test` 与 `*.api.test` 的 Chromium bypass，子域不再在浏览器侧走代理；IP / localhost / CIDR / `*` 保持精确语义（Issue #3091）。
+
 ## [3.9.18] - 2026-11-28
 
 ### Fixed
