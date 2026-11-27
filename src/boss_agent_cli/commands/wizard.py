@@ -203,8 +203,14 @@ def _workflow_risk_code(run: Mapping[str, Any]) -> str | None:
 		if isinstance(step, Mapping):
 			errors.append(step.get("error"))
 	for error in errors:
-		if isinstance(error, Mapping) and error.get("code") in RISK_ERROR_CONTRACTS:
-			return str(error["code"])
+		if not isinstance(error, Mapping):
+			continue
+		code = error.get("code")
+		# 停止展示回退跳过 error 契约校验；非字符串 code 用 ``in frozenset``
+		# 判断会抛 TypeError: unhashable type，把已落盘的停止报成 INTERNAL_ERROR
+		# （Issue #3072）。只认字符串风控码，其余按无法识别降级。
+		if isinstance(code, str) and code in RISK_ERROR_CONTRACTS:
+			return code
 	return None
 
 
