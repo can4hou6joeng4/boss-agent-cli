@@ -1845,7 +1845,14 @@ class BossRecruiterClient(_BaseHttpClient):
 				"__cli_error_details__": {"accepted": False, "stage": "precheck"},
 			}
 
-		history = self.chat_history(friend_id, count=100, max_msg_id=message_id + 1, retry=False)
+		try:
+			history = self.chat_history(friend_id, count=100, max_msg_id=message_id + 1, retry=False)
+		except Exception as exc:
+			# 写前只读失败：同意 POST 尚未发出，留下显式「未派发」证据，命令层
+			# 不能再把确定性解析失败 / 4xx 报成结果未知（Issue #3024，与 #2898
+			# 的写入边界标记同口径）。
+			_mark_request_not_sent(exc)
+			raise
 		if not is_platform_success_code(history.get("code")):
 			return precheck_failure(history)
 		message = incoming_message(history.get("zpData"), friend_id, message_id)
@@ -1855,7 +1862,12 @@ class BossRecruiterClient(_BaseHttpClient):
 			raise ResumeValidationError("该消息不是附件简历请求，不会执行联系方式交换")
 		if dialog.get("operated") is not False:
 			raise ResumeValidationError("该请求已处理或状态不明，不会重复同意")
-		friends = self.friend_detail([friend_id], retry=False)
+		try:
+			friends = self.friend_detail([friend_id], retry=False)
+		except Exception as exc:
+			# 同 chat_history：好友详情仍在写请求之前，失败不产生平台写入。
+			_mark_request_not_sent(exc)
+			raise
 		if not is_platform_success_code(friends.get("code")):
 			return precheck_failure(friends)
 		friend = resume_friend(friends.get("zpData"), friend_id)

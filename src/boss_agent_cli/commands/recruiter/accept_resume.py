@@ -23,6 +23,7 @@ from boss_agent_cli.display import (
 	risk_error_message,
 	render_action_result,
 )
+from boss_agent_cli.services.candidate_actions import exception_reports_request_unsent
 
 
 @click.command("accept-resume")
@@ -128,9 +129,14 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			raise
 		except Exception as exc:
 			# 连接 / 代理 / 协议错误与编码失败都证明没有发出任何请求（包括写前的
-			# 只读请求），不能报成结果未知；其余异常仍按响应丢失处理
-			# （Issue #2596）。
-			if was_request_provably_unsent(exc) or isinstance(exc, RequestTextEncodingError):
+			# 只读请求），不能报成结果未知；客户端在写前读取失败时还会留下显式
+			# ``request_sent=False`` 证据（Issue #3024，与 #2898 同口径）。其余
+			# 异常仍按响应丢失处理（Issue #2596）。
+			if (
+				was_request_provably_unsent(exc)
+				or exception_reports_request_unsent(exc)
+				or isinstance(exc, RequestTextEncodingError)
+			):
 				raise
 			# 写请求响应丢失时不能宣称失败或建议重发，也不透传可能含凭据的异常。
 			_, recovery_action = error_contract_for_code("RESUME_ACCEPT_RESULT_UNKNOWN")
