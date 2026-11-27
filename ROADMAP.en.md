@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.12 (2026-11-27): terminal display reliability — seconds / implausibly small timestamps no longer render as 1970, numeric `activeTime` no longer prints raw milliseconds, narrow-terminal tables fall back to a vertical layout instead of dropping fields, and chat row indexes / type labels no longer show truncated numbers or Python reprs (Issues #3044, #3045, #3046, #3049, #3050).
+
 v3.9.11 (2026-11-27): export completeness — the `export --welfare` / `--active` search pipeline no longer treats a missing `jobList` as a platform-confirmed empty page, later pages are not silently dropped, and budget exhaustion is reported as truncated (Issue #3042).
 
 v3.9.10 (2026-11-27): pagination evidence parity — recruiter lists and chat history derive `pagination.total` from the same row extraction as the terminal renderer, so non-object elements, top-level lists, and alternate containers no longer disagree with what users see (Issue #3037, #3038).

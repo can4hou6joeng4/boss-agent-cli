@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.12] - 2026-11-27
+
 ### Fixed
 
 - 招聘者与求职者两侧的时间列不再把秒级 / 过小时间戳画成 1970 年：`safe_local_time` 增加 2000-01-01 的可信下界，低于下界的值与越界值同口径按「无时间」处理；`hr candidates` / `hr recommendations` 的 `activeTime` 为数字时按可读时间显示，不再原样打印 13 位毫秒数（Issue #3044、#3045）。
