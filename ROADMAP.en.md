@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.10 (2026-11-27): pagination evidence parity — recruiter lists and chat history derive `pagination.total` from the same row extraction as the terminal renderer, so non-object elements, top-level lists, and alternate containers no longer disagree with what users see (Issue #3037, #3038).
+
 v3.9.9 (2026-11-27): pagination evidence completed — `favorites list` clamps oversized pages to the trusted limit instead of reporting a local integer overflow as a retryable network error (Issue #3032); recruiter applications now derive `pagination.total` from the same containers as the rendered rows, so alternate payload containers no longer undercount (Issue #3034).
 
 v3.9.8 (2026-11-27): test isolation completed — doctor tests now run against an isolated data directory, so the local gate no longer false-reds on machines that carry a risk lock from a previous platform risk hit (Issue #3027); the test session now isolates HOME to a temporary directory, so CLI tests without `--data-dir` no longer write the real `~/.boss-agent` (Issue #3028).
