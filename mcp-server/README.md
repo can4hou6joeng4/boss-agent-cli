@@ -73,11 +73,11 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ## 可用工具
 
-当前 MCP Server 暴露 **87 个已实现工具**。
+当前 MCP Server 暴露 **90 个已实现工具**。
 
 ### 能力范围与恢复指引
 
-调用 `boss_schema` 时传入 `{"format":"mcp-tools"}` 可查看工具 schema；`native` 格式描述完整 CLI 命令与 `wizard_catalog`。CLI 子命令与 MCP 工具并非逐项对应：本地简历已提供 `boss_resume_list` / `boss_resume_show` / `boss_resume_init` / `boss_resume_delete` / `boss_resume_clone` / `boss_resume_diff` / `boss_resume_link` / `boss_resume_applications`，职位收藏已提供 `boss_favorites_list` / `boss_favorites_sync`；其余维护步骤仍需通过 CLI 执行。`boss_resume_delete` 删除本机简历文件且不可恢复；`boss_resume_clone` / `boss_resume_link` 只写本机，不产生平台请求；`boss_resume_diff` / `boss_resume_applications` 只读本机；`boss_favorites_sync` 只读平台、写入本地候选池。
+调用 `boss_schema` 时传入 `{"format":"mcp-tools"}` 可查看工具 schema；`native` 格式描述完整 CLI 命令与 `wizard_catalog`。CLI 子命令与 MCP 工具并非逐项对应：本地简历已提供 `boss_resume_list` / `boss_resume_show` / `boss_resume_init` / `boss_resume_delete` / `boss_resume_clone` / `boss_resume_diff` / `boss_resume_link` / `boss_resume_applications` / `boss_resume_export` / `boss_resume_import` / `boss_resume_edit`，职位收藏已提供 `boss_favorites_list` / `boss_favorites_sync`；其余维护步骤仍需通过 CLI 执行。`boss_resume_delete` 删除本机简历文件且不可恢复；`boss_resume_clone` / `boss_resume_link` / `boss_resume_import` / `boss_resume_edit` 只写本机，不产生平台请求，其中 `import` 的 `force=true` 会丢弃本地已有编辑；`boss_resume_diff` / `boss_resume_applications` 只读本机；`boss_resume_export` 只读简历并写本机文件，`pdf` 格式需要本机浏览器内核；`boss_favorites_sync` 只读平台、写入本地候选池。
 
 信封中的 `hints.next_actions` 是后继 CLI 命令，不能直接当作 MCP 工具名调用。仅使用 MCP 的宿主应先查找等价工具或已登记的 `boss_wizard` goal；没有等价入口时，明确告知需要执行的 CLI 步骤，不要声称已完成。`hints.operator_actions` 则保留给扫码、浏览器操作等真人指引。
 

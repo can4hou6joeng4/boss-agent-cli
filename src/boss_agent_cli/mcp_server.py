@@ -317,6 +317,15 @@ _LOCAL_RESUME_CLONE_INTERRUPT_RECOVERY = (
 _LOCAL_RESUME_LINK_INTERRUPT_RECOVERY = (
 	"职位关联已中断；本机关联表可能已写入。先用 boss_resume_applications 核对，再决定是否重试；不产生平台写入"
 )
+_LOCAL_RESUME_EXPORT_INTERRUPT_RECOVERY = (
+	"导出已中断；目标文件可能已部分写入或尚未生成。先核对输出目录中的文件，再决定是否重试；不产生平台写入"
+)
+_LOCAL_RESUME_IMPORT_INTERRUPT_RECOVERY = (
+	"导入已中断；本地简历文件可能已写入。先运行 boss_resume_list 核对，再决定是否重试；不产生平台写入"
+)
+_LOCAL_RESUME_EDIT_INTERRUPT_RECOVERY = (
+	"编辑已中断；本地简历可能已保存新值。先用 boss_resume_show 核对，再决定是否重试；不产生平台写入"
+)
 
 
 def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
@@ -328,6 +337,12 @@ def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
 		return _LOCAL_RESUME_CLONE_INTERRUPT_RECOVERY
 	if args[:2] == ("resume", "link"):
 		return _LOCAL_RESUME_LINK_INTERRUPT_RECOVERY
+	if args[:2] == ("resume", "export"):
+		return _LOCAL_RESUME_EXPORT_INTERRUPT_RECOVERY
+	if args[:2] == ("resume", "import"):
+		return _LOCAL_RESUME_IMPORT_INTERRUPT_RECOVERY
+	if args[:2] == ("resume", "edit"):
+		return _LOCAL_RESUME_EDIT_INTERRUPT_RECOVERY
 	if args[:2] == ("favorites", "sync"):
 		return _LOCAL_FAVORITES_SYNC_INTERRUPT_RECOVERY
 	if args and args[0] == "wizard" and _option_value(args, "--stop") is not None:

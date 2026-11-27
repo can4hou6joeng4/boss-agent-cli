@@ -606,6 +606,26 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "resume_applications":
 		return _literal_positionals(["resume", "applications", arguments["name"]], start=2)
 
+	if name == "resume_export":
+		args = ["resume", "export", arguments["name"]]
+		if arguments.get("format") is not None:
+			args.extend(_option_pair("--format", str(arguments["format"])))
+		if arguments.get("output_file") is not None:
+			args.extend(_option_pair("--output", str(arguments["output_file"])))
+		return _literal_positionals(args, start=2)
+
+	if name == "resume_import":
+		args = ["resume", "import", arguments["file_path"]]
+		if arguments.get("force") is True:
+			args.append("--force")
+		return _literal_positionals(args, start=2)
+
+	if name == "resume_edit":
+		args = ["resume", "edit", arguments["name"]]
+		args.extend(_option_pair("--field", str(arguments["field"])))
+		args.extend(_option_pair("--value", str(arguments["value"])))
+		return _literal_positionals(args, start=2)
+
 	if name == "ai_analyze_jd":
 		return _literal_positionals(
 			["ai", "analyze-jd", arguments["jd_text"], *_option_pair("--resume", arguments["resume"])],
