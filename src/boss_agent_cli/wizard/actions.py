@@ -532,6 +532,33 @@ def _required_nonblank_value(inputs: Mapping[str, Any], name: str) -> str:
 	return value
 
 
+def _reject_unencodable_inputs(**fields: str | None) -> None:
+	"""标识 / 自由文本必须能按严格 UTF-8 编码（Issue #3017）。
+
+	客户端在发出第一个字节之前就会因孤立代理项抛 ``RequestTextEncodingError``，
+	但写动作的「结果未知」标记已经落盘，runner 的通用异常分支会先把确定未发出的
+	请求报成 ``NETWORK_ERROR`` 结果未知并禁止 ``--resume`` 重放。与 CLI 命令入口
+	同口径，在构造平台与 ``begin_write`` 之前按参数错误拒绝。
+	"""
+	bad = [
+		name
+		for name, value in fields.items()
+		if value is not None and not is_utf8_encodable(value)
+	]
+	if not bad:
+		return
+	raise WorkflowActionError(
+		"INVALID_PARAM",
+		f"{' / '.join(bad)} 含有无法按 UTF-8 编码的字符（如孤立代理项），请求未发出",
+		recoverable=True,
+		recovery_action=(
+			"去掉无效字符后新建 workflow（同一 run 的输入已绑定，不能原地改写）；"
+			"编号建议重新从 HR 沟通列表输出中取"
+		),
+		replay_safe=True,
+	)
+
+
 def _required_nonblank_str(inputs: Mapping[str, Any], name: str) -> str:
 	"""读取必填的非空白字符串。
 
@@ -3115,6 +3142,8 @@ def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	# 非字符串不能 str() 后发给平台：{"a": 1} 会变成它的 repr 进入一次
 	# effect: unknown 的请求（Issue #2633）。空串仍按未提供处理。
 	security_id = _optional_str_strict(inputs, "security_id") or None
+	# 编码失败发生在请求发出之前；必须在写标记落盘前拒绝（Issue #3017）。
+	_reject_unencodable_inputs(geek_id=geek_id, job_id=job_id, security_id=security_id)
 	return _recruiter_call(
 		context,
 		lambda platform: platform.view_geek(geek_id, job_id, security_id),
@@ -3216,6 +3245,8 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	# 纯空白消息与 CLI `hr reply` 同口径拒绝：它会被当成一条空消息真正发给
 	# 候选人（Issue #2516）。
 	message = _required_nonblank_value(inputs, "message")
+	# 编码失败发生在请求发出之前；必须在写标记落盘前拒绝（Issue #3017）。
+	_reject_unencodable_inputs(message=message)
 	return _recruiter_call(
 		context,
 		lambda platform: platform.send_message_by_friend(friend_id, message),
