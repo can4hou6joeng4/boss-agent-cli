@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `boss export --welfare` / `--active`（以及共用 `run_search_pipeline` 的 `search` / `watch`）不再把缺失、`null` 或非列表的 `jobList` 当成平台确认的空页：管线与无筛选快路径同口径，只有显式空列表才结束扫描；缺容器时按平台布尔 `hasMore` 继续或停止，翻满页数预算会报 `page_budget_exhausted` 并标记 `truncated=true`，后续页不会再被静默丢掉（Issue #3042）。
+
 ## [3.9.10] - 2026-11-27
 
 ### Fixed

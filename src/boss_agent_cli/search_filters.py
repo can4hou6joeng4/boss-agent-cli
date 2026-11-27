@@ -1164,14 +1164,32 @@ def run_search_pipeline(
 					details = error["details"]
 			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败", details=details)
 		platform_data = _unwrap_platform_data(client, raw)
+		raw_job_list = platform_data.get("jobList")
 		job_list = field_list(platform_data, "jobList")
 		last_page_scanned = current_page
 		stats.pages_scanned += 1
 		stats.jobs_seen += len(job_list)
 
 		if not job_list:
-			stop_reason = "empty_page"
-			break
+			if isinstance(raw_job_list, list):
+				# 显式空列表是平台确认的空页：既有契约（Issue #2657）。
+				stop_reason = "empty_page"
+				break
+			# 缺容器 / null / 非列表不能证明列表结束。与顶层 export 快路径同口径
+			# （Issue #2932、#3042）：只有平台明确 hasMore=false 才停止；未知时
+			# 按 continue_when_has_more_unknown 决定是否继续，翻满预算由循环末尾
+			# 的默认原因报 page_budget_exhausted（导出侧据此标 truncated）。
+			raw_has_more = platform_data.get("hasMore")
+			has_more = raw_has_more is True
+			has_more_reported = raw_has_more if isinstance(raw_has_more, bool) else None
+			if raw_has_more is False:
+				stop_reason = "has_more_false"
+				break
+			if raw_has_more is not True and not continue_when_has_more_unknown:
+				stop_reason = "has_more_unknown"
+				break
+			current_page += 1
+			continue
 
 		# Phase 1: list-page prefilter
 		survivors = []
