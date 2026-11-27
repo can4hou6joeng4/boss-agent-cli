@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.16] - 2026-11-28
+
 ### Fixed
 
 - 向导停止展示回退只把字符串 `error.code` 当作风控码：控制器字段漂移成数组 / 对象时，已落盘的 `wizard --stop` 不再报 `INTERNAL_ERROR`，而是按最小停止记录返回 `ok=true`；`--status` 仍按 `CACHE_RECORD_INVALID` 报告记录损坏（Issue #3072）。
