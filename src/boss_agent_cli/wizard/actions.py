@@ -143,14 +143,17 @@ from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowCo
 PlatformFactory = Callable[[str, AuthManager, tuple[float, float], str | None, str | None], Any]
 
 
-def _hint_command(context: ActionContext, command: str) -> str:
+def _hint_command(context: ActionContext, command: str, *, role: str | None = None) -> str:
 	"""动作层恢复命令必须定位触发它的数据目录与平台。
 
 	wizard 的 headless / MCP 调用可以带 ``--data-dir``：恢复指引写成裸 ``boss ...``
 	时，Agent 照抄会把新 AI 密钥、``config reset``、watch 删除重建或 crawl 重建
 	落到默认目录，原目录的问题原样保留（与 #913 / #919 的命令层迁移同一接缝）。
+
+	``role`` 只给不在所属组内的命令（如 agent 组）：招聘者照抄不带角色的
+	``agent run --resume`` 会在默认候选人角色下读取另一套本地状态（Issue #3061）。
 	"""
-	return boss_command(command, platform_name=context.platform, data_dir=context.data_dir)
+	return boss_command(command, platform_name=context.platform, data_dir=context.data_dir, role=role)
 
 
 @dataclass(frozen=True)
@@ -1060,12 +1063,17 @@ def _write_call(
 	if stop is not None:
 		# 顶层 hr 写命令在派发前检查停止闩锁；wizard / MCP 走同一动作时不能例外
 		# （Issue #2612）。请求未发出，不写「结果未知」标记，也不自动重试。
+		resume_command = _hint_command(
+			context,
+			"agent run --resume",
+			role="recruiter" if context.role == "recruiter" else None,
+		)
 		raise WorkflowActionError(
 			"CIRCUIT_BREAKER_OPEN",
 			f"停止开关已打开（{stop}），本次不会发出写请求",
 			recoverable=True,
 			recovery_action=(
-				f"人工核对未确认动作后执行 {_hint_command(context, 'agent run --resume')} 关闭熔断，"
+				f"人工核对未确认动作后执行 {resume_command} 关闭熔断，"
 				"再由操作者显式重试；不要自动重发"
 			),
 			auto_retry=False,
