@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.5 (2026-11-27): wizard's recruiter_resume / recruiter_reply now reject inputs that cannot be encoded as UTF-8 before the write marker is persisted, so an encoding failure no longer leaves an "outcome unknown" marker and a request that was provably never sent is reported as an invalid parameter (Issue #3017).
+
 v3.9.4 (2026-11-27): wizard control actions now share the MCP host's timeout semantics — --status / --stop no longer accept a --timeout that was never executed, and boss_wizard declares its host timeout cap and rejects out-of-range values before launch (Issue #3013).
 
 v3.9.3 (2026-11-27): MCP host timeouts for recruiter attachment-resume and chat-page actions now cover their fixed internal requests, so accept, download, reply, contact exchange and job-location sends are no longer cut off during pre-submit checks (Issue #3009, #3010).
