@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.10] - 2026-11-27
+
 ### Fixed
 
 - `hr applications` / `hr recommendations` / `hr jobs list` / `hr candidates` 的 `pagination.total` 与终端渲染共用同一份行提取口径：`null` 等非对象元素不再被计为一行，平台把载荷换成顶层列表时 `total` 不再是 `null`，`hr candidates` 也识别 items/list/result 替代容器；平台载荷仍原样透传（Issue #3037）。
