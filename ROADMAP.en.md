@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.8 (2026-11-27): test isolation completed — doctor tests now run against an isolated data directory, so the local gate no longer false-reds on machines that carry a risk lock from a previous platform risk hit (Issue #3027); the test session now isolates HOME to a temporary directory, so CLI tests without `--data-dir` no longer write the real `~/.boss-agent` (Issue #3028).
+
 v3.9.7 (2026-11-27): attachment-resume commands classify deterministic pre-write read failures; an acceptance request that was provably never sent no longer reports an unknown outcome, and download parse failures or parameter 4xx responses no longer invite unbounded retries (Issue #3024).
 
 v3.9.6 (2026-11-27): automation consumes explicit client evidence that a write was never sent and releases its in-flight marker; wizard clears a rejected attempt's write marker before checking the next retry deadline, preserving recovery while retaining platform-risk and unknown-result protections (Issues #3019, #3020).
