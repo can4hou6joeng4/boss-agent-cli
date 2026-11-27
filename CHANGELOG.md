@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.13] - 2026-11-27
+
 ### Fixed
 
 - 向导采集 / 导出面板按真实状态展示：`crawl status` 查询不再把仍在运行或风控暂停的采集显示成「采集已完成」，`running_stale` 的下一步与风控解锁指引重新可见；`stop_requested` / `queued` / `budget_stopped` 等采集状态有可读标签，`crawl stop` 受理后会给出 `crawl status` 后继指引。导出结果 `truncated=true` 时改为黄色「导出结果被截断」，展示请求条数与原因说明；等待继续面板不再重复打印同一条恢复命令（Issue #3053、#3054）。
