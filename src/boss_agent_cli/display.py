@@ -330,22 +330,38 @@ def login_action_for_ctx(ctx: Any) -> str:
 	return boss_command_for_ctx(ctx, "login", include_data_dir=True)
 
 
-def contact_refresh_command_for_ctx(ctx: Any) -> str:
-	"""CONTACT_NOT_FOUND 的后继命令：招聘者刷新 hr chat，求职者刷新 chat。"""
-	command = "hr chat" if ctx and getattr(ctx, "obj", None) and ctx.obj.get("role") == "recruiter" else "chat"
-	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+def _recruiter_side_command(ctx: Any, command: str | None) -> bool:
+	"""后继命令跟随命令族；共用工作流入口与缺少标识时按运行角色（Issue #3065）。"""
+	if command is not None:
+		group = command.split(".", 1)[0]
+		if group not in {"wizard", "agent"}:
+			return command.startswith("recruiter-")
+	return bool(ctx and getattr(ctx, "obj", None) and ctx.obj.get("role") == "recruiter")
 
 
-def unconfirmed_write_contract_for_ctx(ctx: Any) -> tuple[str, dict[str, list[str]]]:
-	"""ACTION_UNCONFIRMED 的恢复指引：按角色给出可执行的核对命令。
+def contact_refresh_command_for_ctx(ctx: Any, *, command: str | None = None) -> str:
+	"""CONTACT_NOT_FOUND 的后继命令：招聘者刷新 hr chat，求职者刷新 chat。
+
+	``command`` 是本次执行的内部命令标识（``exchange`` / ``recruiter-chat``）；
+	显式给出时按命令族选择，避免求职者命令在 ``--role recruiter`` 下被引向
+	招聘者专属命令（Issue #3065）。
+	"""
+	refresh = "hr chat" if _recruiter_side_command(ctx, command) else "chat"
+	return boss_command_for_ctx(ctx, refresh, include_data_dir=True)
+
+
+def unconfirmed_write_contract_for_ctx(
+	ctx: Any, *, command: str | None = None
+) -> tuple[str, dict[str, list[str]]]:
+	"""ACTION_UNCONFIRMED 的恢复指引：按命令族给出可执行的核对命令。
 
 	登记表只保留角色中立文案；求职者只能核对自己的会话 / 投递，招聘者才用
 	``hr chatmsg <friend_id>``。共享错误出口在回填或改写登记表文案时都走这里，
-	避免未来新增的写命令漏掉角色覆盖（Issue #2921）。
+	避免未来新增的写命令漏掉角色覆盖（Issue #2921）。``command`` 存在时按命令族
+	判断，避免求职者命令在 ``--role recruiter`` 下被引向招聘者核对入口。
 	"""
-	role = ctx.obj.get("role") if ctx and getattr(ctx, "obj", None) else None
-	command = "hr chatmsg <friend_id>" if role == "recruiter" else "chat"
-	check_command = boss_command_for_ctx(ctx, command, include_data_dir=True)
+	command_name = "hr chatmsg <friend_id>" if _recruiter_side_command(ctx, command) else "chat"
+	check_command = boss_command_for_ctx(ctx, command_name, include_data_dir=True)
 	return (
 		f"动作可能已生效：先用 {check_command} 核对平台记录，不要自动重试",
 		{"next_actions": [check_command]},
@@ -465,6 +481,7 @@ def platform_error_contract(
 	clean_command: str | None = None,
 	doctor_command: str | None = None,
 	read_only: bool = False,
+	command: str | None = None,
 ) -> tuple[bool, str | None, dict[str, Any] | None]:
 	"""Return ``(recoverable, recovery_action, hints)`` for a platform error code.
 
@@ -479,6 +496,8 @@ def platform_error_contract(
 
 	CONTACT_NOT_FOUND 是确定性结果：``next_actions`` 指向同一数据目录刷新沟通
 	列表（招聘者 ``hr chat`` / 求职者 ``chat``），不重放原命令（Issue #1485）。
+	``command`` 是本次执行的内部命令标识，用于让后继命令跟随命令族，而不是
+	只看 ``--role``（Issue #3065）。
 	"""
 	if code == "UNKNOWN" and read_only:
 		code = "NETWORK_ERROR"
@@ -491,11 +510,11 @@ def platform_error_contract(
 	if code == "CONTACT_NOT_FOUND":
 		# friend_id 写错或联系人已变化是确定性结果：给出去同一数据目录刷新沟通
 		# 列表的下一步，而不是让 Agent 重放同一条命令或让用户提 issue（#1485）。
-		chat_command = contact_refresh_command_for_ctx(ctx)
+		chat_command = contact_refresh_command_for_ctx(ctx, command=command)
 		return recoverable, f"用 {chat_command} 核对联系人标识后重试", {"next_actions": [chat_command]}
 	if code == "ACTION_UNCONFIRMED":
-		# 写请求结果未知：登记表文案不区分角色，出口必须按当前角色注入核对命令。
-		recovery_action, hints = unconfirmed_write_contract_for_ctx(ctx)
+		# 写请求结果未知：登记表文案不区分角色，出口必须按命令族注入核对命令。
+		recovery_action, hints = unconfirmed_write_contract_for_ctx(ctx, command=command)
 		return recoverable, recovery_action, hints
 	if recovery_action:
 		# 登记表是通用示例；诊断类命令（doctor / crawl status / resume list）读的
@@ -646,9 +665,9 @@ def handle_error_output(
 		recoverable = registered_recoverable
 	if recovery_action is None:
 		if code == "ACTION_UNCONFIRMED":
-			# 持久化失败记录的错误码回填也要按当前角色生成核对命令，不能把
-			# 招聘者专属命令交给求职者（Issue #2921）。
-			recovery_action, role_hints = unconfirmed_write_contract_for_ctx(ctx)
+			# 持久化失败记录的错误码回填也要按命令族生成核对命令，不能把
+			# 招聘者专属命令交给求职者命令（Issue #2921 #3065）。
+			recovery_action, role_hints = unconfirmed_write_contract_for_ctx(ctx, command=command)
 			hints = {**role_hints, **(hints or {})}
 		else:
 			recovery_action = registered_recovery_action
@@ -666,7 +685,7 @@ def handle_error_output(
 		recovery_action = login_action_for_ctx(ctx)
 		hints = {**auth_required_hints(ctx), **(hints or {})}
 	elif code == "ACTION_UNCONFIRMED" and recovery_action in registered_variants:
-		recovery_action, role_hints = unconfirmed_write_contract_for_ctx(ctx)
+		recovery_action, role_hints = unconfirmed_write_contract_for_ctx(ctx, command=command)
 		hints = {**role_hints, **(hints or {})}
 	elif recovery_action and recovery_action == registered_recovery_action:
 		# 仍是登记表原文：doctor / resume list / crawl status 读的是本次运行的数据
@@ -796,7 +815,9 @@ def handle_platform_error_output(
 	# 自相矛盾信封（Issue #1900）。
 	if read_only and code == "UNKNOWN":
 		code = "NETWORK_ERROR"
-	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx, read_only=read_only)
+	recoverable, recovery_action, risk_hints = platform_error_contract(
+		code, ctx=ctx, read_only=read_only, command=command
+	)
 	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None
 	if isinstance(response, dict):
