@@ -33,6 +33,7 @@ from mcp.types import (
 )
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
+from boss_agent_cli.api.recruiter_client import CHAT_ACTION_MAX_REQUESTS
 from boss_agent_cli.display import RISK_ERROR_CONTRACTS
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
@@ -142,6 +143,13 @@ _HR_ACCEPT_RESUME_REQUESTS = 3
 #: ``hr download-resume``：历史 + 好友详情 + 预览检查 + 附件下载各一次
 #: （Issue #3009）。
 _HR_DOWNLOAD_RESUME_REQUESTS = 4
+#: ``hr reply`` / ``hr resume --exchange`` / ``hr request-resume`` 的最坏请求数：
+#: 好友详情、动作前历史快照、browser-action 窗口、动作后历史回读各一次，再加
+#: 首次回读未命中时的 3 次确认重读（Issue #3010）。常量与客户端回读行为共用，
+#: 回读次数调整时预算自动跟随。
+_HR_CHAT_ACTION_REQUESTS = CHAT_ACTION_MAX_REQUESTS
+#: ``hr location``：好友详情 + 发送工作地点（Issue #3010）。
+_HR_LOCATION_REQUESTS = 2
 #: 招聘自动化一轮先扫描的 tab 数上界（新招呼 / 未读）。
 _AUTOMATION_SCAN_REQUESTS = 2
 #: 自动化每个会话最多一次历史读取 + 一次动作派发；``--limit`` 是本轮全局
@@ -536,6 +544,18 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 			return _HR_ACCEPT_RESUME_REQUESTS
 		if subcommand == "download-resume":
 			return _HR_DOWNLOAD_RESUME_REQUESTS
+		if subcommand in {"reply", "request-resume"}:
+			return _HR_CHAT_ACTION_REQUESTS
+		if subcommand == "resume":
+			# 只有 --exchange 走聊天页动作；其余形态只查一次在线简历。
+			if "--exchange" in _option_region(args):
+				return _HR_CHAT_ACTION_REQUESTS
+			return None
+		if subcommand == "location":
+			# --dry-run 只预览目标，不请求平台（Issue #3010）。
+			if "--dry-run" in _option_region(args):
+				return None
+			return _HR_LOCATION_REQUESTS
 		return None
 	if command == "watch" and len(args) > 1 and args[1] == "run":
 		# watch run 对保存的搜索应用福利 / 活跃度筛选，逐条查详情；

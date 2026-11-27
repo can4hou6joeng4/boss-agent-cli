@@ -43,6 +43,17 @@ from boss_agent_cli.api.zhipin_errors import (
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
+#: 动作后聊天记录回读的重试间隔（秒）：首读 + 3 次重试，约 6s。
+_EXCHANGE_HISTORY_RETRY_DELAYS_S: tuple[float, ...] = (1.5, 2.0, 2.5)
+#: 聊天页动作成功路径的基础请求段：好友详情、动作前历史快照、browser-action
+#: 窗口、动作后历史回读。动作后首次回读未命中时还会按上面的间隔继续回读，
+#: 确认可能延后到第 7 次请求；MCP 超时预算与客户端回读行为共用这一组常量
+#: （Issue #3010）。
+CHAT_ACTION_BASE_REQUESTS = 4
+CHAT_ACTION_HISTORY_RETRY_ATTEMPTS = len(_EXCHANGE_HISTORY_RETRY_DELAYS_S)
+#: 聊天页动作在平台请求层面的最坏请求数（4 段 + 3 次确认重读）。
+CHAT_ACTION_MAX_REQUESTS = CHAT_ACTION_BASE_REQUESTS + CHAT_ACTION_HISTORY_RETRY_ATTEMPTS
+
 
 def _mark_request_not_sent(exc: BaseException) -> None:
 	"""给确定发生在写入之前的异常标注 ``request_sent=False``。
@@ -577,7 +588,7 @@ class BossRecruiterClient(_BaseHttpClient):
 	_CODE_RATE_LIMITED = ep.CODE_RATE_LIMITED
 	_ADD_ENDPOINT_HINT = True
 	# exchange 动作后没有 WS 证据时，聊天记录回读的重试间隔（秒）；首读 + 3 次重试，约 6s。
-	_EXCHANGE_HISTORY_RETRY_DELAYS_S: tuple[float, ...] = (1.5, 2.0, 2.5)
+	_EXCHANGE_HISTORY_RETRY_DELAYS_S: tuple[float, ...] = _EXCHANGE_HISTORY_RETRY_DELAYS_S
 
 	def _register(self) -> None:
 		_OPEN_CLIENTS.add(self)
