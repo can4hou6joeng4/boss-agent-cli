@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.2 (2026-11-27): Recognize sender direction in recruiter message objects so incoming candidate messages do not show send status; include source-grouped summary batches in MCP timeout budgets and document the actual request limits in both languages (Issue #3003, #3006).
+
 v3.9.1 (2026-11-27): Preserve completed platform-risk errors and manual recovery instructions during MCP interruption cleanup, and include contact lookup in host timeout budgets while direct history reads keep a single-request budget (Issue #3000, #3001).
 
 v3.9.0 (2026-11-27): Add `annotations.readOnlyHint` to every tool exported by `boss schema --format mcp-tools`, sharing the same read-only policy as runtime `tools/list` (Issue #2997).
