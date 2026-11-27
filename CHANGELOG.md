@@ -8,6 +8,7 @@
 
 - 共享错误出口的后继命令改为跟随命令族：求职者侧 `exchange` / `mark` / `chat` 即使在 `--role recruiter` 下也给出 `boss chat`，不再被引向招聘者专属的 `hr chat`；招聘者命令仍保留 `hr chat` / `hr chatmsg`（Issue #3065）。
 - 自动化周期停止时分别判定熔断闩锁与事件日志写入：闩锁已成功落盘、仅日志追加失败时 `risk_latch_persisted` 不再误报为 false，原始风控 / 预算异常与本地停止保护保持不变（Issue #3067）。
+- `search` 命中本地缓存时按本页 `data` 重算派生分页计数：缓存行里的 `pagination.total` 与行数不一致或为 `null` 时，成功信封不再声明 `total_kind=returned_page_count` 却给出错误的 `total`；平台证据（`page` / `has_more`）仍取缓存（Issue #3069）。
 
 ## [3.9.14] - 2026-11-27
 

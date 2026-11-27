@@ -567,6 +567,15 @@ def search_cmd(
 					snapshot = try_save_index(data_dir, items, source=f"search:{query}", page=page, logger=logger)
 					saved = bool(snapshot)
 					cached_pagination = result.get("pagination")
+					# total 是从 data 推导的计数，不能把缓存里的值级漂移原样发给
+					# Agent；命中后以本次渲染的 data 行数为准。平台证据（page /
+					# has_more）仍取缓存（Issue #3069）。
+					if isinstance(cached_pagination, dict):
+						cached_pagination = {
+							**cached_pagination,
+							"total": len(items),
+							"total_kind": "returned_page_count",
+						}
 					# 只把本次写入的快照身份放进信封；保存后读回可变文件在并发下
 					# 会挂上另一次搜索的身份（Issue #2292）。
 					if isinstance(snapshot, dict) and isinstance(cached_pagination, dict):
