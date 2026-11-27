@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.11 (2026-11-27): export completeness — the `export --welfare` / `--active` search pipeline no longer treats a missing `jobList` as a platform-confirmed empty page, later pages are not silently dropped, and budget exhaustion is reported as truncated (Issue #3042).
+
 v3.9.10 (2026-11-27): pagination evidence parity — recruiter lists and chat history derive `pagination.total` from the same row extraction as the terminal renderer, so non-object elements, top-level lists, and alternate containers no longer disagree with what users see (Issue #3037, #3038).
 
 v3.9.9 (2026-11-27): pagination evidence completed — `favorites list` clamps oversized pages to the trusted limit instead of reporting a local integer overflow as a retryable network error (Issue #3032); recruiter applications now derive `pagination.total` from the same containers as the rendered rows, so alternate payload containers no longer undercount (Issue #3034).
