@@ -111,10 +111,18 @@ def job_list_rows(data: Any) -> list[dict[str, Any]]:
 
 
 def _direction(item: dict[str, Any]) -> str:
-	"""消息方向：平台给 from / role / side，缺失时按 isSelf 判定。"""
+	"""消息方向：优先发送人姓名，其次平台类型码的「我 / 对方」归一。"""
 	value = _first_value(item, "from", "role", "side")
 	if isinstance(value, dict):
-		value = _first_value(value, "type", "name")
+		# name 是平台给真人的展示文本；type 是内部机器码（boss / geek），
+		# 直接打印会让终端只剩 boss / geek（Issue #3057）。
+		name = _first_value(value, "name")
+		if isinstance(name, str) and name.strip():
+			return name.strip()
+		kind = _first_value(value, "type")
+		if isinstance(kind, str) and kind.strip():
+			return {"boss": "我", "geek": "对方"}.get(kind.strip().lower(), kind.strip())
+		value = None
 	if isinstance(value, str) and value.strip():
 		return value.strip()
 	if item.get("isSelf") is True or item.get("self") is True:
