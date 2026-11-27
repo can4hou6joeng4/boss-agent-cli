@@ -1,7 +1,34 @@
 import json
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
+
+#: 本次 pytest 会话的隔离家目录。``pytest_configure`` 在测试模块导入前设置 ``HOME``，
+#: 所以 ``Path.home()`` 的模块级常量（如 test_commands 的 ``_DEFAULT_DATA_DIR``）
+#: 与运行时解析出的默认 ``--data-dir`` 仍然一致，同时不再触碰真实用户目录。
+_SESSION_HOME: str | None = None
+
+
+def pytest_configure(config):
+	"""把整个测试会话的家目录隔离到临时目录（Issue #3028）。"""
+	global _SESSION_HOME
+	if _SESSION_HOME is not None:
+		return
+	_SESSION_HOME = tempfile.mkdtemp(prefix="boss-test-home-")
+	os.environ["HOME"] = _SESSION_HOME
+	# Windows 上 ``Path.expanduser`` 读 USERPROFILE；POSIX 读 HOME。
+	os.environ["USERPROFILE"] = _SESSION_HOME
+
+
+def pytest_unconfigure(config):
+	"""删除会话隔离家目录，避免临时目录堆积。"""
+	global _SESSION_HOME
+	if _SESSION_HOME is not None:
+		shutil.rmtree(_SESSION_HOME, ignore_errors=True)
+		_SESSION_HOME = None
 
 
 @pytest.fixture(autouse=True)
