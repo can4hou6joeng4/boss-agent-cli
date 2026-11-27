@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- 向导输入边界拒绝超出解释器位数上限的整数：CLI / MCP / Python API 共用的 `ensure_storable_inputs` 不再让超长整数落到 `json.dumps` 抛裸 `ValueError`，改为带路径的 `INVALID_PARAM` 诊断（Issue #3085）。
 - 向导采集状态面板的本地产物与内部任务绑定按真实类型判定：`jobs.json` 为目录 / `jobs.csv` 为悬空链接时不再报告「产物存在」；断点里的容器 `run_id` 不再以 repr 截断 `params.inputs.run_id` 回退，合法的内部任务绑定重新可见（Issue #3081）。
 
 ## [3.9.17] - 2026-11-28
