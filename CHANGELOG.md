@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.7] - 2026-11-27
+
 ### Fixed
 
 - `hr download-resume` / `hr accept-resume` 不再把写前只读请求的确定性解析失败与参数类 4xx 兜成可重试的 `NETWORK_ERROR` 或「同意结果未知」：前者会让 Agent 无界重试，后者会让人去核对一个从未发出的写请求。下载命令改按 `INTERNAL_ERROR` / `INVALID_PARAM` 上报；同意路径在客户端写前读取失败时标注显式 `request_sent=False`，命令层据此按确定性错误分类，不再携带 `outcome_unknown` 标记（Issue #3024）。
