@@ -160,7 +160,7 @@ def _enrich_chat_summaries(
 	"""给沟通列表补未读数 / 最后一条消息 / 时间，返回来源统计（放进 hints）。
 
 	请求量：页面快照不发请求；页面没覆盖到的会话里只取列表前 summary_limit 个，
-	按 50 个一批串行调 userLastMsg（默认最多 2 次请求），其余会话只保留列表自带字段。
+	按来源分组后每 50 个一批串行调 userLastMsg（默认最多 3 次请求），其余会话只保留列表自带字段。
 	合并与归一化实现与向导 action 共用 services/recruiter_chat_summary。
 	"""
 	page, page_meta = _page_summaries(platform)
