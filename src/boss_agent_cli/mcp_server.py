@@ -135,6 +135,13 @@ _BATCH_GREET_MAX_COUNT = 10
 _EXPORT_DEFAULT_COUNT = 50
 #: 招聘者聊天摘要与最近消息的 CLI 默认条数。
 _HR_DEFAULT_LIMIT = 100
+#: ``hr accept-resume``：只读预检（历史 + 好友详情）+ 一次同意 POST；``--dry-run``
+#: 不请求平台。默认 120s 只够一次请求，健康调用会在预检阶段被宿主掐断
+#: （Issue #3009）。
+_HR_ACCEPT_RESUME_REQUESTS = 3
+#: ``hr download-resume``：历史 + 好友详情 + 预览检查 + 附件下载各一次
+#: （Issue #3009）。
+_HR_DOWNLOAD_RESUME_REQUESTS = 4
 #: 招聘自动化一轮先扫描的 tab 数上界（新招呼 / 未读）。
 _AUTOMATION_SCAN_REQUESTS = 2
 #: 自动化每个会话最多一次历史读取 + 一次动作派发；``--limit`` 是本轮全局
@@ -522,6 +529,13 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 			from_list = "--friend-id" not in _option_region(args)
 			batches = max_last_messages_requests(limit, grouped_by_source=from_list)
 			return min(int(from_list) + batches, _MAX_ESTIMATED_REQUESTS)
+		if subcommand == "accept-resume":
+			# --dry-run 只预览本地参数，不请求平台（Issue #3009）。
+			if "--dry-run" in _option_region(args):
+				return None
+			return _HR_ACCEPT_RESUME_REQUESTS
+		if subcommand == "download-resume":
+			return _HR_DOWNLOAD_RESUME_REQUESTS
 		return None
 	if command == "watch" and len(args) > 1 and args[1] == "run":
 		# watch run 对保存的搜索应用福利 / 活跃度筛选，逐条查详情；
