@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.6 (2026-11-27): automation consumes explicit client evidence that a write was never sent and releases its in-flight marker; wizard clears a rejected attempt's write marker before checking the next retry deadline, preserving recovery while retaining platform-risk and unknown-result protections (Issues #3019, #3020).
+
 v3.9.5 (2026-11-27): wizard's recruiter_resume / recruiter_reply now reject inputs that cannot be encoded as UTF-8 before the write marker is persisted, so an encoding failure no longer leaves an "outcome unknown" marker and a request that was provably never sent is reported as an invalid parameter (Issue #3017).
 
 v3.9.4 (2026-11-27): wizard control actions now share the MCP host's timeout semantics — --status / --stop no longer accept a --timeout that was never executed, and boss_wizard declares its host timeout cap and rejects out-of-range values before launch (Issue #3013).
