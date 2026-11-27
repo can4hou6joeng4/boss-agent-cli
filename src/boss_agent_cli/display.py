@@ -1074,6 +1074,42 @@ def render_status(
 		)
 
 
+def _simple_list_min_width(columns: list[tuple[str, str, str]]) -> int:
+	"""表格可读所需的最小终端宽度（Issue #3046）。
+
+	Rich 在宽度不足时会把每列压到 1 格；CJK 字符宽度为 2，放不进 1 格就
+	整列消失，屏幕上只剩行号和纯数字列。按「每个数据列至少 4 格（两个
+	汉字）+ 两侧 padding + 一条边线」估算，低于它时改用纵向逐字段布局。
+	"""
+	width = 3  # ``#`` 列
+	width += 3 * (len(columns) + 1)  # 每列两侧 padding 与一条边线
+	for header, _, _ in columns:
+		width += max(cell_len(header), 4)
+	return width
+
+
+def _render_simple_list_vertical(
+	items: list[dict[str, Any]],
+	title: str,
+	columns: list[tuple[str, str, str]],
+) -> None:
+	"""窄终端降级：逐条纵向渲染字段，业务字段不会被压成空格（Issue #3046）。
+
+	值按字面写入 ``Text``（不经 markup 解析），与表格单元格同样只做
+	``cell_text`` 归一；超宽值交给终端折行，不做截断。
+	"""
+	console.print(Text(f"{title} ({len(items)})", style="bold"), soft_wrap=True)
+	for index, item in enumerate(items, 1):
+		block = Text()
+		for position, (header, key, style) in enumerate(columns):
+			if position:
+				block.append("\n")
+			block.append(f"{index}. " if position == 0 else "   ", style="dim")
+			block.append(f"{header}: ", style="bold")
+			block.append(cell_text(item.get(key)), style=style or None)
+		console.print(block, soft_wrap=True)
+
+
 def render_simple_list(
 	items: list[dict[str, Any]],
 	title: str,
@@ -1087,6 +1123,9 @@ def render_simple_list(
 	items = [item for item in items if isinstance(item, dict)]
 	if not items:
 		console.print(f"[yellow]no {escape_markup(title)}[/yellow]")
+		return
+	if console.width < _simple_list_min_width(columns):
+		_render_simple_list_vertical(items, title, columns)
 		return
 
 	# title 可能含外部输入（联系人名、配置路径等）：整个标题按字面渲染。
@@ -1345,7 +1384,8 @@ def render_saved_search_list(
 			"name": item["name"],
 			"params": "\n".join(
 				f"{key}: {cell_text(value)}" for key, value in configured_search_params(item["params"]).items()
-			) or "-",
+			)
+			or "-",
 			"created_at": unix_time_label(item.get("created_at")),
 		}
 		for item in items
@@ -2033,8 +2073,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 						message=str(e),
 						recoverable=busy_recoverable,
 						recovery_action=(
-							"稍后重试本命令；并发导出同一数据目录时会短暂争用当天快照锁，"
-							"快照文件本身完好，不需要删除"
+							"稍后重试本命令；并发导出同一数据目录时会短暂争用当天快照锁，快照文件本身完好，不需要删除"
 						),
 					)
 				elif is_browser_kernel_missing(str(e)):
