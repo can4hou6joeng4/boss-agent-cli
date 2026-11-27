@@ -1130,7 +1130,9 @@ def render_simple_list(
 
 	# title 可能含外部输入（联系人名、配置路径等）：整个标题按字面渲染。
 	table = Table(title=f"{escape_markup(title)} ({len(items)})", show_lines=True)
-	table.add_column("#", style="dim", width=3)
+	# 行号列按实际条数自适应：固定 3 格时第 1000 行起被 Rich 截成 ``10…``，
+	# 1000 / 1001 显示成同一个编号（Issue #3049）。
+	table.add_column("#", style="dim", width=max(3, len(str(len(items)))))
 	for header, _, style in columns:
 		# 不设列宽上限：Rich 按终端宽度分配，超宽内容按字符折行（Issue #2761）。
 		table.add_column(escape_markup(header), style=style, overflow="fold")
