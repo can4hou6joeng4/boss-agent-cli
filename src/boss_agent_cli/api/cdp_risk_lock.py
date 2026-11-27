@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import stat
 import time
 from dataclasses import dataclass
@@ -193,6 +194,25 @@ def read_lock(data_dir: Path) -> RiskLock | None:
 	return entry[0] if entry is not None else None
 
 
+def _is_same_locked_file(written: os.stat_result, candidate: Path) -> bool:
+	"""``candidate``（可经符号链接父目录）是否就是刚写入的锁文件。
+
+	``data_dir/cache`` 指向 ``.``（或数据目录自身）时，主位置与后备位置字面
+	不同却解析到同一 inode：照常 ``unlink`` 会把刚写入的主锁删掉，``write_lock``
+	仍返回成功，调用方记 ``persisted=true``，新进程却读到「无锁」——风控硬边界
+	fail-open（Issue #3080）。判定失败（链接环、权限）时按同一文件处理，宁可
+	留下陈旧锁也不制造无锁窗口。
+	"""
+	try:
+		target = candidate.stat()
+	except FileNotFoundError:
+		# 悬空链接 / 不存在：``unlink`` 只删除链接本身，不可能碰到刚写入的锁。
+		return False
+	except (OSError, ValueError):
+		return True
+	return (written.st_dev, written.st_ino) == (target.st_dev, target.st_ino)
+
+
 def write_lock(
 	data_dir: Path,
 	stoken_sha256: str | None,
@@ -234,8 +254,17 @@ def write_lock(
 		except (OSError, UnicodeError) as exc:
 			errors.append(exc)
 			continue
+		# 清理「另一位置」的陈旧锁前先确认它不是刚写入文件的路径别名
+		# （符号链接父目录会让两个位置指向同一 inode，Issue #3080）。stat
+		# 失败同样按无法判定处理，跳过清理而不是冒险删掉刚写的锁。
+		try:
+			written_stat: os.stat_result | None = path.stat()
+		except (OSError, ValueError):
+			written_stat = None
 		for stale in lock_paths(data_dir):
 			if stale == path:
+				continue
+			if written_stat is None or _is_same_locked_file(written_stat, stale):
 				continue
 			try:
 				stale.unlink()
