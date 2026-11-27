@@ -16,16 +16,29 @@ MSG_STATUS_LABELS: dict[object, str] = {1: "未读", 2: "已读"}
 GROUP_ORDER = ["对方主动", "我主动", "投递"]
 
 
+#: 可信时间戳下界：2000-01-01T00:00:00Z。招聘平台的数据不可能早于这个时刻。
+#: 低于它的正数（10 位秒级时间戳、截断/回绕后的值）按毫秒渲染会画出 1970 年，
+#: 让真人把一条 2023 年的消息当成 1970 年的旧数据（Issue #3044）。
+MIN_PLAUSIBLE_TS_MS = 946_684_800_000
+
+
 def safe_local_time(ts_ms: Any, *, tz: datetime.tzinfo | None = None) -> datetime.datetime | None:
-	"""毫秒时间戳转 datetime；越界 / 非有限值返回 None（Issue #1295）。
+	"""毫秒时间戳转 datetime；越界 / 非有限 / 早于可信下界的值返回 None。
 
 	平台把纳秒时间戳当毫秒传来、或 JSON 里的 ``1e400`` 变成 ``inf`` 时，
 	``datetime.fromtimestamp`` 抛 ``ValueError`` / ``OverflowError``。时间字段
 	只是展示信息，坏值按「无时间」处理，不能让整条命令失败——否则
 	``handle_auth_errors`` 会把确定性的坏数据兜成可重试的 ``NETWORK_ERROR``，
 	Agent 拿着同一份坏数据反复重试、消耗请求预算。
+
+	早于 ``MIN_PLAUSIBLE_TS_MS`` 的值同样按「无时间」处理：10 位秒级时间戳
+	（如 ``1700000000``）被当成毫秒会在 TTY 显示 1970 年（Issue #3044）。这里
+	不按位数猜测单位并把秒换算成毫秒——与纳秒越界同口径（Issue #1295），
+	避免同一份坏数据在不同展示层得到不同解释。
 	"""
 	try:
+		if ts_ms < MIN_PLAUSIBLE_TS_MS:
+			return None
 		return datetime.datetime.fromtimestamp(ts_ms / 1000, tz=tz)
 	except (TypeError, ValueError, OverflowError, OSError):
 		return None
@@ -73,9 +86,8 @@ def matches_chat_filters(
 	"""
 	if type(last_ts) is not int:
 		last_ts = 0
-	return (
-		(not cutoff_ts or not last_ts or last_ts >= cutoff_ts)
-		and (relation_label is None or initiated_by == relation_label)
+	return (not cutoff_ts or not last_ts or last_ts >= cutoff_ts) and (
+		relation_label is None or initiated_by == relation_label
 	)
 
 
@@ -144,8 +156,15 @@ def message_text_value(value: Any) -> str | None:
 
 # 聊天历史的展示标签；CLI `chatmsg` 与向导 `candidate_chat_history` 共用。
 _MSG_TYPE_MAP = {
-	1: "文本", 2: "图片", 3: "招呼", 4: "简历", 5: "系统",
-	6: "名片", 7: "语音", 8: "视频", 9: "表情",
+	1: "文本",
+	2: "图片",
+	3: "招呼",
+	4: "简历",
+	5: "系统",
+	6: "名片",
+	7: "语音",
+	8: "视频",
+	9: "表情",
 }
 
 
@@ -247,16 +266,18 @@ def normalize_chat_message(
 		"time": msg_time,
 	}
 	if include_raw:
-		normalized.update({
-			"message_id": msg.get("id") or msg.get("msgId") or msg.get("messageId"),
-			"type_code": msg.get("type"),
-			"timestamp": msg.get("time"),
-			"body": body,
-			"links": _extract_links(msg, body=body),
-			"security_id": _first_present(msg, body, ("securityId", "security_id")),
-			"job_id": _first_present(msg, body, ("jobId", "job_id", "encryptJobId")),
-			"raw": msg,
-		})
+		normalized.update(
+			{
+				"message_id": msg.get("id") or msg.get("msgId") or msg.get("messageId"),
+				"type_code": msg.get("type"),
+				"timestamp": msg.get("time"),
+				"body": body,
+				"links": _extract_links(msg, body=body),
+				"security_id": _first_present(msg, body, ("securityId", "security_id")),
+				"job_id": _first_present(msg, body, ("jobId", "job_id", "encryptJobId")),
+				"raw": msg,
+			}
+		)
 	return normalized
 
 
