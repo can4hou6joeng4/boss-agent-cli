@@ -24,6 +24,20 @@ def _sanitize_surrogates(text: str) -> str:
 	return sanitize_surrogates(text)
 
 
+def _normalized_unread(raw_item: dict[str, Any]) -> int:
+	"""未读数只认真正的非负整数（Issue #1853 / #2886）。
+
+	CSV 与 md/html 共用同一归一：bool 是 ``int`` 子类但不是「未读数」，
+	负数没有平台语义，超长整数在 ``str()`` / f-string 里会抛裸
+	``ValueError``；三者都按缺失（0）。此前 CSV 只归一负数，同一份数据在
+	CSV 里写 ``true``、在 Markdown 里写 ``0``（Issue #3075）。
+	"""
+	value = raw_item.get("unread")
+	if type(value) is int and value >= 0 and safe_text(value):
+		return value
+	return 0
+
+
 def _text_cell(value: Any) -> str:
 	"""文本格式里的容器值序列化成 JSON 文本，不落 Python repr（Issue #1853）。
 
@@ -86,7 +100,9 @@ def prepare_render_data(
 	groups: dict[str, list[tuple[dict[str, Any], str, dict[str, Any]]]] = {}
 	for raw_item in usable:
 		item = {key: _text_cell(value) for key, value in raw_item.items()}
-		key = item.get("initiated_by", "未知")
+		# 键存在但为 null / 空串时 ``.get(key, "未知")`` 的默认值不生效，
+		# 分组副标题会退化成「（1 条）」而不是「未知（1 条）」（Issue #3075）。
+		key = item.get("initiated_by") or "未知"
 		groups.setdefault(key, []).append((item, contact_identity(raw_item), raw_item))
 
 	# from_who 决定最终可见分组：总计 / 分组统计必须与 sections 同源，否则
@@ -168,20 +184,11 @@ def prepare_render_data(
 			is_new = key in added_ids
 			ref = f"S{global_idx}"
 			msg = str(item.get("last_msg") or "-")
-			# unread 只认真正的整数（与 chat_snapshot._unread_count 同口径）：
+			# unread 只认真正的非负整数（与 chat_snapshot._unread_count 同口径）：
 			# 字符串 / 容器会在 ``row["unread"] > 0`` 抛 TypeError（Issue #1853）。
 			# 判断必须用原始值：_text_cell 已把标量转成字符串，转换后的 "1"
 			# 会被 ``type(...) is int`` 误判为缺失（Issue #2162）。
-			unread_value = raw_item.get("unread")
-			# 超大整数（>4300 位十进制）在 md/html 的 str()/f-string 里抛裸
-			# ValueError，整份导出会落成无信封的 traceback；与 safe_text 同口径
-			# 按缺失处理（Issue #2343）。负数没有平台语义，快照 diff 已按 0
-			# 处理，导出也必须一致，不能只在 CSV 里写出 "-1"（Issue #2886）。
-			unread = (
-				unread_value
-				if type(unread_value) is int and unread_value >= 0 and safe_text(unread_value)
-				else 0
-			)
+			unread = _normalized_unread(raw_item)
 			rows.append({
 				"ref": ref, "is_new": is_new, "sid": sid, "key": key,
 				"brand_name": item.get("brand_name") or "-",
@@ -268,11 +275,11 @@ def _render_csv(friends: list[dict[str, Any]]) -> str:
 			# 非对象条目跳过：``item.items()`` 的 AttributeError 会让整份
 			# CSV 导出落成错误信封（Issue #2162）。
 			continue
-		# CSV 直接读原始 item，绕过 prepare_render_data 的未读归一化；负数
-		# 不得写成 "-1"（还会被公式防护前置单引号），与快照 diff 的 0 口径
-		# 保持一致（Issue #2886）。
-		if type(item.get("unread")) is int and item["unread"] < 0:
-			item = {**item, "unread": 0}
+		# CSV 直接读原始 item，绕过 prepare_render_data 的未读归一化；共用同一
+		# 归一（bool / 负数 / 超长整数按 0），三种格式不能对同一份数据给出
+		# 不同计数（Issue #2886 / #3075）。
+		if "unread" in item:
+			item = {**item, "unread": _normalized_unread(item)}
 		# null 写成空单元格，不落成字面量 None（Issue #1793）。
 		safe_row = {k: "" if v is None else sanitize_csv_cell(str(_text_cell(v))) for k, v in item.items()}
 		writer.writerow(safe_row)
