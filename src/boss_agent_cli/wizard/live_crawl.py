@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import math
+import stat
 from pathlib import Path
 from typing import Any, Mapping
 
 from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.services.json_files import path_mode
 
 _CRAWL_GOALS = frozenset({"crawl_start", "crawl_resume", "crawl_status", "crawl_stop"})
 
@@ -35,8 +37,16 @@ def bindable_run_id(value: Any) -> str | None:
 	把状态 / 列表 / 停止控制路径整体拖垮。这样的值不可能对应 ``crawl_runs``
 	里的真实记录（写入时同样过不了绑定），按「没有绑定内部任务」处理；
 	``safe_text`` 同时兜住超大整数 / 深嵌套的 ``str()`` 异常。
+
+	只接受字符串与非 bool 数值标量：容器 / 布尔的 ``str()`` 是 Python repr
+	（``"{'x': 1}"`` / ``"True"``），可绑定但必然查不到 ``crawl_runs``；旧实现
+	还会让 ``inner_crawl_run_id`` 立即返回、截断合法的后续候选（Issue #3081）。
 	"""
-	if value is None:
+	if value is None or isinstance(value, bool):
+		return None
+	if not isinstance(value, (str, int, float)):
+		return None
+	if isinstance(value, float) and not math.isfinite(value):
 		return None
 	text = safe_text(value)
 	if not text:
@@ -49,21 +59,33 @@ def bindable_run_id(value: Any) -> str | None:
 
 
 def inner_crawl_run_id(run: Mapping[str, Any]) -> str | None:
-	"""Extract the crawler run_id nested in a workflow last_result / params."""
+	"""Extract the crawler run_id nested in a workflow last_result / params.
+
+	某个候选值类型漂移（``bindable_run_id`` 返回 None）时继续尝试后续候选：
+	旧实现直接 ``return``，``last_result.data.run_id`` 是容器时合法的
+	``params.inputs.run_id`` 被截断，状态面板的 jobs / output_paths 随之消失
+	（Issue #3081）。
+	"""
 	last = run.get("last_result")
 	if isinstance(last, Mapping):
 		data = last.get("data")
 		if isinstance(data, Mapping) and data.get("run_id"):
-			return bindable_run_id(data["run_id"])
+			bound = bindable_run_id(data["run_id"])
+			if bound:
+				return bound
 		if last.get("run_id"):
-			return bindable_run_id(last["run_id"])
+			bound = bindable_run_id(last["run_id"])
+			if bound:
+				return bound
 	params = run.get("params")
 	if isinstance(params, Mapping):
 		inputs = params.get("inputs")
 		if isinstance(inputs, Mapping):
 			for key in ("run_id", "crawl_run_id"):
 				if inputs.get(key):
-					return bindable_run_id(inputs[key])
+					bound = bindable_run_id(inputs[key])
+					if bound:
+						return bound
 	return None
 
 
@@ -75,13 +97,17 @@ def _output_paths(output_dir: str | None) -> dict[str, str]:
 	for kind in ("json", "csv", "xlsx"):
 		path = base / f"jobs.{kind}"
 		try:
-			path.lstat()
-		except FileNotFoundError:
-			continue
+			mode = path_mode(path)
 		except (OSError, ValueError):
 			# 展示型探测：目录存在但不可读（权限 / 挂载异常 / 非法路径）时
 			# 按「无法确认产物」处理。`Path.exists()` 在 3.11 / 3.12 会把
 			# PermissionError 抛给状态面板、3.14 又静默返回 False（Issue #2371）。
+			continue
+		# 目录 / FIFO / 设备 / 悬空链接都不是可读取的产物文件：只按 lstat
+		# 存在性报告会让状态面板展示一个打不开的路径（Issue #3081）。
+		# 符号链接指向普通文件仍视为产物，与 services/json_files.path_mode
+		# 的读路径口径一致。
+		if mode is None or not stat.S_ISREG(mode):
 			continue
 		paths[kind] = str(path)
 	return paths
