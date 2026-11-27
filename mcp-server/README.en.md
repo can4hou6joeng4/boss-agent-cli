@@ -57,6 +57,10 @@ Call `boss_schema` with `{"format":"mcp-tools"}` to inspect tool schemas; the `n
 
 The envelope's `hints.next_actions` contains follow-up CLI commands, which cannot be called directly as MCP tool names. A host using only MCP should look for an equivalent tool or a registered `boss_wizard` goal first; when none exists, explain the required CLI step without claiming it has completed. `hints.operator_actions` remains for human instructions such as scanning a QR code or operating a browser.
 
+### Tool annotations
+
+`tools/list` attaches MCP `ToolAnnotations` to every tool: statically read-only tools (such as `boss_schema`, `boss_search`, and `boss_resume_show`) carry `readOnlyHint: true` so hosts can auto-approve read-only calls. Tools whose writes depend on parameters stay `false`: action-driven tools (`boss_config` / `boss_hr_jobs` / `boss_wizard`) and tools with local output arguments (`boss_chat` / `boss_export` / `boss_digest` / `boss_stats`). Annotations are host hints only and do not replace the confirmation and error contracts; `destructiveHint` / `idempotentHint` / `openWorldHint` keep their specification defaults.
+
 ### Shared workflow
 
 | Tool | Description |

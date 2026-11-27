@@ -28,6 +28,8 @@ from mcp.types import (
 	ListToolsResult,
 	PaginatedRequestParams,
 	TextContent,
+	Tool,
+	ToolAnnotations,
 )
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
@@ -273,6 +275,40 @@ _DEFAULT_ACTION_BY_TOOL: dict[str, str] = {"boss_wizard": "run"}
 _ACTION_DIMENSION_TOOL_NAMES = frozenset(
 	tool.name for tool in TOOLS if "action" in tool.input_schema.get("properties", {})
 )
+
+#: 本地输出参数：工具即使只读平台，带这些参数时也会写本机文件，不能标成
+#: ``readOnlyHint=true``。宿主可能对只读调用自动放行，误标会把本地文件写入
+#: 藏进「只读」提示里（Issue #2993）。
+_LOCAL_OUTPUT_ARGUMENT_KEYS = frozenset({"output", "output_file"})
+
+
+def _static_read_only(tool: Tool) -> bool:
+	"""返回工具在所有参数组合下是否都只读（供 MCP ``ToolAnnotations`` 使用）。
+
+	只用于静态注解：``boss_config`` / ``boss_hr_jobs`` / ``boss_wizard`` 的写语义
+	取决于 action，带 ``output`` / ``output_file`` 的工具可能写本地文件，都不能
+	标为只读。动态写判定仍由 ``_tool_may_write`` 按参数负责，两者互不替代。
+	「只读」指不产生平台写入或用户可见的本地状态变更；缓存与可写性探针不计。
+	"""
+	if tool.name not in _READ_ONLY_TOOL_NAMES:
+		return False
+	if tool.name in _ACTION_DIMENSION_TOOL_NAMES:
+		return False
+	properties = tool.input_schema.get("properties", {})
+	return not (_LOCAL_OUTPUT_ARGUMENT_KEYS & set(properties))
+
+
+#: ``tools/list`` 返回带 ``ToolAnnotations`` 的副本：``readOnlyHint`` 规范缺省
+#: 为 false，不注明会让宿主对 ``boss_schema``、``boss_search`` 这类只读调用也
+#: 逐个确认。``destructiveHint`` / ``idempotentHint`` / ``openWorldHint`` 保持
+#: 规范默认值，避免误标（Issue #2993）。延迟到请求时构造：mock 环境下的
+#: ``mcp.types.Tool`` 替身没有 ``model_copy``，模块导入不能依赖它。
+def _annotated_tools() -> list[Tool]:
+	return [
+		tool.model_copy(update={"annotations": ToolAnnotations(read_only_hint=_static_read_only(tool))})
+		for tool in TOOLS
+	]
+
 
 #: schema 缺省 ``dry_run=true`` 的工具：省略该键时 ``mcp_args._build_args`` 仍会
 #: 生成 ``--dry-run``，实际语义是只预览。不能按「未显式声明只读」归为写，否则
@@ -925,7 +961,7 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 
 
 async def list_tools(ctx: Any, params: "PaginatedRequestParams | None" = None) -> ListToolsResult:
-	return ListToolsResult(tools=TOOLS)
+	return ListToolsResult(tools=_annotated_tools())
 
 
 def _tool_argument_error(tool_name: str, message: str) -> CallToolResult:

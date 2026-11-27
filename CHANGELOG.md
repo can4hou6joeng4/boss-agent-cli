@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `tools/list` 为每个 MCP 工具补充 `ToolAnnotations.readOnlyHint`：静态只读工具可被宿主自动放行；带 action 维度或本地输出参数的工具保持 `false`，`destructiveHint` / `idempotentHint` / `openWorldHint` 维持规范默认值（Issue #2993）。
+
 ## [3.7.0] - 2026-11-27
 
 ### Added

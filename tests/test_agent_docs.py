@@ -63,6 +63,9 @@ def _load_mcp_tools() -> list:
 		_mcp_stdio.stdio_server = MagicMock()
 		_mcp_types.TextContent = MagicMock()
 		_mcp_types.Tool = type("Tool", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
+		_mcp_types.ToolAnnotations = type(
+			"ToolAnnotations", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)}
+		)
 		# mcp 2.x 的 handler 收 (ctx, params) 并返回 Result 对象，mcp_server 因此还需这四个类型。
 		for _name in ("CallToolRequestParams", "CallToolResult", "ListToolsResult", "PaginatedRequestParams"):
 			setattr(_mcp_types, _name, type(_name, (), {"__init__": lambda self, **kw: self.__dict__.update(kw)}))
