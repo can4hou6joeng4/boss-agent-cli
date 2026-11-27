@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 共享错误出口的后继命令改为跟随命令族：求职者侧 `exchange` / `mark` / `chat` 即使在 `--role recruiter` 下也给出 `boss chat`，不再被引向招聘者专属的 `hr chat`；招聘者命令仍保留 `hr chat` / `hr chatmsg`（Issue #3065）。
+
 ## [3.9.14] - 2026-11-27
 
 ### Fixed

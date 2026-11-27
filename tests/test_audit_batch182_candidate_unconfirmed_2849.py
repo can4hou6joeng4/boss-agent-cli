@@ -49,8 +49,11 @@ _COMMANDS = {
 }
 
 
-def _invoke(tmp_path: Any, command: str, response: dict[str, Any], error_code: str) -> dict[str, Any]:
+def _invoke(
+	tmp_path: Any, command: str, response: dict[str, Any], error_code: str, *, role: str | None = None
+) -> dict[str, Any]:
 	argv, method, _ = _COMMANDS[command]
+	extra = ["--role", role] if role is not None else []
 	with patch(f"boss_agent_cli.commands.{command}.AuthManager"), patch(
 		f"boss_agent_cli.commands.{command}.get_platform_instance"
 	) as mock_cls:
@@ -58,9 +61,22 @@ def _invoke(tmp_path: Any, command: str, response: dict[str, Any], error_code: s
 		client.friend_list.return_value = _FRIENDS
 		client.parse_error.return_value = (error_code, "请求中断")
 		getattr(client, method).return_value = response
-		out = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", *argv])
+		out = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", *extra, *argv])
 	assert out.exit_code == 1, out.output
 	return json.loads(out.output)
+
+
+@pytest.mark.parametrize("command", sorted(_COMMANDS))
+def test_candidate_contact_not_found_stays_candidate_side_under_recruiter_role(
+	tmp_path: Any, command: str
+) -> None:
+	"""共享错误出口的后继命令跟随命令族，而不是 `--role`（Issue #3065）。"""
+	payload = _invoke(tmp_path, command, {"code": -1}, "CONTACT_NOT_FOUND", role="recruiter")
+	error = payload["error"]
+	assert error["code"] == "CONTACT_NOT_FOUND"
+	assert f"boss --data-dir {tmp_path} chat" in error["recovery_action"]
+	assert "hr chat" not in error["recovery_action"]
+	assert payload["hints"]["next_actions"] == [f"boss --data-dir {tmp_path} chat"]
 
 
 @pytest.mark.parametrize("command", sorted(_COMMANDS))
