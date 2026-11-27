@@ -169,10 +169,17 @@ _MSG_TYPE_MAP = {
 
 
 def message_type_label(msg_type: Any) -> str:
-	"""平台消息类型编码的可读标签；布尔不是类型编码（Issue #915）。"""
+	"""平台消息类型编码的可读标签；布尔不是类型编码（Issue #915）。
+
+	缺失与容器类型没有可展示的编码：``f"其他({msg_type})"`` 会把 ``None`` 或
+	Python dict repr 打给真人（Issue #3050）。它们统一按「其他」归一；未知
+	整数编码保留 ``其他(99)``，布尔保留既有口径 ``其他(True)``。
+	"""
 	code = int_code(msg_type)
 	if code is not None:
 		return _MSG_TYPE_MAP.get(code, f"其他({code})")
+	if msg_type is None or isinstance(msg_type, (dict, list, tuple, set)):
+		return "其他"
 	return f"其他({msg_type})"
 
 
