@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `favorites list` 不再把超大页码造成的本地整数溢出兜成可重试的 `NETWORK_ERROR`：`--page` 与信封分页页码都按可信上限钳制，翻页提示只在可前进时生成（Issue #3032）。
+
 ## [3.9.8] - 2026-11-27
 
 ### Fixed
