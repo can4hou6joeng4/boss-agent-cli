@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-11-27
+
 ### Added
 
 - `boss schema --format mcp-tools` 导出的每个工具补充 `annotations.readOnlyHint`，与运行时 `tools/list` 共用同一份只读白名单与判定，离线注册工具定义时也能区分只读与写入（Issue #2997）。
