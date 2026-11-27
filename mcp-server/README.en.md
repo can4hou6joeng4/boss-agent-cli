@@ -59,7 +59,7 @@ The envelope's `hints.next_actions` contains follow-up CLI commands, which canno
 
 ### Tool annotations
 
-`tools/list` attaches MCP `ToolAnnotations` to every tool: statically read-only tools (such as `boss_schema`, `boss_search`, and `boss_resume_show`) carry `readOnlyHint: true` so hosts can auto-approve read-only calls. Tools whose writes depend on parameters stay `false`: action-driven tools (`boss_config` / `boss_hr_jobs` / `boss_wizard`) and tools with local output arguments (`boss_chat` / `boss_export` / `boss_digest` / `boss_stats`). Annotations are host hints only and do not replace the confirmation and error contracts; `destructiveHint` / `idempotentHint` / `openWorldHint` keep their specification defaults.
+`tools/list` attaches MCP `ToolAnnotations` to every tool: statically read-only tools (such as `boss_schema`, `boss_search`, and `boss_resume_show`) carry `readOnlyHint: true` so hosts can auto-approve read-only calls. Tools whose writes depend on parameters stay `false`: action-driven tools (`boss_config` / `boss_hr_jobs` / `boss_wizard`) and tools with local output arguments (`boss_chat` / `boss_export` / `boss_digest` / `boss_stats`). Annotations are host hints only and do not replace the confirmation and error contracts; `destructiveHint` / `idempotentHint` / `openWorldHint` keep their specification defaults. Every tool exported by `boss schema --format mcp-tools` carries the same `annotations.readOnlyHint`, so registering tool definitions offline gets the same read/write distinction.
 
 ### Shared workflow
 

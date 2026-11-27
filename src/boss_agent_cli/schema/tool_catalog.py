@@ -12,6 +12,7 @@ from boss_agent_cli.api.endpoints import INDUSTRY_CODES, JOB_TYPE_CODES, SCALE_C
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 from boss_agent_cli.schema.availability import availability_note, inject_availability
 from boss_agent_cli.schema.data import SCHEMA_DATA
+from boss_agent_cli.schema.tool_policy import static_read_only
 
 
 @dataclass(frozen=True)
@@ -95,10 +96,16 @@ def native_crawl_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 	`boss schema` 的 `commands.crawl.mcp_tools` 与 `--format mcp-tools` 导出的是
 	同一批工具：内嵌版本先前缺少 `additionalProperties: false` 与可用性说明，
-	只读 native 的调用方会拿到一份更宽松的契约。这里复用同一份规范化逻辑。
+	只读 native 的调用方会拿到一份更宽松的契约。这里复用同一份规范化逻辑，
+	只读注解也取自同一份 ``tool_policy`` 判定（Issue #2997）。
 	"""
 	return [
-		{"name": tool.name, "description": tool.description, "inputSchema": tool.input_schema}
+		{
+			"name": tool.name,
+			"description": tool.description,
+			"inputSchema": tool.input_schema,
+			"annotations": {"readOnlyHint": static_read_only(tool.name, tool.input_schema)},
+		}
 		for tool in build_tool_catalog(data)
 		if tool.name in _CRAWL_TOOL_NAMES
 	]
