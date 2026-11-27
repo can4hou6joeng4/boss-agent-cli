@@ -204,19 +204,29 @@ def _persist_breaker_latch(
 
 	风控 / 预算停止的闩锁写回可能撞上控制锁（``AutomationControlBusy``）。本地
 	写入失败不能掩盖原始异常：调用方必须继续看到 ACCOUNT_RISK / 预算停止，而不是
-	AUTOMATION_BUSY（Issue #1470）。这里只捕获 ``Exception``，中断与
-	``SystemExit`` 仍然照常上抛。
+	AUTOMATION_BUSY（Issue #1470）。闩锁与事件日志必须分别判定：锁闩已成功落盘、
+	仅日志追加失败时，不能把 ``risk_latch_persisted`` 报成 false（Issue #3067）。
+	这里只捕获 ``Exception``，中断与 ``SystemExit`` 仍然照常上抛。
 	"""
+	latch_error: str | None = None
 	try:
 		guard.open_circuit_breaker(code)
+	except Exception as exc:
+		latch_error = f"{type(exc).__name__}: {exc}"
+	try:
 		store.append_event(
 			make_event(platform, "", PlatformAction.SKIP, EventStatus.CIRCUIT_BREAKER_OPEN, 0.0, code)
 		)
 	except Exception as exc:
-		return {
-			"risk_latch_persisted": False,
-			"risk_latch_error": f"{type(exc).__name__}: {exc}",
+		details: dict[str, object] = {
+			"risk_latch_persisted": latch_error is None,
+			"risk_latch_event_error": f"{type(exc).__name__}: {exc}",
 		}
+		if latch_error is not None:
+			details["risk_latch_error"] = latch_error
+		return details
+	if latch_error is not None:
+		return {"risk_latch_persisted": False, "risk_latch_error": latch_error}
 	return None
 
 
