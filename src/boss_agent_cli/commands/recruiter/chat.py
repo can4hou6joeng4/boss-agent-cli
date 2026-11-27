@@ -7,12 +7,12 @@ from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.services.chat_utils import message_list
 from boss_agent_cli.services.recruiter_chat_summary import (
 	clean_unread_by_tab,
 	enrich_friend_summaries,
 	friend_ids_from_items,
 	friend_items,
+	message_items,
 	normalize_last_message,
 	summaries_by_friend,
 	unread_totals,
@@ -70,7 +70,7 @@ def _chat_history_pagination(data: Any) -> dict[str, Any]:
 	平台把 ``hasMore`` 放在响应顶层；页码字段对 ``--max-msg-id`` 不适用，因此
 	这里不返回 ``page``。
 	"""
-	messages = message_list(data)
+	messages = message_items(data)
 	pagination = list_pagination(data, page=1, rows=messages)
 	pagination.pop("page", None)
 	mids = [

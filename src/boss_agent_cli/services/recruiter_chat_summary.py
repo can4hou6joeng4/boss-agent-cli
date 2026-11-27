@@ -55,6 +55,22 @@ def friend_items(data: Any) -> list[dict[str, Any]]:
 	return dict_rows_from(data, "friendList", "result", "list") or []
 
 
+#: 招聘者聊天记录的列表容器：终端渲染与 ``pagination.total`` 共用（Issue #3038）。
+#: 顺序取渲染层原有优先级；``historyMsgList`` 是 ``chat_utils.message_list``
+#: 早已识别的候选，此前只有 total 认它、屏幕不显示。
+MESSAGE_CONTAINER_KEYS = ("messageList", "msgList", "messages", "historyMsgList", "list", "result")
+
+
+def message_items(data: Any) -> list[dict[str, Any]]:
+	"""招聘者聊天记录的实际渲染行：与 ``pagination.total`` 共用同一份提取。
+
+	``hr chatmsg`` 的 total 与终端渲染必须来自同一次提取：只让 total 认
+	``historyMsgList`` 或只让渲染认 ``msgList``，同一份响应就会在屏幕上和分页
+	证据里给出不同的消息数（Issue #3038）。
+	"""
+	return dict_rows_from(data, *MESSAGE_CONTAINER_KEYS) or []
+
+
 def friend_ids_from_items(items: list[dict[str, Any]]) -> list[int]:
 	ids: list[int] = []
 	for item in items:
