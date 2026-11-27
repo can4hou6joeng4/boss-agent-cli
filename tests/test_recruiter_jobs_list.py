@@ -184,7 +184,8 @@ def test_hr_jobs_list_keeps_envelope_when_payload_is_not_a_mapping() -> None:
 		"page": 4,
 		"has_more": None,
 		"has_more_source": "unknown",
-		"total": None,
+		# 顶层列表照常渲染，但非对象元素不成为行：总数是实际渲染的 0 行（Issue #3037）。
+		"total": 0,
 		"total_kind": "returned_page_count",
 		"total_available": None,
 	}

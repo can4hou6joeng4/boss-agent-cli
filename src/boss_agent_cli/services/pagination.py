@@ -107,3 +107,17 @@ def rows_from_first(platform_data: Any, *keys: str) -> list[Any] | None:
 		if isinstance(value, list):
 			return value
 	return None
+
+
+def dict_rows_from(platform_data: Any, *keys: str) -> list[dict[str, Any]] | None:
+	"""按渲染口径取对象行：接受顶层列表，过滤非对象元素。
+
+	``pagination.total`` 声明为 ``returned_page_count``，必须等于终端实际渲染的
+	行数：``null`` 等非对象元素不渲染，平台把载荷换成顶层列表时却照常渲染。
+	命令层与渲染层共用本函数；只统计原始列表长度或只接受对象容器，都会让
+	``total`` 与屏幕上的行数不一致（Issue #3037）。
+	"""
+	value = platform_data if isinstance(platform_data, list) else rows_from_first(platform_data, *keys)
+	if value is None:
+		return None
+	return [item for item in value if isinstance(item, dict)]

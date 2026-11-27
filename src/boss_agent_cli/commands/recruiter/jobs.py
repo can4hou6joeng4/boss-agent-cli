@@ -18,7 +18,7 @@ from boss_agent_cli.display import (
 	render_message_panel,
 	render_next_steps,
 )
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance, rows_from_first
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, dict_rows_from, page_can_advance
 
 
 def _render_job_detail(data: dict[str, Any], *, next_steps: list[str]) -> None:
@@ -50,6 +50,9 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 			handle_platform_error_output(ctx, "recruiter-jobs-list", platform, result, fallback_message="职位列表获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
+		# 与 render_job_list 共用同一份提取口径：非对象元素不渲染、顶层列表照常
+		# 渲染，total 才是本次实际渲染的行数（Issue #3034、#3037）。
+		rows = dict_rows_from(data, "jobList", "items", "list", "data")
 		# 平台把分页事实放在 data.page / hasMore / totalSize 里，信封 pagination
 		# 却一直是 null：Agent 按契约只看 pagination 时既不知道当前页，也没有
 		# 「是否还有下一页」的证据。data 原样保留，避免破坏已有消费方。
@@ -74,7 +77,6 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 			)
 			# 与 render_job_list 共用候选键：平台改用 jobList / items 时 total
 			# 仍与本次实际渲染的行数一致（Issue #3034）。
-			rows = rows_from_first(data, "jobList", "items", "list", "data")
 			row_count = len(rows) if rows is not None else 0
 			pagination: dict[str, Any] = {
 				"page": current_page,
@@ -89,7 +91,8 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 				"page": min(max(page, 1), MAX_TRUSTED_PAGE),
 				"has_more": None,
 				"has_more_source": "unknown",
-				"total": None,
+				# 顶层列表照常渲染，total 必须给出真实行数；其它畸形载荷未知。
+				"total": len(rows) if rows is not None else None,
 				"total_kind": "returned_page_count",
 				"total_available": None,
 			}
