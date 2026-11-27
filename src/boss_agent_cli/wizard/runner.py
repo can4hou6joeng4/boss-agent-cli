@@ -652,10 +652,11 @@ class WorkflowRunner:
 						if write_marker is not None:
 							raise self._unconfirmed_error(exc.code, write_marker) from exc
 						attempt += 1
-						control.raise_if_requested()
-						# 动作明确报告了可以重放的失败：这次尝试在写请求前预先落盘的「结果未知」
-						# 随之作废。留着它，下一次尝试还没发出请求就被终止也会被当成结果未知。
+						# 动作明确报告了可以重放的失败：先撤销这次尝试的写前标记，
+						# 再检查下一次尝试是否允许开始。否则此处截止／停止会把已知的
+						# 平台拒绝误判成结果未知，永久禁止恢复（Issue #3020）。
 						self._store.set_step_error(run_id, step_name, None)
+						control.raise_if_requested()
 						# 动作可能在失败前已保存内部任务绑定；自动重试也要读取最新断点，
 						# 否则 crawl_start 会另建任务并丢开原任务的进度与预算（Issue #972）。
 						persisted = self._store.get_checkpoint(run_id) or {}

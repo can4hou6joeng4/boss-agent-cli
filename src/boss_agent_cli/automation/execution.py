@@ -9,6 +9,7 @@ from typing import Any, Final
 
 from boss_agent_cli.api.browser_client import ChatTabCdpUnreachable, RecruiterChatTabRequired
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.automation.adapters import RecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig
@@ -26,6 +27,7 @@ from boss_agent_cli.automation.models import (
 from boss_agent_cli.automation.reply_ai import apply_reply_strategy
 from boss_agent_cli.automation.safety import SafetyGuard
 from boss_agent_cli.automation.storage import AutomationStateError, AutomationStore, queued_action
+from boss_agent_cli.services.candidate_actions import exception_reports_request_unsent
 
 #: `state.json` 里每个会话的在途动作标记。直接扫描路径没有待执行队列行可以
 #: 提前标记，必须在派发前把「可能已发出」的动作落进 state（Issue #1511）。
@@ -48,6 +50,18 @@ class InflightAction:
 	started_at: str
 	conversation_ref: str
 	message_hash: str
+
+
+def _action_provably_unsent(exc: Exception) -> bool:
+	"""只按写边界证据释放在途标记，复合动作不能按传输异常类型猜测。"""
+	if isinstance(exc, PlatformRiskError):
+		return False
+	if isinstance(exc, (ChatTabCdpUnreachable, RecruiterChatTabRequired, BrowserSourceUnavailable)):
+		return True
+	if isinstance(exc, RequestBudgetExceeded):
+		return exc.details.get("request_sent") is False
+	# 招聘者客户端在写前读取／脚本派发前失败时留下的显式布尔证据（Issue #3019）。
+	return exception_reports_request_unsent(exc)
 
 
 def process_pending(
@@ -267,36 +281,18 @@ def process_pending(
 			status, event_reason = execute_or_dry_run(
 				adapter, guard, decision, ref, dry_run, before_dispatch=before_queue_dispatch
 			)
-		except (ChatTabCdpUnreachable, RecruiterChatTabRequired, BrowserSourceUnavailable):
-			# 这三类异常都表示请求尚未发出（聊天页未就绪 / CDP 端点不可达 / 浏览器
-			# 通道全部不可用）：队列行必须回到 pending，否则下一轮会把一个从未派发
-			# 的动作当成结果未知，转成 verification-required 并打开熔断（Issue #1469）。
-			# 会话级在途标记同样释放（Issue #1514）。
-			if not dry_run:
+		except Exception as exc:
+			# 请求可证明未发出：队列与会话在途标记一起释放。复合动作只认客户端
+			# 的显式证据；其余异常保留 executing（Issues #1469 #1514 #3019）。
+			if not dry_run and _action_provably_unsent(exc):
 				if prior is not None and state is not None:
 					_release_inflight(prior, store, state)
 				actions[index] = _pending_with_status(item, "pending")
 				try:
 					store.write_pending(actions)
 				except Exception:
-					# 还原写盘失败不能掩盖原始的「请求未发出」异常：调用方仍要看到
-					# 真正的失败原因，而不是一条本地写错误；行留在 executing 时下一轮
-					# 仍按结果未知处理，保守但不会重发。
-					pass
-			raise
-		except RequestBudgetExceeded as exc:
-			# 预算 / 时限在动作发出前抛出的停止（details.request_sent=False）可以安全
-			# 恢复 pending；其它异常（含中断与响应风控）请求可能已发出，保守保留
-			# executing，下一轮按结果未知处理（Issue #1245）。
-			if exc.details.get("request_sent") is False:
-				if not dry_run and prior is not None and state is not None:
-					_release_inflight(prior, store, state)
-				actions[index] = _pending_with_status(item, "pending")
-				try:
-					store.write_pending(actions)
-				except Exception:
-					# 与上面的分支同口径：还原写盘失败不能掩盖原始的预算 / 超时
-					# 停止码（Issue #1947）。
+					# 还原写盘失败不能掩盖原始异常；行留在 executing 时下一轮
+					# 仍按结果未知处理，保守但不会重发（Issue #1947）。
 					pass
 			raise
 		next_status = _next_pending_status(status)
@@ -400,20 +396,10 @@ def process_ref(
 			status, event_reason = execute_or_dry_run(
 				adapter, guard, decision, ref, dry_run, before_dispatch=before_scan_dispatch
 			)
-		except (ChatTabCdpUnreachable, RecruiterChatTabRequired, BrowserSourceUnavailable):
-			# 请求尚未发出：释放在途标记再抛出，避免下一轮把从未派发的动作
-			# 转成 verification-required（与队列 #1469 同口径，Issue #1511）。
-			_release_inflight(prior, store, state)
-			raise
-		except RequestBudgetExceeded as exc:
-			# details.request_sent=False 明确表示请求未发出，可以安全释放；
-			# 其它预算停止与超时 / 风控一样保留标记，下一轮按结果未知处理。
-			if exc.details.get("request_sent") is False:
+		except Exception as exc:
+			# 与队列共用写边界证据；未确认的写入、风控与中断保留重放保护。
+			if _action_provably_unsent(exc):
 				_release_inflight(prior, store, state)
-			raise
-		except Exception:
-			# 超时、风控、控制锁冲突等异常都无法证明请求未发出：保留在途标记，
-			# 下一轮转 verification-required 等人工核对，绝不自动重发。
 			raise
 		if status is EventStatus.AUTO_EXECUTED:
 			# 只有真正执行成功才把动作记进对话阶段；dry-run 写 prior 会让下一次
