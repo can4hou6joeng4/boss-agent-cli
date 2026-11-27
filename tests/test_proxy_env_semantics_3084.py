@@ -77,7 +77,7 @@ def test_no_proxy_lowercase_spelling_overrides_uppercase() -> None:
 		"no_proxy": "lower.test",
 	}
 
-	assert resolve_proxy(env)["bypass"] == "lower.test"
+	assert resolve_proxy(env)["bypass"] == "lower.test,*.lower.test"
 	assert "all://*lower.test" in _httpx_bypass_mounts(env)
 	assert "all://*upper.test" not in _httpx_bypass_mounts(env)
 
@@ -100,7 +100,7 @@ def test_no_proxy_uppercase_blank_does_not_clear_lowercase() -> None:
 		"no_proxy": "lower.test",
 	}
 
-	assert resolve_proxy(env)["bypass"] == "lower.test"
+	assert resolve_proxy(env)["bypass"] == "lower.test,*.lower.test"
 	assert "all://*lower.test" in _httpx_bypass_mounts(env)
 
 

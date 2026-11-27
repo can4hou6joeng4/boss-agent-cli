@@ -12,6 +12,7 @@ Chromium also leaks the real address over WebRTC UDP unless told otherwise;
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from typing import Mapping, TypedDict
 from urllib.parse import unquote, urlsplit
@@ -90,10 +91,57 @@ def resolve_proxy(environ: Mapping[str, str] | None = None) -> PlaywrightProxy |
 	if proxy is not None:
 		bypass = proxies.get("no", "").strip()
 		if bypass:
-			# Chromium 的 ``bypass`` 与 httpx 的 NO_PROXY 一样按目标主机生效：
-			# 原样传下去，两个通道对同一域名同时直连（Issue #1869）。
-			proxy["bypass"] = bypass
+			# httpx 把普通域名转成 ``all://*<host>``（根域 + 子域都直连），
+			# Chromium 的 bypass 只按字面主机名匹配，必须显式补子域条目
+			# 才不会让 sub.api.test 仍走代理（Issue #3091）。
+			proxy["bypass"] = _chromium_bypass(bypass)
 	return proxy
+
+
+def _chromium_bypass(no_proxy: str) -> str:
+	"""把 NO_PROXY 条目映射成 Chromium 可识别的 bypass 列表（Issue #3091）。
+
+	httpx 0.28 的 ``all://*api.test`` 让 ``api.test`` 与 ``sub.api.test`` 同时
+	直连；Chromium 的 ``api.test`` 只精确匹配根域。普通域名因此同时输出根域与
+	``*.`` 前缀，IP / localhost / CIDR / ``*`` 保持精确语义（不扩大绕过范围）。
+	"""
+	entries: list[str] = []
+	for raw in no_proxy.split(","):
+		host = raw.strip()
+		if not host:
+			continue
+		if host == "*":
+			return "*"
+		if host.startswith("."):
+			# 前导点本身就表示「子域」，补前缀会生成 `*..host`。
+			entries.append(f"*{host}")
+			continue
+		if "://" in host or _is_exact_bypass(host):
+			# 带 scheme 的条目由 httpx 当 URLPattern 挂载，Chromium 只认主机名，
+			# 保守保留原值；IP / localhost / CIDR 不做子域扩展。
+			entries.append(host)
+		else:
+			entries.extend((host, f"*.{host}"))
+	seen: set[str] = set()
+	unique: list[str] = []
+	for entry in entries:
+		if entry not in seen:
+			seen.add(entry)
+			unique.append(entry)
+	return ",".join(unique)
+
+
+def _is_exact_bypass(host: str) -> bool:
+	"""该条目在 httpx 侧已经按精确主机 / 网段匹配，不需要子域通配。"""
+	if host.lower() == "localhost":
+		return True
+	for parser in (ipaddress.ip_address, ipaddress.ip_network):
+		try:
+			parser(host[1:-1] if host.startswith("[") and host.endswith("]") else host)
+		except ValueError:
+			continue
+		return True
+	return False
 
 
 def _proxy_environment(source: Mapping[str, str]) -> tuple[dict[str, str], dict[str, str]]:

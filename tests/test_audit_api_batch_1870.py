@@ -55,6 +55,7 @@ def test_http_proxy_does_not_proxy_https_traffic() -> None:
 
 @pytest.mark.parametrize("key", ["NO_PROXY", "no_proxy"])
 def test_no_proxy_is_forwarded_as_bypass(key: str) -> None:
+	"""NO_PROXY 条目要映射成 Chromium bypass：普通域名覆盖根域与子域（Issue #3091）。"""
 	proxy = resolve_proxy({
 		"HTTPS_PROXY": "http://proxy.example:3128",
 		key: "www.zhipin.com, .zhipin.com",
@@ -62,7 +63,7 @@ def test_no_proxy_is_forwarded_as_bypass(key: str) -> None:
 
 	assert proxy == {
 		"server": "http://proxy.example:3128",
-		"bypass": "www.zhipin.com, .zhipin.com",
+		"bypass": "www.zhipin.com,*.www.zhipin.com,*.zhipin.com",
 	}
 
 
