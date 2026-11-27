@@ -64,8 +64,8 @@ def test_pipeline_estimate_covers_collector_page_cap() -> None:
 
 
 def test_hr_last_messages_estimate_includes_chat_list_request() -> None:
-	# 无 --friend-id 时命令先取一页沟通列表再分批拉消息（Issue #2025）。
-	assert _estimated_requests(("hr", "last-messages", "--limit", "100")) == 3
+	# 无 --friend-id 时先取一页列表（Issue #2025），混合来源最多三批（Issue #3006）。
+	assert _estimated_requests(("hr", "last-messages", "--limit", "100")) == 4
 	assert (
 		_estimated_requests(("hr", "last-messages", "--limit", "100", "--friend-id", "f1"))
 		== 2

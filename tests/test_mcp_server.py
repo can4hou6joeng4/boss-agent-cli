@@ -1312,7 +1312,7 @@ def test_run_boss_timeout(mock_run):
 		(("export", "golang", "--active", "3day"), 600, 900),
 		(("export", "golang", "--active", "online"), 200, 400),
 		(("export", "golang", "--count", "300"), 600, 900),
-		# hr chat = 1 次好友列表 + ceil(summary_limit/50) 批。
+		# hr chat = 1 次好友列表 + 来源 0/1 分组后的最大摘要批次。
 		(("hr", "chat"), 200, 300),
 		(("hr", "chat", "--summary-limit", "300"), 400, 600),
 		(("hr", "last-messages"), 120, 300),

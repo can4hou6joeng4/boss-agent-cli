@@ -1,7 +1,7 @@
 """招聘者「最近消息」批量查询：CLI `hr last-messages` 与向导 goal 共用。
 
 userLastMsg 批量：前端自己每页最多 100 个；一次塞 300+ 个会被拒（「未知的非法参数」）。
-CDP 模式下请求串行，这里再保守一点：每批 50 个，默认只补前 100 个会话（最多 2 次请求）。
+CDP 模式下请求串行，这里再保守一点：每批 50 个，默认只补前 100 个会话（单来源最多 2 次，混合来源最多 3 次请求）。
 批量切分由调用方负责——平台接口单批最多 100 个 friendId，因此统一走本模块按批串行。
 """
 
@@ -14,6 +14,17 @@ from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
 DEFAULT_SUMMARY_LIMIT = 100
 MAX_SUMMARY_LIMIT = 300
 LAST_MESSAGES_BATCH_SIZE = 50
+
+
+def max_last_messages_requests(count: int, *, grouped_by_source: bool) -> int:
+	"""估算固定条数在默认批次大小下最多需要几次最近消息请求。
+
+	按来源分组时只存在默认来源 0 与来源 1。每个非空组先占一批，剩余
+	条目每满一个批次大小才可能再增加一批；全程整数运算（Issue #3006）。
+	"""
+	count = max(count, 0)
+	groups = min(count, 2 if grouped_by_source else 1)
+	return groups + (count - groups) // LAST_MESSAGES_BATCH_SIZE
 
 
 def as_friend_int(value: Any) -> int | None:

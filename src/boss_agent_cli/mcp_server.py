@@ -41,6 +41,7 @@ from boss_agent_cli.schema.tool_policy import READ_ONLY_TOOL_NAMES as _READ_ONLY
 from boss_agent_cli.schema.tool_policy import static_read_only
 from boss_agent_cli.services.contact_lookup import MAX_FRIEND_LOOKUP_PAGES
 from boss_agent_cli.services.friend_list_pages import MAX_FRIEND_LIST_PAGES
+from boss_agent_cli.services.recruiter_last_messages import max_last_messages_requests
 from boss_agent_cli.search_filters import detail_filter_max_pages, resolve_active_level
 
 # 向后兼容的再导出：这些符号在拆分前属于本模块，`mcp-server/server.py` wrapper
@@ -121,8 +122,6 @@ _REQUEST_MARGIN_SECONDS = 30.0
 _MAX_CLI_TIMEOUT_SECONDS = 900.0
 #: 搜索结果页固定 15 条；详情筛选要逐条请求。
 _SEARCH_PAGE_SIZE = 15
-#: 招聘者聊天摘要 / 最近消息按每批 50 条请求估算。
-_HR_BATCH_SIZE = 50
 #: pipeline / follow-up / digest 聚合好友列表的估算页数上限：与 collector
 #: 的真实翻页上限一致；按 5 页估算会让 8 页以上的账号被提前掐断（Issue #2024）。
 _FRIEND_LIST_ESTIMATE_PAGES = MAX_FRIEND_LIST_PAGES
@@ -511,19 +510,18 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 			summary_limit = _int_option(args, "--summary-limit", _HR_DEFAULT_LIMIT)
 			if summary_limit is None:
 				return None
-			# 1 次好友列表 + 每 50 条摘要一批。整数除法避免超大整数在
-			# 浮点除法时抛 OverflowError（Issue #1612）。
-			batches = -(-max(summary_limit, 0) // _HR_BATCH_SIZE)
+			# 好友列表带 friendSource，分组后各自分批，不能只按总数分页（Issue #3006）。
+			batches = max_last_messages_requests(summary_limit, grouped_by_source=True)
 			return min(1 + batches, _MAX_ESTIMATED_REQUESTS)
 		if subcommand == "last-messages":
 			limit = _int_option(args, "--limit", _HR_DEFAULT_LIMIT)
 			if limit is None or limit < 1:
 				return None
-			# 与 summary-limit 分支同口径：整数分页并封顶（Issue #1612）。
-			batches = -(-limit // _HR_BATCH_SIZE)
-			# 无 --friend-id 时命令先取一页沟通列表再分批拉消息（Issue #2025）。
-			base = 0 if "--friend-id" in _option_region(args) else 1
-			return min(base + batches, _MAX_ESTIMATED_REQUESTS)
+			# 无 --friend-id 时先取列表及来源（Issue #2025），之后可能分成两组。
+			# 显式 ID 没有来源信息，仍是单组；估算共用服务的默认批次大小。
+			from_list = "--friend-id" not in _option_region(args)
+			batches = max_last_messages_requests(limit, grouped_by_source=from_list)
+			return min(int(from_list) + batches, _MAX_ESTIMATED_REQUESTS)
 		return None
 	if command == "watch" and len(args) > 1 and args[1] == "run":
 		# watch run 对保存的搜索应用福利 / 活跃度筛选，逐条查详情；
