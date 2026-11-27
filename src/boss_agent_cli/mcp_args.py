@@ -86,14 +86,15 @@ _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 #: action → 该 action 实际会下发的键（Issue #1493）。
 #: 矩阵之外的键若带非空值，`_build_args` 直接拒绝而不是静默丢弃：越界参数被
 #: 忽略后调用仍会成功，调用方会以为过滤、恢复或写入已经生效。
-#: 键集合以 CLI 为准：wizard 的 --timeout / --max-retries 对四种 action 都可用，
+#: 键集合以 CLI 为准：wizard 的 --timeout 只对 run / resume 生效（status / stop
+#: 在 CLI 入口拒绝，Issue #3013），--max-retries 对四种 action 都可用，
 #: config 的 key 对应 get/set/reset 三个子命令（没有 unset），hr jobs 的 page
 #: 只属于 list、job_id 只属于 online/offline。
 _WIZARD_ACTION_KEYS: dict[str, frozenset[str]] = {
 	"run": frozenset({"action", "role", "platform", "goal", "inputs", "requested_steps", "timeout", "max_retries"}),
 	"resume": frozenset({"action", "run_id", "timeout", "max_retries"}),
-	"status": frozenset({"action", "run_id", "timeout", "max_retries"}),
-	"stop": frozenset({"action", "run_id", "timeout", "max_retries"}),
+	"status": frozenset({"action", "run_id", "max_retries"}),
+	"stop": frozenset({"action", "run_id", "max_retries"}),
 }
 _WIZARD_KEY_USAGE = {
 	"role": "仅用于 action=run",
@@ -102,6 +103,7 @@ _WIZARD_KEY_USAGE = {
 	"inputs": "仅用于 action=run",
 	"requested_steps": "仅用于 action=run",
 	"run_id": "仅用于 action=resume/status/stop",
+	"timeout": "仅用于 action=run/resume",
 }
 _CONFIG_ACTION_KEYS: dict[str, frozenset[str]] = {
 	"list": frozenset({"action"}),

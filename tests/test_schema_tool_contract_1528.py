@@ -159,11 +159,14 @@ def test_wizard_requires_run_id_for_control_actions():
 	schema = _tools()["boss_wizard"].input_schema
 	assert schema["if"]["properties"]["action"]["enum"] == ["resume", "status", "stop"]
 	assert schema["then"]["required"] == ["run_id"]
-	# run 专属参数不得出现在 resume/status/stop（Issue #2795）。
+	# run 专属参数不得出现在 resume/status/stop（Issue #2795）；
+	# timeout 只对 run / resume 生效，控制动作在 else 分支排除（Issue #3013）。
 	assert set(schema["then"]["not"]["anyOf"][0]["required"]) == {"role"}
 	assert {name for branch in schema["then"]["not"]["anyOf"] for name in branch["required"]} == {
 		"role", "platform", "goal", "inputs", "requested_steps",
 	}
+	assert schema["then"]["if"]["properties"]["action"]["const"] == "resume"
+	assert schema["then"]["else"]["not"]["required"] == ["timeout"]
 
 
 def test_ai_jd_mutual_exclusion_rejects_both_sources(tmp_path):

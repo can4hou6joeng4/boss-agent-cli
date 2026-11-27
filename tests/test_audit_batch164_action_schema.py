@@ -131,9 +131,9 @@ _WIZARD_VALID = [
 	{"action": "run", "role": "candidate", "platform": "zhipin", "goal": "search"},
 	{"action": "run", "role": "candidate", "platform": "zhipin", "goal": "search", "inputs": {"a": 1}, "requested_steps": ["s"]},
 	{"action": "status", "run_id": "r"},
-	{"action": "resume", "run_id": "r"},
-	# timeout / max_retries 对四种 action 都可用。
-	{"action": "stop", "run_id": "r", "timeout": 5, "max_retries": 1},
+	{"action": "resume", "run_id": "r", "timeout": 5},
+	# timeout 只对 run / resume 生效；max_retries 对四种 action 都可用（Issue #3013）。
+	{"action": "stop", "run_id": "r", "max_retries": 1},
 ]
 
 _WIZARD_INVALID = [
@@ -141,6 +141,9 @@ _WIZARD_INVALID = [
 	{"action": "status", "run_id": "r", "role": "candidate"},
 	{"action": "stop", "run_id": "r", "inputs": {}},
 	{"action": "status", "run_id": "r", "requested_steps": ["s"]},
+	# status / stop 不执行 --timeout，schema 与 CLI / 映射层一致拒绝（Issue #3013）。
+	{"action": "stop", "run_id": "r", "timeout": 5},
+	{"action": "status", "run_id": "r", "timeout": 5, "max_retries": 1},
 	{"action": "run", "role": "candidate", "platform": "zhipin", "goal": "search", "run_id": "r"},
 ]
 

@@ -208,8 +208,13 @@ def test_mcp_rejects_out_of_range_numbers(
 
 @pytest.mark.parametrize("requested", ["1e308", "3600"])
 def test_mcp_caps_wizard_host_wait(requested: str) -> None:
-	"""宿主等待最多 900s；wizard 自身超时再长也不能让 MCP 近似无界（Issue #1594）。"""
-	assert mcp_server._cli_timeout(("wizard", "--timeout", requested)) == 900.0
+	"""宿主等待最多 900s；wizard 自身超时再长也不能让 MCP 近似无界（Issue #1594）。
+
+	超过上限的请求现在直接拒绝而不是静默截断（Issue #3013）：CLI 仍会按请求值
+	运行，宿主却只等 900s，截断会让调用方拿到与请求不符的终止时间。
+	"""
+	with pytest.raises(ValueError, match="900"):
+		mcp_server._cli_timeout(("wizard", "--timeout", requested))
 	assert mcp_server._cli_timeout(("wizard", "--timeout", "60")) == 65.0
 
 

@@ -596,6 +596,18 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 _MAX_ESTIMATED_REQUESTS = int(_MAX_CLI_TIMEOUT_SECONDS // _REQUEST_BUDGET_SECONDS) + 1
 
 
+def _is_wizard_control_args(args: tuple[str, ...]) -> bool:
+	"""``wizard --status`` / ``--stop`` 不执行 ``--timeout``（Issue #3013）。
+
+	控制动作在进入 runner 前返回，CLI 入口会拒绝该参数；宿主预算必须回落到
+	默认值，不能让一个从未生效的小 timeout 先杀掉本应返回 INVALID_PARAM 的子进程。
+	"""
+	if not args or args[0] != "wizard":
+		return False
+	region = _option_region(args)
+	return "--status" in region or "--stop" in region
+
+
 def _cli_timeout(args: tuple[str, ...]) -> float:
 	# 超时按最坏情况下的平台请求数估算（Issue #1491 / #1492）：
 	#   默认节流 DEFAULT_REQUEST_DELAY = (30.0, 60.0)，高斯均值 45s、上界 60s；
@@ -607,13 +619,24 @@ def _cli_timeout(args: tuple[str, ...]) -> float:
 	#       按 900s 封顶；普通 search 只有 1 次列表请求 → 95s，仍取默认 120s。
 	# A wizard deadline belongs to the child. The host allows bounded extra
 	# time for that child to commit its result/checkpoint and emit the envelope.
-	requested_timeout = _option_value(args, "--timeout") if args and args[0] == "wizard" else None
+	requested_timeout = (
+		_option_value(args, "--timeout")
+		if args and args[0] == "wizard" and not _is_wizard_control_args(args)
+		else None
+	)
 	if requested_timeout is not None:
 		try:
 			requested = float(requested_timeout)
 		except ValueError:
 			return _CLI_TIMEOUT_SECONDS
 		if math.isfinite(requested) and requested > 0:
+			if requested > _MAX_CLI_TIMEOUT_SECONDS:
+				# schema 已声明宿主等待上限；超过时 CLI 仍会按请求值运行，宿主却
+				# 先杀子进程。拒绝比静默截断更可预期（Issue #3013）。
+				raise ValueError(
+					f"timeout 最大为 {_MAX_CLI_TIMEOUT_SECONDS:g} 秒（MCP 宿主等待上限），"
+					f"收到 {requested:g} 秒"
+				)
 			# wizard 子进程自己的 --timeout 没有上限：宿主若按任意大值等待，
 			# 客户端一次超时调用会把 MCP server 挂到近似无界（Issue #1594）。
 			return min(requested + _CHECKPOINT_GRACE_SECONDS, _MAX_CLI_TIMEOUT_SECONDS)
@@ -773,7 +796,7 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 		# envelope_error 会从登记表补齐 recovery_action；本地参数错误未启动子进程，
 		# 不能沿用其它 INVALID_PARAM 来源的「修正参数」笼统文案。
 		estimate_error["error"]["recovery_action"] = (
-			"减小 --summary-limit / --limit / --count 后重试；本次未启动子进程。"
+			"减小 --summary-limit / --limit / --count 或 --timeout 后重试；本次未启动子进程。"
 			"参数提示由 --help 给出，输入未进入 CLI"
 		)
 		return estimate_error
@@ -885,7 +908,7 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 			"INVALID_PARAM",
 			f"参数超出本地估算范围：{exc}",
 			outcome_unknown=False,
-			recovery_action="减小 count / summary-limit 后重试；本次子进程未启动",
+			recovery_action="调整 count / summary-limit / timeout 后重试；本次子进程未启动",
 		)
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
 	# handler 校验工具参数；实际启动前还要覆盖宿主注入的全局选项和可执行文件名。

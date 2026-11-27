@@ -914,6 +914,23 @@ def _run_wizard_command(
 		return
 	if (
 		len(selectors) == 1
+		and selectors[0][0] in {"--status", "--stop"}
+		and timeout_seconds is not None
+	):
+		# status / stop 在进入 runner 前就返回，--timeout 从未被执行；MCP 宿主却
+		# 会把它当作等待子进程的硬预算。本地锁等待期间宿主先杀掉子进程，stop 的
+		# 停止标记可能尚未写入，信封却报 outcome_unknown=true。入口明确拒绝，
+		# 避免同一输入在 CLI 与 MCP 下语义相反（Issue #3013）。
+		_wizard_error(
+			ctx,
+			interactive,
+			code="INVALID_PARAM",
+			message="--timeout 只对 run / resume 生效，--status / --stop 不接受该参数",
+			recovery_action="去掉 --timeout 后重试；--status / --stop 只读取或停止已有任务",
+		)
+		return
+	if (
+		len(selectors) == 1
 		and selectors[0][0] != "--input-json"
 		and not is_utf8_encodable(selectors[0][1])
 	):
@@ -1173,7 +1190,7 @@ def _run_wizard_command(
 	type=click.FloatRange(min=0.001),
 	default=None,
 	callback=_validate_timeout,
-	help="workflow 超时秒数",
+	help="workflow 超时秒数；仅 run / resume 生效，--status / --stop 不接受",
 )
 @click.option("--max-retries", type=click.IntRange(min=0, max=10), default=0, help="可恢复步骤的最大重试次数")
 @click.pass_context

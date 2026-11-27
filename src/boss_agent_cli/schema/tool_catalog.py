@@ -147,10 +147,12 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"timeout": {
 						"type": "number",
 						"minimum": 0.001,
+						"maximum": 900,
 						"default": 120,
 						"description": (
-							"workflow 超时秒数；run / resume 省略时 MCP 宿主按 120 秒设置子进程截止，"
-							"CLI 直接调用不设截止"
+							"workflow 超时秒数（仅 action=run / resume；status / stop 不接受该参数）；"
+							"run / resume 省略时 MCP 宿主按 120 秒设置子进程截止，CLI 直接调用不设截止；"
+							"MCP 宿主等待上限为 900 秒"
 						),
 					},
 					"max_retries": {"type": "integer", "minimum": 0, "maximum": 10, "default": 0, "description": "可恢复步骤的最大重试次数"},
@@ -162,7 +164,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"then": {
 					"required": ["run_id"],
 					# role/platform/goal/inputs/requested_steps 只属于 run（Issue #2795）；
-					# timeout / max_retries 对四种 action 都可用，不加限制。
+					# max_retries 对四种 action 都可用，不加限制。
 					"not": {
 						"anyOf": [
 							{"required": ["role"]},
@@ -172,6 +174,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 							{"required": ["requested_steps"]},
 						]
 					},
+					# timeout 只属于 run / resume：resume 允许，status / stop 在 CLI
+					# 入口会拒绝该参数（Issue #3013），schema 提前声明同一约束。
+					"if": {"properties": {"action": {"const": "resume"}}, "required": ["action"]},
+					"then": {},
+					"else": {"not": {"required": ["timeout"]}},
 				},
 				# run（含省略 action）必须给出 role / platform / goal：否则调用方要连吃
 				# 三次各报一个缺失字段的 INVALID_PARAM 才能拼出合法调用（Issue #1775）。

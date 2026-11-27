@@ -118,6 +118,13 @@ _MANUAL_BOUNDS: dict[str, dict[str, tuple[float | None, float | None]]] = {
 	"boss_show": {"number": (1, None)},
 }
 
+#: MCP 宿主层额外声明的上限，与 CLI 参数范围不同源（Issue #3013）：
+#: ``boss_wizard`` 的 timeout 在 CLI 直接调用时不设上限，MCP 宿主最多等待
+#: 900 秒并在启动前拒绝越界值，schema 的 ``maximum`` 因此只能与宿主上限比较。
+_HOST_ONLY_MAXIMUM: dict[str, dict[str, float]] = {
+	"boss_wizard": {"timeout": 900},
+}
+
 
 def _catalog() -> dict[str, dict[str, Any]]:
 	return {tool.name: tool.input_schema for tool in build_tool_catalog()}
@@ -151,6 +158,9 @@ def test_mcp_numeric_bounds_match_click_params() -> None:
 			# 命令体手工守卫的边界优先；已登记的属性不应同时声明 Click 范围。
 			manual = _MANUAL_BOUNDS.get(tool_name, {}).get(property_name)
 			click_min, click_max = manual if manual is not None else _click_bounds(param)
+			host_max = _HOST_ONLY_MAXIMUM.get(tool_name, {}).get(property_name)
+			if host_max is not None:
+				click_max = host_max
 			for bound, expected, actual in (
 				("minimum", click_min, prop.get("minimum")),
 				("maximum", click_max, prop.get("maximum")),

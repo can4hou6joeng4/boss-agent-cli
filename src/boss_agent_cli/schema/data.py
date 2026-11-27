@@ -116,7 +116,7 @@ SCHEMA_DATA = {
 				},
 				"--status": {"type": "string", "default": None, "description": "查询指定 workflow run_id"},
 				"--stop": {"type": "string", "default": None, "description": "停止指定 workflow run_id"},
-				"--timeout": {"type": "float", "default": None, "minimum": 0.001, "description": "workflow 超时秒数"},
+				"--timeout": {"type": "float", "default": None, "minimum": 0.001, "description": "workflow 超时秒数；仅 --input-json（run）/ --resume 生效，--status / --stop 不接受该参数"},
 				"--max-retries": {"type": "int", "default": 0, "minimum": 0, "maximum": 10, "description": "可恢复步骤的最大重试次数"},
 			},
 		},
