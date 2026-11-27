@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.4 (2026-11-27): wizard control actions now share the MCP host's timeout semantics — --status / --stop no longer accept a --timeout that was never executed, and boss_wizard declares its host timeout cap and rejects out-of-range values before launch (Issue #3013).
+
 v3.9.3 (2026-11-27): MCP host timeouts for recruiter attachment-resume and chat-page actions now cover their fixed internal requests, so accept, download, reply, contact exchange and job-location sends are no longer cut off during pre-submit checks (Issue #3009, #3010).
 
 v3.9.2 (2026-11-27): Recognize sender direction in recruiter message objects so incoming candidate messages do not show send status; include source-grouped summary batches in MCP timeout budgets and document the actual request limits in both languages (Issue #3003, #3006).
