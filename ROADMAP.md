@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.1（2026-11-27）：MCP 中断清理保留已返回的风控终止结果与人工恢复指引，联系人扫描纳入宿主超时预算，直读历史保留单次请求预算（Issue #3000、#3001）。
+
 v3.9.0（2026-11-27）：`boss schema --format mcp-tools` 导出的每个工具补充 `annotations.readOnlyHint`，与运行时 `tools/list` 共用同一份只读判定（Issue #2997）。
 
 v3.8.0（2026-11-27）：MCP `tools/list` 为每个工具补充 `ToolAnnotations.readOnlyHint`，静态只读调用可被宿主自动放行，参数相关写入保持 false（Issue #2993）。
