@@ -88,8 +88,10 @@ def _sample_value(prop: dict[str, Any], name: str = "") -> Any:
 #: 条件校验拒绝。与 mcp_args 的实现独立维护，避免测试跟着实现一起漂移。
 _ACTION_SCOPED_KEYS: dict[str, dict[str, set[str]]] = {
 	"boss_wizard": {
-		"run": {"role", "platform", "goal", "inputs", "requested_steps"},
-		"resume": {"run_id"},
+		# timeout 只对 run / resume 生效（Issue #3013）；status / stop 带该键会被
+		# 映射层与 CLI 入口拒绝，样例不能补上。
+		"run": {"role", "platform", "goal", "inputs", "requested_steps", "timeout"},
+		"resume": {"run_id", "timeout"},
 		"status": {"run_id"},
 		"stop": {"run_id"},
 	},
@@ -105,7 +107,7 @@ _ACTION_SCOPED_KEYS: dict[str, dict[str, set[str]]] = {
 		"offline": {"job_id"},
 	},
 }
-_ACTION_SHARED_KEYS = {"action", "timeout", "max_retries"}
+_ACTION_SHARED_KEYS = {"action", "max_retries"}
 
 #: schema 用 ``not`` 声明互斥的键：按全部 properties 生成的样例必须二选一，
 #: 否则映射层按互斥约束拒绝（Issue #2175），测试会在入口就撞上 ValueError。

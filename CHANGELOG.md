@@ -8,6 +8,8 @@
 
 - MCP `boss_hr_accept_resume` / `boss_hr_download_resume` 的宿主超时覆盖命令内部固定请求：同意附件简历按 3 次（历史、好友详情、同意 POST）、下载按 4 次（再含预览检查与附件下载）估算，`accept-resume --dry-run` 不请求平台，仍用默认 120s（Issue #3009）。
 - MCP `boss_hr_reply` / `boss_hr_exchange` / `boss_hr_request_resume` / `boss_hr_location` 的宿主超时覆盖聊天页动作的固定请求：前三条最坏 7 次（好友详情、动作前历史快照、browser-action 窗口、动作后首次回读，再加首次未命中时的 3 次确认重读；预算与客户端重读常量共用），`hr location` 为 2 次（好友详情、发送工作地点）；`location --dry-run` 不请求平台，`hr resume` 非 `--exchange` 形态仍用默认 120s（Issue #3010）。
+- `boss wizard --status / --stop` 明确拒绝 `--timeout`：这两个控制动作在进入 runner 前返回，此前 CLI 静默忽略该参数，MCP 宿主却把它当作等待预算，stop 可能在停止标记写入前被提前杀掉并报成 `outcome_unknown=true`。MCP 映射层与工具 schema 同步声明该参数仅用于 run / resume，宿主等待回落到默认 120s（Issue #3013）。
+- MCP `boss_wizard` 的 `timeout` 声明宿主等待上限 900 秒；超过上限的取值在启动子进程前以 `INVALID_PARAM` 拒绝，不再静默截断到 900 秒（Issue #3013）。
 
 ## [3.9.2] - 2026-11-27
 
