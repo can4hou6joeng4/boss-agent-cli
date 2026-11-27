@@ -301,6 +301,7 @@ module = [
 	"boss_agent_cli.schema.error_codes",
 	"boss_agent_cli.schema.formats",
 	"boss_agent_cli.schema.tool_catalog",
+	"boss_agent_cli.schema.tool_policy",
 	"boss_agent_cli.services",
 	"boss_agent_cli.services.browser_runtime",
 	"boss_agent_cli.services.candidate_actions",

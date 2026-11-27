@@ -5,6 +5,7 @@ from typing import Any
 
 from boss_agent_cli.output import SchemaParameterPaths, SchemaPath
 from boss_agent_cli.schema.tool_catalog import build_tool_catalog
+from boss_agent_cli.schema.tool_policy import static_read_only
 
 
 #: OpenAI 与 Anthropic 的工具参数 schema 顶层只接受普通 object：带这些组合 /
@@ -56,12 +57,17 @@ def format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
-	"""与运行时 tools/list 共用目录，键名遵循 Model Context Protocol。"""
+	"""与运行时 tools/list 共用目录与只读判定，键名遵循 Model Context Protocol。
+
+	``annotations.readOnlyHint`` 必须与服务器返回逐工具一致：按导出的工具定义
+	离线注册宿主时，同样能拿到静态只读提示（Issue #2997）。
+	"""
 	return [
 		{
 			"name": tool.name,
 			"description": tool.description,
 			"inputSchema": tool.input_schema,
+			"annotations": {"readOnlyHint": static_read_only(tool.name, tool.input_schema)},
 		}
 		for tool in build_tool_catalog(data)
 	]

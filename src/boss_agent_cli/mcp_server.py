@@ -36,6 +36,8 @@ from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
 from boss_agent_cli.output import envelope_error, json_safe_value, serialization_failure_envelope
+from boss_agent_cli.schema.tool_policy import READ_ONLY_TOOL_NAMES as _READ_ONLY_TOOL_NAMES
+from boss_agent_cli.schema.tool_policy import static_read_only
 from boss_agent_cli.services.friend_list_pages import MAX_FRIEND_LIST_PAGES
 from boss_agent_cli.search_filters import detail_filter_max_pages, resolve_active_level
 
@@ -201,57 +203,8 @@ def _configure_boss_invocation(
 	_BOSS_GLOBAL_ARGS = args
 
 
-# 子进程超时 / 取消时，只有明确只读的工具才能声明「可重放」。未列出的工具
-# （包括未来新增的）一律按「可能已产生平台副作用」处理：漏判只读只是保守，
-# 漏判写操作会让 Agent 直接重试一个可能已经生效的动作。
-_READ_ONLY_TOOL_NAMES = frozenset({
-	"boss_status",
-	"boss_doctor",
-	"boss_schema",
-	"boss_search",
-	"boss_recommend",
-	"boss_detail",
-	"boss_show",
-	"boss_history",
-	"boss_chat",
-	"boss_chatmsg",
-	"boss_me",
-	"boss_interviews",
-	"boss_cities",
-	"boss_pipeline",
-	"boss_follow_up",
-	"boss_digest",
-	"boss_stats",
-	"boss_export",
-	"boss_resume_list",
-	"boss_resume_show",
-	"boss_resume_diff",
-	"boss_resume_applications",
-	"boss_watch_list",
-	"boss_preset_list",
-	"boss_shortlist_list",
-	"boss_shortlist_compare",
-	"boss_favorites_list",
-	"boss_crawl_status",
-	"boss_crawl_results",
-	"boss_chat_summary",
-	"boss_agent_stats",
-	"boss_agent_pending",
-	"boss_agent_review",
-	"boss_config",
-	"boss_hr_whoami",
-	"boss_hr_applications",
-	"boss_hr_candidates",
-	"boss_hr_recommendations",
-	"boss_hr_chat",
-	"boss_hr_chatmsg",
-	"boss_hr_last_messages",
-	"boss_hr_resume",
-	"boss_hr_jobs",
-	"boss_hr_jobs_detail",
-	# wizard 只有 status 是纯读取，其余 action 按写操作处理（Issue #2552）。
-	"boss_wizard",
-})
+# 子进程超时 / 取消时，只有 `schema.tool_policy.READ_ONLY_TOOL_NAMES` 里的工具
+# 才能声明「可重放」。白名单与静态只读注解共用同一份规则（Issue #2997）。
 
 #: 工具名整体只读、但个别参数会把调用变成平台写操作。判定必须看参数：
 #: `boss_hr_jobs` 的 `action=online|offline` 会 POST 上线/下线，超时后若按只读
@@ -276,26 +229,14 @@ _ACTION_DIMENSION_TOOL_NAMES = frozenset(
 	tool.name for tool in TOOLS if "action" in tool.input_schema.get("properties", {})
 )
 
-#: 本地输出参数：工具即使只读平台，带这些参数时也会写本机文件，不能标成
-#: ``readOnlyHint=true``。宿主可能对只读调用自动放行，误标会把本地文件写入
-#: 藏进「只读」提示里（Issue #2993）。
-_LOCAL_OUTPUT_ARGUMENT_KEYS = frozenset({"output", "output_file"})
-
-
 def _static_read_only(tool: Tool) -> bool:
 	"""返回工具在所有参数组合下是否都只读（供 MCP ``ToolAnnotations`` 使用）。
 
-	只用于静态注解：``boss_config`` / ``boss_hr_jobs`` / ``boss_wizard`` 的写语义
-	取决于 action，带 ``output`` / ``output_file`` 的工具可能写本地文件，都不能
-	标为只读。动态写判定仍由 ``_tool_may_write`` 按参数负责，两者互不替代。
-	「只读」指不产生平台写入或用户可见的本地状态变更；缓存与可写性探针不计。
+	规则与 ``boss schema --format mcp-tools`` 导出共用
+	``schema.tool_policy.static_read_only``，避免两处注解漂移（Issue #2997）。
+	动态写判定仍由 ``_tool_may_write`` 按参数负责，两者互不替代。
 	"""
-	if tool.name not in _READ_ONLY_TOOL_NAMES:
-		return False
-	if tool.name in _ACTION_DIMENSION_TOOL_NAMES:
-		return False
-	properties = tool.input_schema.get("properties", {})
-	return not (_LOCAL_OUTPUT_ARGUMENT_KEYS & set(properties))
+	return static_read_only(tool.name, tool.input_schema)
 
 
 #: ``tools/list`` 返回带 ``ToolAnnotations`` 的副本：``readOnlyHint`` 规范缺省

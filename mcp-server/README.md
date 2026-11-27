@@ -83,7 +83,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ### 工具注解
 
-`tools/list` 为每个工具附带 MCP `ToolAnnotations`：静态只读工具（如 `boss_schema`、`boss_search`、`boss_resume_show`）标注 `readOnlyHint: true`，供宿主自动放行只读调用；带 `action` 维度（`boss_config` / `boss_hr_jobs` / `boss_wizard`）或本地输出参数（`boss_chat` / `boss_export` / `boss_digest` / `boss_stats`）的工具保持 `false`，避免把参数决定的写入藏进「只读」提示。注解只是宿主提示，不替代工具自身的确认与错误契约；`destructiveHint` / `idempotentHint` / `openWorldHint` 保持规范默认值。
+`tools/list` 为每个工具附带 MCP `ToolAnnotations`：静态只读工具（如 `boss_schema`、`boss_search`、`boss_resume_show`）标注 `readOnlyHint: true`，供宿主自动放行只读调用；带 `action` 维度（`boss_config` / `boss_hr_jobs` / `boss_wizard`）或本地输出参数（`boss_chat` / `boss_export` / `boss_digest` / `boss_stats`）的工具保持 `false`，避免把参数决定的写入藏进「只读」提示。注解只是宿主提示，不替代工具自身的确认与错误契约；`destructiveHint` / `idempotentHint` / `openWorldHint` 保持规范默认值。`boss schema --format mcp-tools` 导出的每个工具带同一份 `annotations.readOnlyHint`，离线注册工具定义时也能按相同规则区分只读与写入。
 
 ### 共享 workflow
 
