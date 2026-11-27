@@ -1511,6 +1511,53 @@ def test_risk_error_is_not_masked_by_control_lock_busy(tmp_path: Path, monkeypat
 	assert "busy" in excinfo.value.details["risk_latch_error"]
 
 
+@pytest.mark.parametrize("failure_code", ["ACCOUNT_RISK", "ENVIRONMENT_RISK", "REQUEST_BUDGET_EXHAUSTED"])
+def test_event_log_failure_keeps_successful_latch_reported(tmp_path: Path, failure_code: str) -> None:
+	"""闩锁已落盘、仅事件日志失败时不能误报闩锁未持久化（Issue #3067）。
+
+	本地日志路径被目录占用是真实可复现的写入失败；此时 stop.json 与 state
+	快照里的 breaker 都已打开，原始预算停止异常仍应保留，只是 details 要准确
+	区分「闩锁已生效」与「日志写失败」。
+	"""
+	from boss_agent_cli.api.client import EnvironmentRiskError
+	from boss_agent_cli.api.request_budget import RequestBudgetExceeded
+
+	error_type = {
+		"ACCOUNT_RISK": AccountRiskError,
+		"ENVIRONMENT_RISK": EnvironmentRiskError,
+		"REQUEST_BUDGET_EXHAUSTED": RequestBudgetExceeded,
+	}[failure_code]
+	original = error_type("offline stop")
+	store = AutomationStore(tmp_path)
+	(store.root / "action-log.jsonl").mkdir()
+
+	class _StoppedAdapter(MockRecruiterAutomationPlatform):
+		def __init__(self) -> None:
+			super().__init__("zhipin", [])
+
+		def ensure_session(self) -> None:
+			raise original
+
+	with pytest.raises(error_type) as excinfo:
+		run_automation_cycle(
+			_StoppedAdapter(),
+			store,
+			AutomationConfig(),
+			platform="zhipin",
+			dry_run=False,
+		)
+
+	assert excinfo.value is original
+	assert excinfo.value.details["risk_latch_persisted"] is True
+	assert "risk_latch_error" not in excinfo.value.details
+	assert "AutomationStateError" in excinfo.value.details["risk_latch_event_error"]
+	assert "action-log" in excinfo.value.details["risk_latch_event_error"]
+	assert store.read_stop()["open"] is True
+	snapshot = AutomationStore.read_state_snapshot(tmp_path)
+	assert snapshot["autonomy"]["circuit_breaker"]["open"] is True
+	assert AutomationStore.stop_reason_for(tmp_path) == failure_code
+
+
 def test_normal_cycle_still_writes_state(tmp_path: Path, monkeypatch) -> None:
 	"""无异常周期仍要执行 finally 的 state 写回（Issue #1470）。
 

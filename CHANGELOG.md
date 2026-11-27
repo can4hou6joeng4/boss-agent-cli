@@ -7,6 +7,7 @@
 ### Fixed
 
 - 共享错误出口的后继命令改为跟随命令族：求职者侧 `exchange` / `mark` / `chat` 即使在 `--role recruiter` 下也给出 `boss chat`，不再被引向招聘者专属的 `hr chat`；招聘者命令仍保留 `hr chat` / `hr chatmsg`（Issue #3065）。
+- 自动化周期停止时分别判定熔断闩锁与事件日志写入：闩锁已成功落盘、仅日志追加失败时 `risk_latch_persisted` 不再误报为 false，原始风控 / 预算异常与本地停止保护保持不变（Issue #3067）。
 
 ## [3.9.14] - 2026-11-27
 
