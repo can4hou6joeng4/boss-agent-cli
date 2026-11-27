@@ -90,3 +90,20 @@ def rows_from(platform_data: Any, key: str) -> list[Any] | None:
 	"""取平台响应里的列表字段；缺失或类型不符时返回 ``None``。"""
 	value = platform_data.get(key) if isinstance(platform_data, dict) else None
 	return value if isinstance(value, list) else None
+
+
+def rows_from_first(platform_data: Any, *keys: str) -> list[Any] | None:
+	"""按优先级取第一个可识别的列表容器；都不是列表时返回 ``None``。
+
+	终端渲染与 ``pagination.total`` 必须共用同一组候选键：只数固定键时，平台把
+	列表换到 ``result`` / ``items`` / ``jobList`` 等替代容器，信封里明明有记录
+	却报 ``total=None`` / ``0``（Issue #3034）。空列表也是可识别容器，命中即返回，
+	不能继续找兄弟键。
+	"""
+	if not isinstance(platform_data, dict):
+		return None
+	for key in keys:
+		value = platform_data.get(key)
+		if isinstance(value, list):
+			return value
+	return None

@@ -18,7 +18,7 @@ from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
 	page_can_advance,
-	rows_from,
+	rows_from_first,
 )
 
 
@@ -45,7 +45,11 @@ def applications_cmd(ctx: click.Context, job_id: str | None, label_id: int, page
 			handle_platform_error_output(ctx, "recruiter-applications", platform, result, fallback_message="投递申请列表获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
-		pagination = list_pagination(data, page=page, rows=rows_from(data, "friendList"))
+		# 与 render_friend_list 共用候选键：平台换用 result / list 容器时，
+		# total 仍是本次实际渲染的行数（Issue #3034）。
+		pagination = list_pagination(
+			data, page=page, rows=rows_from_first(data, "friendList", "result", "list")
+		)
 		next_actions = [
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			hint_command(ctx, "hr chat"),

@@ -32,7 +32,7 @@ from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
 	page_can_advance,
-	rows_from,
+	rows_from_first,
 )
 
 
@@ -64,7 +64,10 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 			handle_platform_error_output(ctx, "recruiter-recommendations", platform, result, fallback_message="推荐牛人获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
-		pagination = list_pagination(data, page=page, rows=rows_from(data, "geekList"))
+		# 与 render_candidate_list 共用候选键，total 是本次实际渲染的行数（Issue #3034）。
+		pagination = list_pagination(
+			data, page=page, rows=rows_from_first(data, "geekList", "items", "list", "result")
+		)
 		next_actions = [
 			hint_command(
 				ctx,

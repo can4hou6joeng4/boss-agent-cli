@@ -7,6 +7,7 @@
 ### Fixed
 
 - `favorites list` 不再把超大页码造成的本地整数溢出兜成可重试的 `NETWORK_ERROR`：`--page` 与信封分页页码都按可信上限钳制，翻页提示只在可前进时生成，原生 schema 与 MCP 工具的数值边界同步（Issue #3032）。
+- `hr applications` / `hr recommendations` / `hr jobs list` 的 `pagination.total` 改为与终端渲染共用同一组列表容器（friendList/result/list、geekList/items/list/result、jobList/items/list/data），平台改用替代容器时不再把实际返回的记录报成 `total=null` / `0`；平台载荷仍原样透传（Issue #3034）。
 
 ## [3.9.8] - 2026-11-27
 
