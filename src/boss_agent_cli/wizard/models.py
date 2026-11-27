@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Mapping
@@ -42,7 +43,8 @@ _MAX_INPUT_DEPTH = 200
 
 
 def ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) -> None:
-	"""递归拒绝 NaN / Infinity（Issue #1883）与孤立代理字符（Issue #2058）。
+	"""递归拒绝 NaN / Infinity（Issue #1883）、孤立代理字符（Issue #2058）
+	与超出解释器位数上限的整数（Issue #3085）。
 
 	``json.loads`` 默认接受 ``NaN`` / ``Infinity``，而 ``nan != nan`` 恒真：
 	含非有限数值的 plan 一旦落库，恢复时永远比对不相等，run 永久不可恢复；
@@ -80,6 +82,18 @@ def ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) -> 
 	elif isinstance(value, (list, tuple)):
 		for index, item in enumerate(value):
 			ensure_storable_inputs(item, f"{path}[{index}]", depth + 1)
+	elif isinstance(value, int) and not isinstance(value, bool):
+		# CPython 限制 int → 十进制字符串的上限，json.dumps 走同一个转换：
+		# 超限整数在这里放行，落库时才抛裸 ValueError（命令层兜成 INTERNAL_ERROR）。
+		# 用同一个 str() 判定（捕获其 ValueError）而非自算位数，保证与落库口径
+		# 完全一致；上限为 0 表示解释器关闭了限制（Issue #3085）。
+		if sys.get_int_max_str_digits():
+			try:
+				str(value)
+			except ValueError:
+				raise WorkflowInputError(
+					f"{path} 的整数超过 {sys.get_int_max_str_digits()} 位，无法落成 JSON"
+				) from None
 	elif value is not None and not isinstance(value, (bool, int, float)):
 		# JSON 原生类型之外的值（bytes / set / Decimal / 自定义对象）无法落到
 		# 断点的 JSON 列：WorkflowStore.create 的 json.dumps 会抛 TypeError，
