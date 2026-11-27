@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.16 (2026-11-28): wizard stop display contract — when `error.code` has drifted in type, an already-persisted `wizard --stop` returns success with the minimal stopped record, while `--status` still rejects the record as corrupt (Issue #3072).
+
 v3.9.15 (2026-11-28): local recovery contract consistency — recovery commands follow the candidate or recruiter command family, while shared wizard and automation entries retain their runtime role; an event-log failure preserves the successful stop-latch persistence status and reports the log error separately; cached search pagination totals are recomputed from the returned page (Issues #3065, #3067, #3069).
 
 v3.9.14 (2026-11-27): recovery-hint role consistency — wizard / MCP recruiter write actions now include `--role recruiter` in `agent run --resume` when the stop latch is open, and the TTY failure panel uses the action's full recovery text instead of dropping the role under the default candidate profile (Issues #3061, #3063).
