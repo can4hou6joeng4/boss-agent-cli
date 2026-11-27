@@ -7,6 +7,7 @@
 ### Fixed
 
 - MCP `boss_hr_accept_resume` / `boss_hr_download_resume` 的宿主超时覆盖命令内部固定请求：同意附件简历按 3 次（历史、好友详情、同意 POST）、下载按 4 次（再含预览检查与附件下载）估算，`accept-resume --dry-run` 不请求平台，仍用默认 120s（Issue #3009）。
+- MCP `boss_hr_reply` / `boss_hr_exchange` / `boss_hr_request_resume` / `boss_hr_location` 的宿主超时覆盖聊天页动作的固定请求：前三条最坏 7 次（好友详情、动作前历史快照、browser-action 窗口、动作后首次回读，再加首次未命中时的 3 次确认重读；预算与客户端重读常量共用），`hr location` 为 2 次（好友详情、发送工作地点）；`location --dry-run` 不请求平台，`hr resume` 非 `--exchange` 形态仍用默认 120s（Issue #3010）。
 
 ## [3.9.2] - 2026-11-27
 
