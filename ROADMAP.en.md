@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.13 (2026-11-27): wizard and recruiter display consistency — crawl panels no longer report running or risk-stopped tasks as completed, export truncation evidence and recovery guidance stay visible, `hr chatmsg` direction shows sender names, and `hr location` / `hr request-resume` breaker recovery commands carry `--role recruiter` (Issues #3053, #3054, #3057, #3058).
+
 v3.9.12 (2026-11-27): terminal display reliability — seconds / implausibly small timestamps no longer render as 1970, numeric `activeTime` no longer prints raw milliseconds, narrow-terminal tables fall back to a vertical layout instead of dropping fields, and chat row indexes / type labels no longer show truncated numbers or Python reprs (Issues #3044, #3045, #3046, #3049, #3050).
 
 v3.9.11 (2026-11-27): export completeness — the `export --welfare` / `--active` search pipeline no longer treats a missing `jobList` as a platform-confirmed empty page, later pages are not silently dropped, and budget exhaustion is reported as truncated (Issue #3042).
