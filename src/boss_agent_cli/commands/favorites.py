@@ -16,6 +16,7 @@ from boss_agent_cli.display import (
 	render_simple_list,
 )
 from boss_agent_cli.services.job_identity import deduplicate_job_result
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, list_pagination, page_can_advance
 
 MAX_FAVORITES_PAGES = 50
 FAVORITES_TAG = 4
@@ -202,7 +203,7 @@ def favorites_group() -> None:
 
 
 @favorites_group.command("list")
-@click.option("--page", default=1, type=click.IntRange(1), show_default=True, help="页码")
+@click.option("--page", default=1, type=click.IntRange(1, MAX_TRUSTED_PAGE), show_default=True, help="页码")
 @click.pass_context
 @handle_auth_errors("favorites-list")
 def favorites_list_cmd(ctx: click.Context, page: int) -> None:
@@ -273,16 +274,12 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 	items = [_redact_for_display(_card_to_shortlist_item(card)) for card in valid_cards]
 
 	# 与 history / recommend 同一口径：缺失 hasMore 时为 null，不伪造成 false。
-	raw_has_more = platform_data.get("hasMore")
-	has_more = raw_has_more if isinstance(raw_has_more, bool) else None
-	pagination = {
-		"page": page,
-		"has_more": has_more,
-		"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
-		"total": len(items),
-		"total_kind": "returned_page_count",
-		"status_counts": status_counts,
-	}
+	# 与其他列表命令同口径：页码钳制、hasMore 只认布尔都由共享分页服务负责，
+	# 4300 位页码加一的字符串化不能把确定性本地错误兜成可重试 NETWORK_ERROR
+	# （Issue #3032）。status_counts 是本命令特有证据，保留在同一 pagination 里。
+	pagination = list_pagination(platform_data, page=page, rows=items)
+	pagination["status_counts"] = status_counts
+	has_more = pagination["has_more"]
 	next_actions = [
 		_hint_command(ctx, "favorites sync"),
 		_hint_command(ctx, "--json shortlist list"),
@@ -293,9 +290,15 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 		"终端表格不显示 security_id / job_id，需要 ID 时加 --json 读取。",
 		"httpx 快速通道只用 job_id，security_id 过期不影响取 JD。",
 	]
-	# 与 history 同一口径：hasMore 为真时才给 --page N+1，否则只会把 Agent 送进空页。
-	if has_more is True:
-		next_actions.append(_hint_command(ctx, f"favorites list --page {page + 1}"))
+	# 与 history 同一口径：hasMore 为真且页码未到上限时才给 --page N+1，否则
+	# 只会把 Agent 送进空页或不可解析的超长页码（Issue #2012、#3032）。
+	if has_more is True and page_can_advance(pagination):
+		next_actions.append(_hint_command(ctx, f"favorites list --page {pagination['page'] + 1}"))
+	elif has_more is True:
+		operator_actions.append(
+			f"已达可信页码上限（--page {MAX_TRUSTED_PAGE}），平台仍报告有更多记录；"
+			"如需继续，请调整筛选条件后重新查询"
+		)
 	if has_more is None:
 		operator_actions.append("平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录")
 	hints = {"next_actions": next_actions, "operator_actions": operator_actions}

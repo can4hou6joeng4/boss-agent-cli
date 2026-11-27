@@ -967,7 +967,7 @@ SCHEMA_DATA = {
 			"options": {
 				"list": {
 				"description": "预览职位收藏单页（不落库）。",
-					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "maximum": 1000000, "description": "页码"},
 				},
 				"sync": {},
 			},
