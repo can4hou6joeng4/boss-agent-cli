@@ -47,7 +47,7 @@ def request_resume_cmd(ctx: click.Context, friend_id: int) -> None:
 	stop = _stop_reason(data_dir)
 	if stop is not None:
 		recoverable, recovery_action = error_contract_for_code("CIRCUIT_BREAKER_OPEN")
-		resume_cmd = hint_command(ctx, "agent run --resume")
+		resume_cmd = hint_command(ctx, "agent run --resume", role="recruiter")
 		handle_error_output(
 			ctx,
 			"recruiter-request-resume",

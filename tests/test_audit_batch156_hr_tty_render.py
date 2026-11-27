@@ -214,8 +214,13 @@ def test_hr_chatmsg_renders_message_rows(
 	assert result.exit_code == 0, result.output or repr(result.exception)
 	assert not result.stdout
 	out = stream.getvalue()
-	for text in ("hr chatmsg", "boss", "geek", "您好，看了您的简历想进一步沟通", "2026-05-12 14:30:00"):
+	for text in ("hr chatmsg", "招聘者", "对方", "您好，看了您的简历想进一步沟通", "2026-05-12 14:30:00"):
 		assert text in out
+	# 平台机器码不是给人看的：方向和信封 from.name 同口径（Issue #3057）。
+	# 恢复命令里的 `boss` 是程序名，只看表格行。
+	table_lines = [line for line in out.splitlines() if "│" in line]
+	assert table_lines
+	assert all("boss" not in line and "geek" not in line for line in table_lines)
 
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
