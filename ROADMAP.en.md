@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.8.0 (2026-11-27): Add `ToolAnnotations.readOnlyHint` to every MCP tool so hosts can auto-approve statically read-only calls while parameter-dependent writes stay false (Issue #2993).
+
 v3.7.0 (2026-11-27): Expose resume export/import/edit as MCP tools so hosts that only speak MCP can complete local resume maintenance (Issue #2991).
 
 v3.6.0 (2026-11-27): Expose resume clone/diff/link/applications as MCP tools so hosts that only speak MCP can manage resume versions (Issue #2988).
