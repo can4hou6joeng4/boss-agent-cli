@@ -828,6 +828,62 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			},
 		),
 		ToolDefinition(
+			name="boss_resume_export",
+			description=(
+				"把本地简历导出为 JSON / HTML / PDF 文件；PDF 需要本机浏览器内核（与 CLI 一致）。"
+				"只读本机简历文件，不访问平台；json 省略 output_file 时在 data 中返回简历 JSON，"
+				"html / pdf 省略时保存到默认导出路径。"
+			),
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "简历名称"},
+					"format": {
+						"type": "string",
+						"enum": ["pdf", "json", "html"],
+						"default": "json",
+						"description": "导出格式；pdf 需要本机安装浏览器内核",
+					},
+					"output_file": {"type": "string", "description": "输出文件路径（不指定则保存到默认导出目录）"},
+				},
+				"required": ["name"],
+			},
+		),
+		ToolDefinition(
+			name="boss_resume_import",
+			description=(
+				"从 JSON 文件导入本地简历；force=true 覆盖同名简历并丢弃本地已有编辑。"
+				"只写本机文件，不访问平台。"
+			),
+			input_schema={
+				"type": "object",
+				"properties": {
+					"file_path": {"type": "string", "minLength": 1, "description": "要导入的 JSON 文件路径"},
+					"force": {"type": "boolean", "default": False, "description": "覆盖同名简历"},
+				},
+				"required": ["file_path"],
+			},
+		),
+		ToolDefinition(
+			name="boss_resume_edit",
+			description=(
+				"编辑本地简历的一个文本叶子字段（如 title、personal_info.layout）；"
+				"字段路径与取值由 CLI 校验。只写本机文件，不访问平台。"
+			),
+			input_schema={
+				"type": "object",
+				"properties": {
+					"name": {"type": "string", "minLength": 1, "description": "简历名称"},
+					"field": {"type": "string", "minLength": 1, "description": "字段路径（如 title、personal_info.layout）"},
+					"value": {
+						"type": "string",
+						"description": "新值；MCP 侧必须非空，清空字段请使用 CLI 的 resume edit --value \"\"",
+					},
+				},
+				"required": ["name", "field", "value"],
+			},
+		),
+		ToolDefinition(
 			name="boss_ai_analyze_jd",
 			description="分析职位描述并评估简历匹配度，输出匹配分数和差距分析",
 			input_schema={

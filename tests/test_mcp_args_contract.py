@@ -357,6 +357,15 @@ _LOCAL_SINGLE_COMMAND_TOOLS = {
 	"boss_resume_diff": (resume_cmd_module.resume_diff_cmd, {}, set()),
 	"boss_resume_link": (resume_cmd_module.resume_link_cmd, {}, set()),
 	"boss_resume_applications": (resume_cmd_module.resume_applications_cmd, {}, set()),
+	# 简历导出 / 导入 / 字段编辑（Issue #2991）：CLI 选项名 fmt / output_path
+	# 在 MCP 侧与既有导出工具统一为 format / output_file。
+	"boss_resume_export": (
+		resume_cmd_module.resume_export_cmd,
+		{"fmt": "format", "output_path": "output_file"},
+		set(),
+	),
+	"boss_resume_import": (resume_cmd_module.resume_import_cmd, {}, set()),
+	"boss_resume_edit": (resume_cmd_module.resume_edit_cmd, {}, set()),
 	"boss_shortlist_annotate": (
 		shortlist_cmd_module.shortlist_annotate_cmd,
 		{"add_tag": "add_tags", "remove_tag": "remove_tags"},
