@@ -18,9 +18,9 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
+	dict_rows_from,
 	list_pagination,
 	page_can_advance,
-	rows_from,
 )
 from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 
@@ -88,7 +88,10 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 			handle_platform_error_output(ctx, "recruiter-candidates", platform, result, fallback_message="候选人搜索失败")
 			return
 		data = platform.unwrap_data(result) or {}
-		pagination = list_pagination(data, page=page, rows=rows_from(data, "geekList"))
+		# 与 render_candidate_list 共用同一组容器键与元素过滤（Issue #3037）。
+		pagination = list_pagination(
+			data, page=page, rows=dict_rows_from(data, "geekList", "items", "list", "result")
+		)
 		next_actions = [
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			hint_command(ctx, "hr chat"),

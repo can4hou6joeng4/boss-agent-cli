@@ -16,9 +16,9 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
+	dict_rows_from,
 	list_pagination,
 	page_can_advance,
-	rows_from_first,
 )
 
 
@@ -45,10 +45,10 @@ def applications_cmd(ctx: click.Context, job_id: str | None, label_id: int, page
 			handle_platform_error_output(ctx, "recruiter-applications", platform, result, fallback_message="投递申请列表获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
-		# 与 render_friend_list 共用候选键：平台换用 result / list 容器时，
-		# total 仍是本次实际渲染的行数（Issue #3034）。
+		# 与 render_friend_list 共用同一份提取口径：非对象元素不渲染、顶层列表
+		# 照常渲染，total 才是本次实际渲染的行数（Issue #3034、#3037）。
 		pagination = list_pagination(
-			data, page=page, rows=rows_from_first(data, "friendList", "result", "list")
+			data, page=page, rows=dict_rows_from(data, "friendList", "result", "list")
 		)
 		next_actions = [
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),

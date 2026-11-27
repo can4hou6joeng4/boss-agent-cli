@@ -10,13 +10,13 @@ import math
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS, message_text_value, safe_local_time
+from boss_agent_cli.services.pagination import dict_rows_from
 from boss_agent_cli.services.recruiter_last_messages import (
 	DEFAULT_SUMMARY_LIMIT,
 	MAX_SUMMARY_LIMIT,
 	fetch_last_messages,
 	friend_id_for,
 	friend_sources,
-	list_dict_items,
 )
 
 RECRUITER_MSG_STATUS_LABELS = {0: "发送中", **MSG_STATUS_LABELS}
@@ -51,15 +51,8 @@ def format_chat_time(value: Any) -> str | None:
 
 
 def friend_items(data: Any) -> list[dict[str, Any]]:
-	if isinstance(data, list):
-		return list_dict_items(data)
-	if not isinstance(data, dict):
-		return []
-	for key in ("friendList", "result", "list"):
-		value = data.get(key)
-		if isinstance(value, list):
-			return list_dict_items(value)
-	return []
+	"""沟通列表的实际渲染行：与 ``pagination.total`` 共用同一份提取口径。"""
+	return dict_rows_from(data, "friendList", "result", "list") or []
 
 
 def friend_ids_from_items(items: list[dict[str, Any]]) -> list[int]:
