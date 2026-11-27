@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.5] - 2026-11-27
+
 ### Fixed
 
 - wizard 的 `recruiter_resume` / `recruiter_reply` 在构造平台与写标记落盘之前拒绝无法按 UTF-8 编码的标识 / 消息文本：此前孤立代理项会让客户端在发出请求前抛错，但「结果未知」标记已写入，runner 把确定未发出的请求报成 `NETWORK_ERROR` 并禁止 `--resume` 重放（Issue #3017）。
