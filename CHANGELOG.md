@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 招聘者摘要补齐 `from/to.uid` 消息对象的发送方向识别，候选人来信不再误标为“发送中”；`hr chat`、`hr last-messages` 与 communication 向导共用修复，保留已有方向字段优先级与发出消息状态（Issue #3003）。
+
 ## [3.9.1] - 2026-11-27
 
 ### Fixed
