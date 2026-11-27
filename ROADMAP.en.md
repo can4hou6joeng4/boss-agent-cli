@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.9 (2026-11-27): pagination evidence completed — `favorites list` clamps oversized pages to the trusted limit instead of reporting a local integer overflow as a retryable network error (Issue #3032); recruiter applications now derive `pagination.total` from the same containers as the rendered rows, so alternate payload containers no longer undercount (Issue #3034).
+
 v3.9.8 (2026-11-27): test isolation completed — doctor tests now run against an isolated data directory, so the local gate no longer false-reds on machines that carry a risk lock from a previous platform risk hit (Issue #3027); the test session now isolates HOME to a temporary directory, so CLI tests without `--data-dir` no longer write the real `~/.boss-agent` (Issue #3028).
 
 v3.9.7 (2026-11-27): attachment-resume commands classify deterministic pre-write read failures; an acceptance request that was provably never sent no longer reports an unknown outcome, and download parse failures or parameter 4xx responses no longer invite unbounded retries (Issue #3024).
