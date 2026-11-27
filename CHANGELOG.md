@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-11-27
+
 ### Added
 
 - MCP 工具目录新增 `boss_resume_export`、`boss_resume_import`、`boss_resume_edit`：仅使用 MCP 的宿主可以导出简历文件、从 JSON 导入简历并编辑文本字段；三个入口都只操作本机，`import --force` 会丢弃本地已有编辑，`export` 的 `pdf` 格式需要本机浏览器内核，中断恢复指引先核对本地文件，不产生平台写入（Issue #2991）。
