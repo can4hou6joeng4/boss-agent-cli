@@ -206,11 +206,18 @@ def _message_text(msg: dict[str, Any], body: dict[str, Any]) -> str:
 
 
 def _first_present(primary: dict[str, Any], secondary: dict[str, Any], keys: tuple[str, ...]) -> Any:
+	"""按 ``primary`` → ``secondary``、键顺序取第一个可用标识。
+
+	只认非空字符串：``0`` / ``False`` / ``[]`` / ``{}`` / NaN 都「在场」，
+	旧实现 ``value not in (None, "")`` 会直接返回它们并遮蔽 body 里的合法
+	回退；``chatmsg --raw`` 的成功信封会给出不能用于下游命令的标识
+	（Issue #3075）。与 ``friend_security_id`` 同口径。
+	"""
 	for source in (primary, secondary):
 		for key in keys:
 			value = source.get(key)
-			if value not in (None, ""):
-				return value
+			if isinstance(value, str) and value.strip():
+				return value.strip()
 	return None
 
 

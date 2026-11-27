@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `chat` 与 `chatmsg --raw` 的联系人标识 / 展示字段按可用类型归一：`name` / `title` / `brand_name` / `last_msg` / `last_time` 只接受非空字符串，`uid` / `security_id` / `job_id` 拒绝容器 / 布尔 / falsy 漂移值并继续读合法回退；CSV 的 `unread` 与 Markdown / HTML 共用同一归一，`initiated_by` 为 `null` 时按「未知」分组（Issue #3075）。
+
 ## [3.9.16] - 2026-11-28
 
 ### Fixed

@@ -4,6 +4,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
@@ -19,6 +20,10 @@ from boss_agent_cli.services.chat_utils import (
 	chat_cutoff_ts, contact_identity, int_code, matches_chat_filters, relation_text,
 	safe_local_time, sanitize_csv_cell, escape_md_cell,
 )
+from boss_agent_cli.services.contact_lookup import (
+	friend_display_name,
+	friend_security_id,
+)
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
 # 向后兼容别名（旧测试引用 chat._sanitize_csv_cell 等）
@@ -28,6 +33,34 @@ _MSG_STATUS_LABELS = MSG_STATUS_LABELS
 _GROUP_ORDER = ["对方主动", "我主动", "投递"]
 _sanitize_csv_cell = sanitize_csv_cell
 _escape_md_cell = escape_md_cell
+
+
+def _friend_uid_value(item: dict[str, Any]) -> str | int:
+	"""联系人 uid：非空字符串或可安全字符串化的整数（Issue #3075）。
+
+	既有信封对整数 uid 原样输出（平台与历史快照都有整数形态），这里保留原
+	类型；bool / 容器 / 浮点 / 超长整数按缺失（``""``），与 ``stable_uid``
+	同口径，避免不同联系人共用 ``"True"`` / ``"{}"`` 这类身份。
+	"""
+	value = item.get("uid")
+	if isinstance(value, str):
+		return value if value.strip() else ""
+	if isinstance(value, int) and not isinstance(value, bool):
+		return value if value and safe_text(value) else ""
+	return ""
+
+
+def _friend_text(item: dict[str, Any], key: str, default: str = "-") -> str:
+	"""联系人展示字段只认非空字符串（Issue #3075）。
+
+	``item.get(key) or default`` 会把容器 / 布尔 / ``null`` 原样写进成功信封，
+	``.get(key, default)`` 只在键缺失时生效。漂移值按缺失处理，与
+	``friend_display_name`` / ``friend_security_id`` 同口径。
+	"""
+	value = item.get(key)
+	if isinstance(value, str) and value.strip():
+		return value
+	return default
 
 
 @click.command("chat")
@@ -133,7 +166,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			if last_ts:
 				last_time_str = _format_ts(last_ts)
 			else:
-				last_time_str = item.get("lastTime", "-")
+				last_time_str = _friend_text(item, "lastTime")
 			# lastMessageInfo 是对象；平台字段漂移成非空字符串 / 数组 / 数字时
 			# `.get` 会抛 AttributeError，状态的缺失语义本就是「未知」，按缺失处理
 			# （Issue #1317）。
@@ -143,19 +176,21 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			message_status = last_message_info.get("status")
 			msg_status_label = _MSG_STATUS_LABELS.get(int_code(message_status), "未知")
 			return {
-				"name": item.get("name") or "-",
-				"title": item.get("title") or "-",
-				"brand_name": item.get("brandName") or "-",
+				"name": friend_display_name(item),
+				"title": _friend_text(item, "title"),
+				"brand_name": _friend_text(item, "brandName"),
 				"initiated_by": relation_text(item.get("relationType")),
-				"last_msg": item.get("lastMsg") or "-",
+				"last_msg": _friend_text(item, "lastMsg"),
 				"last_time": last_time_str,
 				"last_ts": last_ts,
 				"msg_status": msg_status_label,
 				# uid 是跨请求稳定的联系人标识，chatmsg/chat-summary/mark/exchange
 				# 都应优先使用它；security_id 是每请求轮换的令牌，仅作参考。
-				"uid": item.get("uid") or "",
-				"security_id": item.get("securityId") or "",
-				"encrypt_job_id": item.get("encryptJobId") or "",
+				# 两者都只接受可用字符串：容器 / 布尔漂移会让信封给出不可读标识，
+				# 还会让快照身份为空（Issue #3075，与 services.contact_lookup 同口径）。
+				"uid": _friend_uid_value(item),
+				"security_id": friend_security_id(item),
+				"encrypt_job_id": _friend_text(item, "encryptJobId", ""),
 				"unread": int_code(item.get("unreadMsgCount")) or 0,
 			}
 

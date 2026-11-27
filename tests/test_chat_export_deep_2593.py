@@ -134,7 +134,10 @@ def test_chat_export_all_formats_survive_deep_contact_field(tmp_path, fmt):
 	if fmt == "json":
 		rows = json.loads(content)
 		assert len(rows) == 2
-		assert "export_error" in rows[1]
+		# CLI 在 _friend_record 边界就把容器字段归一为 "-"，导出器不必再走
+		# 单条降级；render_export 自身的降级由
+		# test_render_export_json_degrades_only_bad_field 覆盖（Issue #3075）。
+		assert rows[1]["last_msg"] == "-"
 	assert envelope["data"]["diff"]["complete"] is True
 
 
