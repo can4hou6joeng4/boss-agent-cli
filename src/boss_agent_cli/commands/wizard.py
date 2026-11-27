@@ -18,6 +18,7 @@ from boss_agent_cli.display import (
 	escape_markup,
 	handle_error_output,
 	handle_output,
+	recovery_command_for_ctx,
 	shell_argument,
 )
 from boss_agent_cli.services.text_files import is_utf8_encodable
@@ -82,8 +83,8 @@ def _is_interactive(ctx: click.Context) -> bool:
 
 
 def _command_for_ctx(ctx: click.Context) -> Callable[[str], str]:
-	"""向导 TTY 恢复文案里的命令要定位本次运行的数据目录与平台（Issue #1090）。"""
-	return lambda command: boss_command_for_ctx(ctx, command, include_data_dir=True)
+	"""向导 TTY 恢复文案要定位本次运行的数据目录，agent 组还要保留角色（Issue #1090 #3063）。"""
+	return lambda command: recovery_command_for_ctx(ctx, command)
 
 
 def _interactive_error(

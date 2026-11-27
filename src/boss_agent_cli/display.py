@@ -301,6 +301,19 @@ def boss_command_for_ctx(
 	return boss_command(command, platform_name=platform_name, data_dir=data_dir, role=role)
 
 
+def recovery_command_for_ctx(ctx: Any, command: str) -> str:
+	"""恢复指引里的命令：agent 组不在 hr 下，招聘者必须显式带角色（Issue #3063）。
+
+	角色来自本次运行的 ctx；没有招聘者上下文时不注入，避免候选人照抄后
+	被切到招聘者那套本地状态。
+	"""
+	role = None
+	if command.startswith("agent ") and ctx and getattr(ctx, "obj", None):
+		if ctx.obj.get("role") == "recruiter":
+			role = "recruiter"
+	return boss_command_for_ctx(ctx, command, include_data_dir=True, role=role)
+
+
 def show_command_for_ctx(ctx: Any, *, index_saved: bool) -> str | None:
 	"""编号查看命令：只有本次列表写入了编号索引时才可用。
 
@@ -428,13 +441,7 @@ def registry_recovery_for_ctx(ctx: Any, text: str) -> str:
 	if ctx is None:
 		return text
 
-	def command_for(command: str) -> str:
-		# agent 命令不在 hr 组下：恢复命令必须显式带角色，否则会读另一套本地
-		# 状态，与同信封的 next_actions 也不一致（Issue #1524）。
-		role = "recruiter" if command.startswith("agent ") else None
-		return boss_command_for_ctx(ctx, command, include_data_dir=True, role=role)
-
-	return rewrite_command_examples(text, _REGISTRY_COMMANDS, command_for)
+	return rewrite_command_examples(text, _REGISTRY_COMMANDS, lambda command: recovery_command_for_ctx(ctx, command))
 
 
 def error_contract_for_code(
