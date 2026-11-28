@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.20] - 2026-11-28
+
 ### Fixed
 
 - MCP 宿主提示的 JSON 信封改为与运行时一致的七键（补上 `schema_version` 与 `command`），并加一条与信封构造同源的契约测试防止再次漂移（Issue #3094）。
