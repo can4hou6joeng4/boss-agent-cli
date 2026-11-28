@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.32（2026-11-28）：含 NUL 的输出路径预检错误保留 `EINVAL`、底层原因与 filename，错误信封不再显示 `[Errno None] None`（Issue #3149）。
+
 v3.9.31（2026-11-28）：显式 `--cdp-url` 下的 stoken 刷新也遵守 `browser-source` 策略，禁止新建 context 的来源在无可复用会话时按来源 fail-closed，不再写回匿名会话生成的 stoken（Issue #3145）。
 
 v3.9.30（2026-11-28）：显式 `browser-source=httpx-only` 的空通道白名单不再被同时传入的 `--cdp-url` 改写，只读请求保持走 httpx，需要页面的能力继续按策略拒绝（Issue #3143）。
