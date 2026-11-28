@@ -7,6 +7,7 @@
 ### Fixed
 
 - `search` 与向导 `candidate_search` 的页码证据改为采信平台响应 / 管线最后扫描页：信封、下一页命令、索引快照与步骤数据同源，缓存命中后也按缓存页码生成提示；旧缓存因 schema 升到 7 自动失效（Issue #3118）。
+- 向导 `candidate_export` 在取满请求条数时统一报 `stop_reason=count_reached`，与顶层 `boss export` 同口径；不再因为平台同时返回 `hasMore=false` 或活跃度提前达标而报 `platform_has_more_false` / `active_target_reached`，`truncated` 仍为 `false`（Issue #3119）。
 
 ## [3.9.23] - 2026-11-28
 
