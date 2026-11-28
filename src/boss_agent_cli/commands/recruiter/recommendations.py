@@ -97,13 +97,39 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str, Any]) -> None:
 	"""保留发送状态并停止工作流，禁止把写失败解释为自动重发。"""
 	check = hint_command(ctx, f"hr chat --job-id {shell_argument(job_id)}")
-	message = "招呼已发送，但本地状态保存失败；停止后续建联" if details.get("sent") else "首次招呼未确认成功；停止发送并核对会话"
+	message = "招呼已发出，但本地状态保存失败；停止后续建联" if details.get("sent") else "首次招呼未确认成功；停止发送并核对会话"
 	if code == "ALREADY_GREETED":
 		message = "该候选人在此职位下已发送过招呼，禁止重复发送"
 	if code == "GREET_LIMIT":
 		message = str(details.get("platform_message") or "该职位的主动沟通权益已用完，本次未发送")
 		action = "停止该职位的新招呼，等待平台权益恢复；不要自动重发本次招呼"
 		hints = {"operator_actions": [action]}
+	elif code == "LOCAL_STATE_WRITE_FAILED":
+		if details.get("sent") is True:
+			# 平台已确认招呼发出，本地记账失败：不能再要求核对「是否已建立会话」。
+			action = f"备份数据目录并检查本地状态；用 {check} 跟进这次已发出的招呼，不要重复发送"
+			hints = {
+				"operator_actions": [message, action],
+				"next_actions": [check],
+			}
+		else:
+			# 请求未发出 / 平台明确拒绝，但 pending 没删掉：给出精确清理入口，
+			# 不用 --all 波及已发送记录与其他动作（Issue #3110）。
+			geek_id = str(details.get("geek_id") or "<geek_id>")
+			preview = hint_command(
+				ctx,
+				f"clean --pending-recruiter-greet {shell_argument(geek_id)} {shell_argument(job_id)} --dry-run",
+			)
+			clean = hint_command(
+				ctx,
+				f"clean --pending-recruiter-greet {shell_argument(geek_id)} {shell_argument(job_id)}",
+			)
+			message = "本次招呼未发出或未成功，但本地预约未释放；不要直接重试"
+			action = f"先备份数据目录，用 {preview} 预览，再用 {clean} 只清理该候选人的 pending 预约"
+			hints = {
+				"operator_actions": [message, "清理后确认该候选人尚未收到招呼，再重新执行"],
+				"next_actions": [preview],
+			}
 	elif code in RISK_ERROR_CONTRACTS:
 		# 风控码（含环境风险与本地风险锁）统一取登记表的停止指引；
 		# 命令自身的「不要重发本次招呼」作为操作者补充，不覆盖机器可读的 next_actions。
@@ -122,12 +148,35 @@ def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str
 	)
 
 
-def _release_unsent_reservation(cache: CacheStore, geek_id: str, job_id: str) -> None:
-	"""撤销确定未发出请求的预约；撤销失败保留 pending（安全侧），不掩盖原始停止原因。"""
+def _release_unsent_reservation(
+	ctx: click.Context, cache: CacheStore, geek_id: str, job_id: str, *, cause_code: str
+) -> bool:
+	"""撤销确定未发出请求的预约；释放失败时暴露本地状态错误（Issue #3110）。
+
+	pending 没有 TTL；吞掉释放失败会让一次瞬态预算 / 通道故障把候选人永久锁成
+	「结果未知」。这里按 candidate 侧 #2315/#2944/#2971 的语义收口：请求未产生
+	平台记录，但预约仍在，必须给不可重试的恢复指引。
+	"""
 	try:
 		cache.release_recruiter_greet(geek_id, job_id)
-	except Exception:
-		pass
+		return True
+	except Exception as exc:
+		# 请求已经证明没有发出，但 pending 仍在：以不可重试的本地状态错误收口，
+		# 恢复指引只清这一行预约，不替操作者做批量删除或直接重发（Issue #3110）。
+		_send_error(
+			ctx, code="LOCAL_STATE_WRITE_FAILED", job_id=job_id,
+			details={
+				"geek_id": geek_id,
+				"job_id": job_id,
+				"sent": False,
+				"request_sent": False,
+				"recorded": False,
+				"outcome_unknown": False,
+				"cause_code": cause_code,
+				"release_error": type(exc).__name__,
+			},
+		)
+		return False
 
 
 @click.command("greet")
@@ -234,10 +283,13 @@ def greet_cmd(
 			# AccountRiskError 平级，只捕账号风控会把环境风控误报成结果未知。
 			_send_error(ctx, code=exc.code, job_id=job_id, details=data)
 			return
-		except BrowserSourceUnavailable:
+		except BrowserSourceUnavailable as exc:
 			# 通道全部不可用意味着请求从未发出：撤销预约后交给装饰器按来源政策输出指引；
 			# 保留 pending 会让修正通道后的重试被误判成「结果未知」。
-			_release_unsent_reservation(cache, geek_id, job_id)
+			if not _release_unsent_reservation(
+				ctx, cache, geek_id, job_id, cause_code=exc.code
+			):
+				return
 			raise
 		except TokenRefreshFailed:
 			_send_error(ctx, code="TOKEN_REFRESH_FAILED", job_id=job_id, details=data)
@@ -245,17 +297,24 @@ def greet_cmd(
 		except (AuthRequired, RecruiterAuthError):
 			_send_error(ctx, code="AUTH_REQUIRED", job_id=job_id, details=data)
 			return
-		except RequestBudgetExceeded:
+		except RequestBudgetExceeded as exc:
 			# 预算/时限只在调度前抛出（request_sent=False）：请求没有发出，撤销预约，
 			# 否则一次瞬态预算耗尽就会把该候选人永久锁成「结果未知」。停止契约由装饰器输出。
-			_release_unsent_reservation(cache, geek_id, job_id)
+			if not _release_unsent_reservation(
+				ctx, cache, geek_id, job_id, cause_code=exc.code
+			):
+				return
 			raise
 		except Exception as exc:
 			# 连接 / 代理 / 协议错误与编码失败都证明请求未发出：释放预约后交给
 			# 装饰器按 NETWORK_ERROR / INVALID_PARAM 收口，不能永久挡住重试
 			# （Issue #2596）。其余异常仍按不可逆写入的结果未知处理。
 			if candidate_action_provably_unsent(exc):
-				_release_unsent_reservation(cache, geek_id, job_id)
+				if not _release_unsent_reservation(
+					ctx, cache, geek_id, job_id,
+					cause_code=getattr(exc, "code", type(exc).__name__),
+				):
+					return
 				raise
 			_send_error(ctx, code="GREET_RESULT_UNKNOWN", job_id=job_id, details=data)
 			return
@@ -270,16 +329,32 @@ def greet_cmd(
 				data["sent"] = False
 				try:
 					cache.record_recruiter_greet(geek_id, job_id, status="quota_limited")
-				except Exception:
-					# 即使记账失败也保留平台明确拒绝的事实；原 pending 仍阻止重发。
-					pass
+				except Exception as exc:
+					# 平台明确拒绝，但 quota_limited 没记上：下一次调用会被残留
+					# pending 拦成「结果未知」。与请求未发出的释放失败同口径收口。
+					_send_error(
+						ctx, code="LOCAL_STATE_WRITE_FAILED", job_id=job_id,
+						details={
+							**data, "geek_id": geek_id, "request_sent": False,
+							"recorded": False, "outcome_unknown": False,
+							"cause_code": code, "record_error": type(exc).__name__,
+						},
+					)
+					return
 			_send_error(ctx, code=code if code != "UNKNOWN" else "GREET_RESULT_UNKNOWN", job_id=job_id, details=data)
 			return
 		data["sent"] = True
 		try:
 			cache.record_recruiter_greet(geek_id, job_id)
-		except Exception:
-			_send_error(ctx, code="GREET_RESULT_UNKNOWN", job_id=job_id, details=data)
+		except Exception as exc:
+			# 平台已确认发出，只是本地记账失败：不是「结果未知」，禁止重发。
+			_send_error(
+				ctx, code="LOCAL_STATE_WRITE_FAILED", job_id=job_id,
+				details={
+					**data, "geek_id": geek_id, "recorded": False,
+					"outcome_unknown": False, "record_error": type(exc).__name__,
+				},
+			)
 			return
 		# 招呼发出后 Agent 需要回到沟通列表跟进候选人：成功信封原先没有 hints，
 		# 终端也不渲染任何内容，整条链在「已发送」处断掉。

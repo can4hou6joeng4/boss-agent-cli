@@ -1048,6 +1048,14 @@ SCHEMA_DATA = {
 					"default": None,
 					"description": "释放失败信封中的 claim_reference；仅清除对应的本次 greet/apply 预约，其他预约保持不变",
 				},
+				"--pending-recruiter-greet": {
+					"type": "array",
+					"items": {"type": "string", "minLength": 1},
+					"minItems": 2,
+					"maxItems": 2,
+					"default": None,
+					"description": "招聘者招呼释放失败信封中的 geek_id 与 job_id；仅清除该候选人的本次 pending 预约，已发送记录不变",
+				},
 			},
 		},
 		"stats": {

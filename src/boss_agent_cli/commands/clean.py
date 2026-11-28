@@ -18,7 +18,7 @@ from rich.table import Table
 from boss_agent_cli import display
 from boss_agent_cli.api.cdp_risk_lock import lock_paths, read_lock
 from boss_agent_cli.api.request_budget import budget_directory
-from boss_agent_cli.cache.store import CacheDatabaseInvalid, is_cache_busy_error, is_cache_local_io_error
+from boss_agent_cli.cache.store import CacheDatabaseInvalid, _text_key, is_cache_busy_error, is_cache_local_io_error
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_error_output,
@@ -53,6 +53,14 @@ from boss_agent_cli.display import (
 	metavar="REFERENCE",
 	help="按释放失败信封中的 claim_reference 清除该次 greet/apply 预约；不清除其他预约",
 )
+@click.option(
+	"--pending-recruiter-greet",
+	"pending_recruiter_greet",
+	nargs=2,
+	default=None,
+	metavar="GEEK_ID JOB_ID",
+	help="按招聘者招呼信封中的 geek_id/job_id 清除该次 pending 预约；不清除已发送记录",
+)
 @click.pass_context
 def clean_cmd(
 	ctx: click.Context,
@@ -62,6 +70,7 @@ def clean_cmd(
 	days: int,
 	risk_lock: bool,
 	pending_claims: str | None,
+	pending_recruiter_greet: tuple[str, str] | None,
 ) -> None:
 	"""清理过期缓存和临时文件。"""
 	if pending_claims is not None and (
@@ -73,6 +82,22 @@ def clean_cmd(
 			recovery_action="从 LOCAL_STATE_WRITE_FAILED 信封复制完整 claim_reference；不要猜测其他预约的标识",
 		)
 		return
+	if pending_recruiter_greet is not None:
+		geek_id, greet_job_id = pending_recruiter_greet
+		if not geek_id.strip() or not greet_job_id.strip():
+			handle_error_output(
+				ctx, "clean", code="INVALID_PARAM",
+				message="--pending-recruiter-greet 需要完整的 geek_id 和 job_id",
+				recovery_action="从 LOCAL_STATE_WRITE_FAILED 信封复制这两个标识；不要猜测其他候选人的预约",
+			)
+			return
+		if pending_claims is not None:
+			handle_error_output(
+				ctx, "clean", code="INVALID_PARAM",
+				message="一次只清理一种预约：--pending-claims 与 --pending-recruiter-greet 不能同时使用",
+				recovery_action="按信封选择对应的清理选项后重试",
+			)
+			return
 	data_dir = ctx.obj["data_dir"]
 	results: list[dict[str, Any]] = []
 	total_freed = 0
@@ -257,7 +282,17 @@ def clean_cmd(
 			results.append(_clean_result("职位描述缓存", freed, count))
 			total_freed += freed
 
-		# 7) 仅清除释放失败信封指定的预约。每次预约的随机标识独立，旧指引
+		# 7) 招聘者招呼的定向预约清理：表键是 (geek_id, job_id)，没有 claim_reference。
+		# 只删 pending；已发出 / 已拒绝的记录与候选人侧其他动作都保留。
+		if pending_recruiter_greet is not None:
+			current_target = "招聘者招呼预约"
+			freed, count = _clean_pending_recruiter_greet(
+				data_dir, pending_recruiter_greet[0], pending_recruiter_greet[1], dry_run=dry_run
+			)
+			results.append(_clean_result("招聘者招呼预约", freed, count))
+			total_freed += freed
+
+		# 8) 仅清除释放失败信封指定的预约。每次预约的随机标识独立，旧指引
 		# 不能删除新建预约；其他在途 / 结果未知预约与 sent 行始终保留。
 		if pending_claims is not None:
 			current_target = "未完成的动作预约"
@@ -338,6 +373,8 @@ def clean_cmd(
 			clean_args.append("--privacy")
 		if pending_claims is not None:
 			clean_args.extend(("--pending-claims", pending_claims))
+		if pending_recruiter_greet is not None:
+			clean_args.extend(("--pending-recruiter-greet", *pending_recruiter_greet))
 		clean_args.extend(("--days", str(days)))
 		if risk_lock:
 			clean_args.append("--risk-lock")
@@ -954,6 +991,38 @@ def _clean_pending_action_claims(data_dir: Path, reference: str, *, dry_run: boo
 			count = int(row[0])
 		else:
 			cursor = conn.execute(f"DELETE FROM candidate_action_claims WHERE {where}", (reference,))
+			count = cursor.rowcount
+			conn.commit()
+		return count * 100, count
+	finally:
+		conn.close()
+
+
+def _clean_pending_recruiter_greet(
+	data_dir: Path, geek_id: str, job_id: str, *, dry_run: bool
+) -> tuple[int, int]:
+	"""只清除指定候选人与职位的 pending 招呼预约（Issue #3110）。
+
+	招聘者招呼记录用 (geek_id, job_id) 作业务键，没有候选人与职位共用的随机
+	claim_reference。这里按同一对键删除，且只碰 pending：已发出 / 已拒绝的
+	去重记录仍然阻止重复招呼。
+	"""
+	db_path = data_dir / "cache" / "boss_agent.db"
+	if not _cache_db_present(db_path):
+		return 0, 0
+	conn = _open_cache_db(db_path, root=data_dir)
+	try:
+		if not _table_exists(conn, "recruiter_greet_records"):
+			return 0, 0
+		where = "geek_id = ? AND job_id = ? AND status = 'pending'"
+		params = (_text_key(geek_id), _text_key(job_id))
+		if dry_run:
+			row = conn.execute(
+				f"SELECT COUNT(*) FROM recruiter_greet_records WHERE {where}", params
+			).fetchone()
+			count = int(row[0])
+		else:
+			cursor = conn.execute(f"DELETE FROM recruiter_greet_records WHERE {where}", params)
 			count = cursor.rowcount
 			conn.commit()
 		return count * 100, count

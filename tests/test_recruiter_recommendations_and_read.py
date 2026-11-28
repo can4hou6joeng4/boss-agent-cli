@@ -471,10 +471,14 @@ def test_quota_cache_failure_preserves_unsent_and_pending(greeting_args, greetin
 	}
 	with patch("boss_agent_cli.cache.store.CacheStore.record_recruiter_greet", side_effect=OSError("private")):
 		first = CliRunner().invoke(cli, greeting_args + ["--yes"])
-	assert json.loads(first.output)["error"]["details"]["sent"] is False
+	body = json.loads(first.output)
+	assert body["error"]["details"]["sent"] is False
+	# 恢复指引会带上本次 data-dir（macOS 临时目录路径本身含 "private"），
+	# 原始 OSError 文案只能出现在 details 之外的路径字符串里（Issue #3110）。
+	assert "private" not in json.dumps(body["error"]["details"], ensure_ascii=False)
+	assert "private" not in body["error"]["message"]
 	second = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	assert json.loads(second.output)["error"]["code"] == "GREET_RESULT_UNKNOWN"
-	assert "private" not in first.output
 	greeting_platform.start_chat.assert_called_once()
 
 
