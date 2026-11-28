@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.28] - 2026-11-28
+
 ### Fixed
 
 - MCP `boss_config` 的 `set` / `reset` 写中断不再提示核对 checkpoint 与平台实际结果，改为指引先用 `boss_config list` 核对本地配置；不产生平台写入（Issue #3137）。
