@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.34] - 2026-11-28
+
 ### Fixed
 
 - 向导恢复指引统一走命令提示同源：损坏简历名带前导 `-` 时 `resume delete` 经 `--` 保护，缺失 crawl run 时补回本次 `--data-dir` 并保护 run_id（Issue #3155）。

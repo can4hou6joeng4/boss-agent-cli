@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.34（2026-11-28）：向导恢复指引对带前导减号的简历名 / run_id 补 `--` 保护并保留本次 `--data-dir`；简历导出本地写入失败的 `LOCAL_IO_ERROR.details` 保留 errno、`strerror` 与原因（Issue #3155 #3156）。
+
 v3.9.33（2026-11-28）：`chatmsg` 非直读路径的下一页提示把 uid 位置参数放在选项之后并用 `--` 保护前导减号，Agent 可原样重放且保留 `--raw`（Issue #3151）。
 
 v3.9.32（2026-11-28）：含 NUL 的输出路径预检错误保留 `EINVAL`、底层原因与 filename，错误信封不再显示 `[Errno None] None`（Issue #3149）。
