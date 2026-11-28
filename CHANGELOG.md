@@ -7,6 +7,7 @@
 ### Fixed
 
 - `hr greet` 的本地状态边界改为实际结果口径：请求证明未发出但预约释放失败、平台权益拒绝后记账失败、平台确认发出后记账失败，统一返回不可重试 `LOCAL_STATE_WRITE_FAILED`（`replay_safe=false` / 结果已知者 `outcome_unknown=false`），不再静默留下无 TTL 的 pending 或把已发出的招呼报成结果未知；恢复提示改为先备份再用 `clean --pending-recruiter-greet <geek_id> <job_id>` 定向清理该次预约（Issue #3110）。
+- `hr location` 的预约释放失败不再被吞掉：明确未发出的请求（读会话失败、预算 / 通道 / 编码错误、平台明确拒绝）释放失败时返回不可重试 `LOCAL_STATE_WRITE_FAILED`，风控触发的读失败仍保留原风控码并附带本地清理指引；恢复提示先备份再用 `clean --pending-recruiter-location <friend_id>` 只清该会话 pending；已发送后本地记账失败改为结果已知的 `LOCAL_STATE_WRITE_FAILED`，不再用「核对是否已生效」引导重发（Issue #3111）。
 
 ## [3.9.21] - 2026-11-28
 
