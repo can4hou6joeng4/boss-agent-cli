@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `AutomationStore.read_state()` 不再让 `stop.json` 的关闭标记覆盖 `state.json` 里仍打开的熔断；`SafetyGuard` 与 `stop_reason_for()` 结论一致，显式 `resume` 可同时清除两份状态（Issue #3140）。
+
 ## [3.9.28] - 2026-11-28
 
 ### Fixed
