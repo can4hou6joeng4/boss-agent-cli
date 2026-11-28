@@ -12,7 +12,7 @@ from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.services.chat_export import render_export
 from boss_agent_cli.services.friend_list_pages import friend_list_page_observation
 from boss_agent_cli.services.output_path import prepare_output_path
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, list_pagination, page_can_advance
 from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.services.chat_utils import (
@@ -218,8 +218,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			output_friends = [{**all_friends[index], "raw": items[index]} for index in selected_indexes]
 
 
-		raw_has_more = platform_data.get("hasMore")
-		has_more = raw_has_more if isinstance(raw_has_more, bool) else None
+		pagination = list_pagination(platform_data, page=page, rows=friends)
+		has_more = pagination["has_more"]
 		# 首页明确没有下一页，且未在解析时丢失条目，才能证明列表完整（#1914、#2179）。
 		collection_complete = page == 1 and has_more is False and page_items_complete
 
@@ -298,20 +298,9 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				],
 			)
 
-		# --page 一直存在，但此前不从平台响应推导分页事实：Agent 翻页时既不知道
-		# 当前是哪一页，也没有「是否还有下一页」的证据。与 recommend 保持同一套
-		# 保守语义：只有平台返回布尔 hasMore 才据此给出下一页命令。
-		# 请求页钳制到可信上限：MCP / 直接调用可以绕过 Click 的 IntRange，
-		# 而 ``page + 1`` 在 4300 位整数上字符串化会抛 ValueError，被兜成
-		# 可重试的 NETWORK_ERROR（Issue #2542，与 #1824 / #1880 同口径）。
-		current_page = min(max(page, 1), MAX_TRUSTED_PAGE)
-		pagination: dict[str, Any] = {
-			"page": current_page,
-			"has_more": has_more,
-			"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
-			"total": len(friends),
-			"total_kind": "returned_page_count",
-		}
+		# 与 recommend / history / chatmsg 共用分页证据：平台纠正页码时信封、
+		# 下一页命令与 TTY 页码都采用有效页码；无效值回显钳制后的请求页。
+		# ``pagination["page"] + 1`` 必须来自已钳制值，避免超长整数字符串化。
 		next_actions = [
 			boss_command_for_ctx(ctx, "detail <security_id>", include_data_dir=True),
 			boss_command_for_ctx(ctx, "chatmsg <uid>", include_data_dir=True),
