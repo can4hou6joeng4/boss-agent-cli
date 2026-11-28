@@ -319,9 +319,14 @@ _LOCAL_RESUME_IMPORT_INTERRUPT_RECOVERY = (
 _LOCAL_RESUME_EDIT_INTERRUPT_RECOVERY = (
 	"编辑已中断；本地简历可能已保存新值。先用 boss_resume_show 核对，再决定是否重试；不产生平台写入"
 )
+_LOCAL_CONFIG_INTERRUPT_RECOVERY = (
+	"配置写入已中断；本地配置可能已部分更新。先运行 boss_config list 核对当前值，再决定是否重试；不产生平台写入"
+)
 
 
 def _write_interrupt_recovery(args: tuple[str, ...]) -> str:
+	if args and args[0] == "config":
+		return _LOCAL_CONFIG_INTERRUPT_RECOVERY
 	if args[:2] == ("resume", "init"):
 		return _LOCAL_RESUME_INIT_INTERRUPT_RECOVERY
 	if args[:2] == ("resume", "delete"):
