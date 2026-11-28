@@ -131,9 +131,12 @@ def test_chat_pagination_evidence(module, name, payload, expected, next_page, tm
 	}
 	next_pages = [action for action in parsed["hints"]["next_actions"] if "--page" in action]
 	if has_more is True:
-		assert shlex.split(next_pages[0]) == _hinted_args(
-			tmp_path, name, "10001", "--page", str(next_page), "--count", "20",
+		parts = (
+			("--page", str(next_page), "--count", "20", "10001")
+			if name == "chatmsg"
+			else ("10001", "--page", str(next_page), "--count", "20")
 		)
+		assert shlex.split(next_pages[0]) == _hinted_args(tmp_path, name, *parts)
 	else:
 		assert next_pages == []
 	if has_more is None:
@@ -166,9 +169,9 @@ def test_chat_next_page_action_is_executable(module, name, tmp_path):
 		)
 		assert first.exit_code == 0, first.output
 		actions = [a for a in json.loads(first.output)["hints"]["next_actions"] if "--page" in a]
-		assert shlex.split(actions[0]) == _hinted_args(
-			tmp_path, name, "10001", "--page", "4", "--count", "7",
-		)
+		# chatmsg 的位置参数必须放在选项之后，前导 '-' 才可能被 '--' 保护。
+		expected = ("--page", "4", "--count", "7", "10001") if name == "chatmsg" else ("10001", "--page", "4", "--count", "7")
+		assert shlex.split(actions[0]) == _hinted_args(tmp_path, name, *expected)
 
 		# 提示自带数据目录，直接去掉开头的 boss 即可执行。
 		second = runner.invoke(cli, shlex.split(actions[0])[1:])
@@ -205,11 +208,18 @@ def test_chatmsg_next_page_action_keeps_raw(tmp_path):
 	assert result.exit_code == 0, result.output
 	actions = [a for a in json.loads(result.output)["hints"]["next_actions"] if "--page" in a]
 	assert shlex.split(actions[0]) == _hinted_args(
-		tmp_path, "chatmsg", "10001", "--page", "3", "--count", "9", "--raw",
+		tmp_path, "chatmsg", "--page", "3", "--count", "9", "--raw", "10001",
 	)
 
 	# 提示自带数据目录与 --raw，直接去掉开头的 boss 即可执行并保留保真字段。
-	replay = CliRunner().invoke(cli, [*shlex.split(actions[0])[1:], "--help"])
+	with patch("boss_agent_cli.commands.chatmsg.get_platform_instance") as platform_cls, \
+			patch("boss_agent_cli.commands.chatmsg.AuthManager"):
+		client = _ctx_mock(platform_cls)
+		client.friend_list.return_value = _friend_list_response([_friend_item()])
+		client.chat_history.return_value = {"code": 0, "zpData": {
+			"messages": [_message()], "hasMore": True, "page": 3,
+		}}
+		replay = CliRunner().invoke(cli, shlex.split(actions[0])[1:])
 	assert replay.exit_code == 0, replay.output
 
 
@@ -225,7 +235,7 @@ def test_chatmsg_next_page_action_omits_raw_when_not_requested(tmp_path):
 	assert result.exit_code == 0, result.output
 	actions = [a for a in json.loads(result.output)["hints"]["next_actions"] if "--page" in a]
 	assert shlex.split(actions[0]) == _hinted_args(
-		tmp_path, "chatmsg", "10001", "--page", "2", "--count", "20",
+		tmp_path, "chatmsg", "--page", "2", "--count", "20", "10001",
 	)
 
 
