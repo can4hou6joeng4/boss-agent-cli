@@ -52,6 +52,7 @@ from boss_agent_cli.services.candidate_actions import (
 	release_candidate_action,
 	reserve_candidate_action,
 	run_candidate_action,
+	response_provably_unsent,
 	settle_candidate_action,
 )
 from boss_agent_cli.services.job_identity import deduplicate_job_result
@@ -555,7 +556,12 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 									# 响应字典形态的风控与异常形态走同一条终止分支，
 									# 不再靠 message 里的「频率」字样误判成 RATE_LIMITED（Issue #419）。
 									raise risk_cls(error_message or error_code)
-								if error_code == "ACTION_UNCONFIRMED":
+								if response_provably_unsent(resp):
+									# 浏览器在写出前中断：run_candidate_action 已释放预约，
+									# 这是明确失败而不是结果未知（Issue #3105）。按普通失败
+									# 重试一次，最终进 failed，不停批。
+									error_msg = error_code
+								elif error_code == "ACTION_UNCONFIRMED":
 									# 请求已发出、结果未知（`__cli_error_details__.replay_safe=false`）：
 									# 重试等于在不知道是否已送达时再发一次招呼。立即停批，
 									# 把阻止重放的详情原样带回（Issue #984）。
@@ -571,7 +577,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
 									)
 									break
-								if error_code == "NETWORK_ERROR":
+								elif error_code == "NETWORK_ERROR":
 									# HTTP 5xx / 超时文案无法证明招呼没发出去：sleep 后
 									# 重发就是在不确定时重复写操作，保留预约并停批
 									# （Issue #2316，与 UNKNOWN 分支同口径）。
@@ -587,7 +593,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										f"招呼结果未确认（网络错误响应），停止批量打招呼: {item.title} @ {item.company}"
 									)
 									break
-								if error_code == "UNKNOWN":
+								elif error_code == "UNKNOWN":
 									# 未识别的响应同样无法证明招呼没发出去：sleep 后重发就是
 									# 在不确定的情况下重复写操作（Issue #990）。
 									unconfirmed = {
@@ -602,7 +608,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										f"招呼结果未确认（平台响应未识别），停止批量打招呼: {item.title} @ {item.company}"
 									)
 									break
-								if error_code in {"RATE_LIMITED", "GREET_LIMIT"}:
+								elif error_code in {"RATE_LIMITED", "GREET_LIMIT"}:
 									# 触发停批的候选人同样要进结果：既不能从 greeted/failed
 									# 里消失，也不能让限流批次以 ok:true 收尾（Issue #2003）。
 									results.append({

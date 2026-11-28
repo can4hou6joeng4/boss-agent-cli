@@ -165,6 +165,12 @@ def classify_platform_response(platform: Any, response: Any) -> Outcome:
 	"""按平台响应判断动作结局：成功 / 明确失败（可重试）/ 结果未知。"""
 	if platform.is_success(response):
 		return "success"
+	# 浏览器通道在写出前中断时，平台层会把严格的 request_sent=False 证据挂在
+	# 响应上（Issue #3105）。这类失败没有产生任何平台写入，必须按可重试释放
+	# 预约；只按错误码把 NETWORK_ERROR 归 unknown 会让职位被 pending 永久挡住。
+	# 与异常侧 was_provably_unsent 同口径，不按 outcome 文本或 truthiness 推断。
+	if response_provably_unsent(response):
+		return "retryable"
 	code, _ = platform.parse_error(response)
 	if str(code) in _UNKNOWN_CODES:
 		return "unknown"
@@ -285,6 +291,15 @@ def cli_error_details(response: Any) -> dict[str, Any]:
 	if not isinstance(details, dict):
 		return {}
 	return {str(key): value for key, value in details.items() if not str(key).startswith("__")}
+
+
+def response_provably_unsent(response: Any) -> bool:
+	"""响应级证据：平台客户端明确标注本次写请求没有发出。
+
+	只认严格的 ``__cli_error_details__.request_sent is False``；``0`` / ``"false"``
+	等类型漂移与缺失证据都不能把结果未知的请求降级成可重试（Issue #3105）。
+	"""
+	return cli_error_details(response).get("request_sent") is False
 
 
 def run_candidate_action(
