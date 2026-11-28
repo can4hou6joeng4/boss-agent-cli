@@ -219,19 +219,22 @@ class _BaseHttpClient:
 	def is_browser_only(self) -> bool:
 		"""平台请求是否只能走浏览器通道。
 
-		配了 ``--cdp-url``、显式非 auto 的浏览器来源，或本进程的浏览器会话已经接上
-		CDP Chrome 时为 True。此时 Chrome 里的 ``__zp_stoken__`` 由页面 JS 维护，
-		再用 httpx 带着从浏览器拷来的 Cookie + stoken 并发打平台，会让这个 stoken
-		被判异常（之后浏览器通道一律 code 37）。所以这些模式下所有平台读写都走浏览器。
+		来源策略是通道选择的唯一真源：显式非 auto 的来源先按自己的通道白名单
+		判定（``httpx-only`` 是空白名单，无论有没有 CDP 都不走浏览器）；auto
+		才继续看 ``--cdp-url`` 或本进程已经接上 CDP Chrome 的浏览器会话。
+		CDP 下 Chrome 里的 ``__zp_stoken__`` 由页面 JS 维护，再用 httpx 带着从
+		浏览器拷来的 Cookie + stoken 打平台，会让这个 stoken 被判异常（之后浏览器
+		通道一律 code 37）；所以需要页面的 CDP 模式把平台读写都改走浏览器。
 		纯 httpx / headless 场景不受影响。
 		"""
+		policy = self._resolve_policy()
+		if policy.name != "auto":
+			# 显式来源按各自通道白名单判定，不能让同时传入的 --cdp-url 把
+			# httpx-only 的空白名单改写成浏览器通道（Issue #3143）。
+			return bool(policy.channels)
 		# getattr 兜底：部分调用方 / 测试用 __new__ 构造实例，不经 __init__。
 		if getattr(self, "_cdp_url", None):
 			return True
-		policy = self._resolve_policy()
-		if policy.name != "auto":
-			# 显式来源按各自通道白名单判定：httpx-only 是空白名单，永远为 False。
-			return bool(policy.channels)
 		session = getattr(self, "_browser_session", None)
 		return session is not None and getattr(session, "_is_cdp", False) is True
 
