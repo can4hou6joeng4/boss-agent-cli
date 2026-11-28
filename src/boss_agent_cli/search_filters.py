@@ -545,6 +545,10 @@ class SearchPipelineResult:
 	stop_reason: str = ""
 	total: int | None = None
 	last_page: int = 0
+	# 最后一次扫描页在平台响应里报告的 page：只有有效整数才记录，否则由调用方
+	# 回退到请求页。与 has_more_reported 同为「平台原样证据」，不能由本地
+	# current_page 冒充（Issue #3118）。
+	last_page_reported: int | None = None
 	stats: SearchPipelineStats = field(default_factory=SearchPipelineStats)
 	# 活跃度文案不认识或拿不到而被排除的职位（文案 → 次数），供命令层写进 hints。
 	active_unknown_descs: dict[str, int] = field(default_factory=dict)
@@ -1119,6 +1123,7 @@ def run_search_pipeline(
 	active_level = resolve_active_level(active)
 	current_page = start_page
 	last_page_scanned = 0
+	last_page_reported: int | None = None
 	has_more = False
 	has_more_reported: bool | None = None
 	# 循环自然跑完 max_pages 才算预算耗尽；下面每个 break 覆盖成具体原因。
@@ -1164,6 +1169,12 @@ def run_search_pipeline(
 					details = error["details"]
 			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败", details=details)
 		platform_data = _unwrap_platform_data(client, raw)
+		raw_page = platform_data.get("page")
+		last_page_reported = (
+			raw_page
+			if isinstance(raw_page, int) and not isinstance(raw_page, bool) and 1 <= raw_page <= MAX_TRUSTED_PAGE
+			else None
+		)
 		raw_job_list = platform_data.get("jobList")
 		job_list = field_list(platform_data, "jobList")
 		last_page_scanned = current_page
@@ -1335,6 +1346,7 @@ def run_search_pipeline(
 		stop_reason=stop_reason,
 		total=len(matched),
 		last_page=last_page_scanned,
+		last_page_reported=last_page_reported,
 		stats=stats,
 		active_unknown_descs=unknown_descs,
 	)

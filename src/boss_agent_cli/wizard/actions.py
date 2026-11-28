@@ -1299,18 +1299,20 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			result = execute_candidate_search(
 				platform, cache, context.logger, {**inputs, "account": account}, **search_kwargs
 			)
+	items = sort_search_items(list(result.items), sort_mode)
+	# 与顶层 `boss search` 同源：平台纠正页码时步骤数据也必须报平台页
+	# （Issue #3118）；旧 test double 没有新字段时回退到最后扫描页 / 请求页。
+	reported_page = getattr(result, "last_page_reported", None)
+	last_scanned = getattr(result, "last_page", 0) or page
 	data: dict[str, Any] = {
 		# 先由 `execute_candidate_search` 评分、再排序：与命令层「先评分再
 		# sort」一致（匹配分类型漂移按 0 处理）。
-		"items": sort_search_items(list(result.items), sort_mode),
-		"pagination": {
-			"page": page,
-			# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。
-			"has_more": result.has_more_reported,
-			"has_more_source": "platform_hasMore" if result.has_more_reported is not None else "unknown",
-			"total": result.total or len(result.items),
-			"total_kind": "returned_page_count",
-		},
+		"items": items,
+		"pagination": _pagination_evidence(
+			{"page": reported_page, "hasMore": result.has_more_reported},
+			page=last_scanned,
+			items=items,
+		),
 	}
 	if active_level:
 		# CLI search 把同一份统计写进 hints.active_filter；向导步骤没有 hints

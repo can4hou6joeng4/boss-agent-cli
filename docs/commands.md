@@ -103,9 +103,9 @@ pbpaste | boss login --curl-file -
 
 `recommend` 的 `pagination.has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`；缺失或类型不明确时为 `null`，`has_more_source=unknown`，不会给出下一页执行提示。仅 `true` 提示翻页；`false` 与 `null` 不触发额外探测。兼容字段 `total` 仍是本次返回条数，`total_kind=returned_page_count`，不代表全量职位数。下一页命令保留本次的 `--with-score`，翻页后仍返回 `match_score`。
 
-`search` 与 `recommend` 同一口径：信封 `pagination.has_more` 只在平台返回布尔 `hasMore` 时是 `true` / `false`，缺失或类型不明确时为 `null`、`has_more_source=unknown`，并在 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有结果。`total_kind=returned_page_count`。向导 `candidate_search` 步骤的内嵌分页结构相同。
+`search` 与 `recommend` 同一口径：信封 `pagination.has_more` 只在平台返回布尔 `hasMore` 时是 `true` / `false`，缺失或类型不明确时为 `null`、`has_more_source=unknown`，并在 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有结果。`pagination.page` 优先使用平台响应里的有效 `page`（管线扫描多页时取最后扫描页），否则回显并钳制请求页；信封、下一页命令、索引快照与向导 `candidate_search` 步骤同源（Issue #3118）。`total_kind=returned_page_count`。向导 `candidate_search` 步骤的内嵌分页结构相同。
 
-`search` 的下一页命令（信封 `hints.next_actions` 与终端 `more:` 提示是同一条）保留本次调用生效的全部条件：位置参数关键词、`--url`、城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型、`--with-score`、`--sort score`、`--no-cache`，只把 `--page` 换成 N+1；`--preset` 展开成等价的显式筛选。所有值按 POSIX shell 规则转义，可直接复制执行。带 `--welfare` / `--active` 的搜索需要逐个查详情，分页语义不同，不提供下一页提示。
+`search` 的下一页命令（信封 `hints.next_actions` 与终端 `more:` 提示是同一条）保留本次调用生效的全部条件：位置参数关键词、`--url`、城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型、`--with-score`、`--sort score`、`--no-cache`，只把 `--page` 换成 N+1（N 是上面的有效页码，而不是本次请求页）；`--preset` 展开成等价的显式筛选。所有值按 POSIX shell 规则转义，可直接复制执行。带 `--welfare` / `--active` 的搜索需要逐个查详情，分页语义不同，不提供下一页提示。
 
 `search` 与 `preset` 的全部后继命令（`detail` / `apply` / `greet`、翻页、`preset list` / `preset add` / `preset remove`）都保留本次调用的 `--data-dir` 与平台，并按 shell 参数转义，照抄即可在同一数据目录里执行。搜索缓存只保存结果与分页证据，不保存 `hints`：命中时按本次调用参数重建提示，缓存键不含 `--sort`，未排序的调用也不会拿到上一次 `--sort score` 的翻页命令。
 

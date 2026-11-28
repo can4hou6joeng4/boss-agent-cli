@@ -23,7 +23,7 @@ from boss_agent_cli.display import (
 	show_command_for_ctx,
 )
 from boss_agent_cli.index_cache import try_save_index
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, list_pagination, page_can_advance
 from boss_agent_cli.services.search_order import SEARCH_SORT_MODES, sort_search_items as _sort_search_items
 from boss_agent_cli.search_filters import (
 	active_filter_hint as _active_filter_hint,
@@ -50,7 +50,9 @@ from boss_agent_cli.wizard.actions import execute_candidate_search
 # 5：缓存里的下一页提示开始保留本次筛选条件；旧条目会把翻页带到另一组结果。
 # 6：pagination 改为如实区分「平台说 false」与「平台没说」（Issue #887），
 #    旧缓存的 has_more 一律是布尔值，复用会让 Agent 继续读到底气十足的 false。
-_SEARCH_CACHE_SCHEMA = 6
+# 7：pagination.page 改为采信平台响应页码（Issue #3118），旧缓存里回显请求页的
+#    页码会让翻页提示重复已看过的页，必须让旧条目失效。
+_SEARCH_CACHE_SCHEMA = 7
 
 
 def _parse_cached_result(raw: str) -> dict[str, Any] | None:
@@ -564,15 +566,22 @@ def search_cmd(
 					logger.debug("搜索命中缓存")
 					items = _refresh_greeted(result["data"], cache, account)
 					items = _sort_search_items(items, sort_mode)
-					snapshot = try_save_index(data_dir, items, source=f"search:{query}", page=page, logger=logger)
-					saved = bool(snapshot)
 					cached_pagination = result.get("pagination")
+					# 平台页码证据来自缓存，下一页命令与快照页码都必须同源：此前
+					# 信封报缓存页码、提示却按本次请求页递增，会重复取已看过的页
+					# （Issue #3118）。缓存字段已在 _parse_cached_result 校验。
+					cached_page = cached_pagination.get("page") if isinstance(cached_pagination, dict) else None
+					if type(cached_page) is not int or not 1 <= cached_page <= MAX_TRUSTED_PAGE:
+						cached_page = page
+					snapshot = try_save_index(data_dir, items, source=f"search:{query}", page=cached_page, logger=logger)
+					saved = bool(snapshot)
 					# total 是从 data 推导的计数，不能把缓存里的值级漂移原样发给
 					# Agent；命中后以本次渲染的 data 行数为准。平台证据（page /
 					# has_more）仍取缓存（Issue #3069）。
 					if isinstance(cached_pagination, dict):
 						cached_pagination = {
 							**cached_pagination,
+							"page": cached_page,
 							"total": len(items),
 							"total_kind": "returned_page_count",
 						}
@@ -585,7 +594,7 @@ def search_cmd(
 					cached_has_more = cached_pagination.get("has_more") if isinstance(cached_pagination, dict) else None
 					cached_hints, cached_next_page_command = _result_hints(
 						ctx,
-						page=page,
+						page=cached_page,
 						params=next_page_params,
 						has_next_page=cached_has_more is True,
 						has_more_unknown=not isinstance(cached_has_more, bool),
@@ -594,7 +603,7 @@ def search_cmd(
 						ctx, "search", items,
 						render=lambda data: render_job_table(
 							data, f"search: {query}",
-							page=page,
+							page=cached_page,
 							hint_next=_more_hint(cached_next_page_command) if cached_next_page_command else "",
 							show_command=show_command_for_ctx(ctx, index_saved=saved),
 						),
@@ -683,7 +692,18 @@ def search_cmd(
 			items = pipeline_result.items
 			cache_items = items
 			output_items = _sort_search_items(items, sort_mode)
-			snapshot = try_save_index(data_dir, output_items, source=f"search:{query}", page=page, logger=logger)
+			# 页码与 has_more 都取平台证据；管线扫描多页时从 last_page 回退，
+			# 不能停留在起始请求页（Issue #3118）。test double 没有新字段时，
+			# getattr 保持旧签名可用。
+			platform_page = getattr(pipeline_result, "last_page_reported", None)
+			last_scanned = getattr(pipeline_result, "last_page", 0) or page
+			pagination = list_pagination(
+				{"page": platform_page, "hasMore": pipeline_result.has_more_reported},
+				page=last_scanned,
+				rows=output_items,
+			)
+			evidence_page = pagination["page"]
+			snapshot = try_save_index(data_dir, output_items, source=f"search:{query}", page=evidence_page, logger=logger)
 			saved = bool(snapshot)
 
 			# Emit search_completed hook
@@ -703,18 +723,9 @@ def search_cmd(
 					"source": "search",
 				})
 
-			# 与 recommend / chat / history / favorites / hr jobs 同一口径：平台
-			# 未返回布尔 hasMore 时为 null，不伪造成 false（Issue #887）。
-			pagination: dict[str, Any] = {
-				"page": page,
-				"has_more": pipeline_result.has_more_reported,
-				"has_more_source": "platform_hasMore" if pipeline_result.has_more_reported is not None else "unknown",
-				"total": pipeline_result.total or len(items),
-				"total_kind": "returned_page_count",
-			}
 			hints, next_page_command = _result_hints(
 				ctx,
-				page=page,
+				page=evidence_page,
 				params=next_page_params,
 				has_next_page=bool(pipeline_result.has_more) and not detail_filter,
 				has_more_unknown=pipeline_result.has_more_reported is None and not detail_filter,
@@ -752,7 +763,7 @@ def search_cmd(
 				ctx, "search", output_items,
 				render=lambda data: render_job_table(
 					data, f"search: {query}{title_suffix}",
-					page=page,
+					page=evidence_page,
 					hint_next=_more_hint(next_page_command) if next_page_command else "",
 					show_command=show_command_for_ctx(ctx, index_saved=saved),
 				),
