@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 向导 `ai_assist` 读取 `ai_base_url` 时的本地配置错误改为收口为不可自动重试的 `CONFIG_INVALID`，并给出 `ai config --base-url` 修复命令；不再让异常逃逸后被 runner 兜成可重试的 `NETWORK_ERROR`（Issue #3126）。
+
 ## [3.9.25] - 2026-11-28
 
 ### Fixed
