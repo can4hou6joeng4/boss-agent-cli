@@ -1947,8 +1947,16 @@ def _export_output_path(context: ActionContext, inputs: Mapping[str, Any], fmt: 
 	写文件前的 `prepare_output_path` 创建。
 	"""
 	raw = inputs.get("output")
-	if raw is None or raw == "":
+	if raw is None:
+		# 只有缺键或显式 null 才落默认路径；显式空串照命令行 `-o` 的口径
+		# 拒绝（Issue #1501 / #3098），否则调用方会以为没指定输出却落了一个文件。
 		raw = context.data_dir / "exports" / f"wizard-jobs.{fmt}"
+	elif isinstance(raw, str) and not raw.strip():
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			"wizard export 的 output 不能为空；省略 output 才会写到默认位置",
+			recovery_action="去掉空的 output，或给出完整文件路径后重试",
+		)
 	elif not isinstance(raw, (str, os.PathLike)):
 		raise WorkflowActionError(
 			"INVALID_PARAM",

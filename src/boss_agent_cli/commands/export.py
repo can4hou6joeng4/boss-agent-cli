@@ -49,7 +49,7 @@ from boss_agent_cli.search_filters import (
 	ensure_supported_city,
 	ensure_text_encodable,
 	parse_boss_search_url,
-	prefilter_platform_job_type,
+	prefilter_job,
 	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
@@ -399,7 +399,7 @@ def export_cmd(
 			for raw_item in deduplicate_job_result(job_list, seen_job_ids=seen_job_ids):
 				if len(collected) >= count:
 					break
-				matches, _ = prefilter_platform_job_type(raw_item, criteria, platform_name=platform.name)
+				matches, _ = prefilter_job(raw_item, criteria, platform_name=platform.name)
 				if not matches:
 					continue
 				if html_mode:
