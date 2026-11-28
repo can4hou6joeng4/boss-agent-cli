@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.21 (2026-11-28): export and batch-greet now reuse the same local prefilter as search and the wizard, so jobs failing city / salary / experience / education filters are neither exported nor greeted; recommend pagination, alternate list containers and the index snapshot follow the shared wizard implementation; wizard export rejects an explicitly empty output; falsy AI config type drift now reports a precise error and local configuration writes no longer leave a half-updated state; provably unsent writes release their claim instead of being reported as outcome-unknown; history pagination and favorites-sync read-stage errors follow the shared contract (Issue #3097 #3098 #3099 #3101 #3103 #3105 #3107).
+
 v3.9.20 (2026-11-28): MCP host instructions now list the full seven-key runtime envelope, including `schema_version` and `command`, guarded by a contract test (Issue #3094).
 
 v3.9.19 (2026-11-28): NO_PROXY domains map to Chromium bypass entries covering both root and subdomains, keeping API and browser egress consistent (Issue #3091).
