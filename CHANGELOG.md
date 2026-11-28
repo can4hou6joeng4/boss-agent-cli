@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.30] - 2026-11-28
+
 ### Fixed
 
 - `browser-source=httpx-only` 与 `--cdp-url` 同时出现时，来源策略的空通道白名单优先，只读请求不再误走浏览器并以 `BROWSER_DISABLED` 失败（Issue #3143）。
