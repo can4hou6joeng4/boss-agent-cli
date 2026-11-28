@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.34 (2026-11-28): wizard recovery hints now protect leading-dash resume names and run ids with `--` and keep the active `--data-dir`; resume export `LOCAL_IO_ERROR.details` retains errno, strerror and the underlying cause (Issue #3155 #3156).
+
 v3.9.33 (2026-11-28): `chatmsg` next-page hints for the lookup path place the uid after the options and protect leading dashes with `--`, so agents can replay them verbatim while keeping `--raw` (Issue #3151).
 
 v3.9.32 (2026-11-28): output-path preflight errors for NUL-containing paths retain `EINVAL`, the underlying cause, and the filename instead of `[Errno None] None` (Issue #3149).
