@@ -105,7 +105,7 @@ wheels = [
 
 [[package]]
 name = "boss-agent-cli"
-version = "3.9.24"
+version = "3.9.25"
 source = { editable = "." }
 dependencies = [
     { name = "brotli" },
