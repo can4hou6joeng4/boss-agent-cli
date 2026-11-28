@@ -84,7 +84,7 @@ SERVER_INSTRUCTIONS = (
 	"boss-agent-cli over MCP exposes all implemented candidate, recruiter, communication and crawl tools. "
 	"Historical assisted and research configurations have identical capability access; platform adapters may still "
 	"return NOT_SUPPORTED when an operation is not implemented. Every tool returns the same JSON envelope "
-	"{ok, data, pagination, error, hints}; when ok is false, read error.code and error.recovery_action and "
+	"{ok, schema_version, command, data, pagination, error, hints}; when ok is false, read error.code and error.recovery_action and "
 	"act on it (for example AUTH_REQUIRED means the user runs boss login). boss schema is the capability "
 	"source of truth — do not hardcode command tables."
 	" For hr_greet, preview with dry_run and obtain explicit operator approval for that candidate and message "
