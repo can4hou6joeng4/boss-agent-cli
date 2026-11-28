@@ -419,12 +419,12 @@ def test_read_tool_schema_lists_every_cli_parameter(
 	_assert_schema_matches_command(tool_name, command, aliases, hidden)
 
 
-# 本地维护与自动化工具：`clean` 只暴露保留天数，`--privacy`（清登录会话/简历）
-# 与 `--risk-lock`（清风控锁）必须由真人判断，不进 MCP；`agent train` 的
-# `--live` 会绕过默认演练直接执行动作，同样不暴露。把这些「有意不暴露」
-# 写进守卫，未来新增参数时不会靠删字段悄悄绕过。
+# 本地维护与自动化工具：`clean` 只暴露保留天数，`--privacy`（清登录会话/简历）、
+# `--risk-lock`（清风控锁）与 `--pending-recruiter-greet`（按候选人清理招呼预约）
+# 必须由真人判断，不进 MCP；`agent train` 的 `--live` 会绕过默认演练直接执行动作，
+# 同样不暴露。把这些「有意不暴露」写进守卫，未来新增参数时不会靠删字段悄悄绕过。
 _MAINTENANCE_SINGLE_COMMAND_TOOLS = {
-	"boss_clean": (clean_cmd_module.clean_cmd, {"clean_all": "all"}, {"privacy", "risk_lock"}),
+	"boss_clean": (clean_cmd_module.clean_cmd, {"clean_all": "all"}, {"privacy", "risk_lock", "pending_recruiter_greet"}),
 	"boss_agent_run": (agent_cmd_module.run_cmd, {}, set()),
 	"boss_agent_train": (agent_cmd_module.train_cmd, {}, {"dry_run", "live"}),
 }
