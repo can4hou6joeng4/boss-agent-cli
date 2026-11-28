@@ -35,7 +35,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	ensure_supported_city,
-	prefilter_platform_job_type,
+	prefilter_job,
 	resolve_search_code_params,
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
@@ -461,7 +461,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				# 收进 1 个候选并真实发出招呼（写操作）。
 				if len(candidates) >= count:
 					break
-				matches, _ = prefilter_platform_job_type(raw_item, criteria, platform_name=platform.name)
+				matches, _ = prefilter_job(raw_item, criteria, platform_name=platform.name)
 				if not matches:
 					continue
 				item = JobItem.from_api(raw_item)

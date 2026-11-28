@@ -8,6 +8,7 @@
 
 - `export` 的列表快路径改用与 `search` / 向导导出共用的 `prefilter_job`：平台返回不满足城市 / 薪资 / 经验 / 学历的条目时按本地判定剔除，不再照单导出（Issue #3097）。
 - 向导 `candidate_export` 的显式空 `output`（空串或纯空白）改为在平台请求与写文件之前返回 `INVALID_PARAM`，与命令层 `-o ""` 同口径；只有缺键或显式 `null` 才落默认路径（Issue #3098）。
+- `batch-greet` 的候选预筛改用与 `search` / 向导共用的 `prefilter_job`：平台返回不满足 `--city` / `--salary` / `--experience` / `--education` 的条目不再进入候选，避免非 dry-run 时向错误职位真实发出招呼（Issue #3099）。
 - `recommend` 的分页证据改用与向导共用的 `list_pagination`：平台纠正页码时索引快照、翻页提示与表格页码都采用有效页码，不再把 Agent 导回已取过的页；列表容器按同一口径识别 `recommendList` / `jobList` / `list` / `items` / `result`，不再返回空页并覆盖编号索引（Issue #3101）。
 
 ## [3.9.20] - 2026-11-28
