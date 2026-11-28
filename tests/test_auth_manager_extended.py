@@ -385,7 +385,8 @@ def test_force_refresh_stored_cookie_refreshes_via_cdp_when_available(
 	manager = AuthManager(tmp_path)
 	manager.force_refresh(cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
 
-	mock_refresh_cdp.assert_called_once_with("http://127.0.0.1:9222")
+	assert mock_refresh_cdp.call_args.args == ("http://127.0.0.1:9222",)
+	assert mock_refresh_cdp.call_args.kwargs["policy"].name == "stored-cookie"
 	mock_refresh_stoken.assert_not_called()
 	assert manager._token["stoken"] == "fresh-token"
 

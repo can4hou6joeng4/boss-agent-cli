@@ -417,7 +417,7 @@ class AuthManager:
 					# 按来源策略优先复用 CDP；风险仍须原样停止，不保证平台接受。
 					if policy.allows(CHANNEL_CDP) and probe_cdp(cdp_url):
 						self._logger.info("检测到 CDP，使用 CDP 刷新 stoken")
-						new_stoken = refresh_stoken_via_cdp(cdp_url)
+						new_stoken = refresh_stoken_via_cdp(cdp_url, policy=policy)
 					elif not policy.allow_browser_launch:
 						raise BrowserSourceUnavailable(
 							policy,
