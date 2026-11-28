@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `export` 的列表快路径改用与 `search` / 向导导出共用的 `prefilter_job`：平台返回不满足城市 / 薪资 / 经验 / 学历的条目时按本地判定剔除，不再照单导出（Issue #3097）。
+- 向导 `candidate_export` 的显式空 `output`（空串或纯空白）改为在平台请求与写文件之前返回 `INVALID_PARAM`，与命令层 `-o ""` 同口径；只有缺键或显式 `null` 才落默认路径（Issue #3098）。
+
 ## [3.9.20] - 2026-11-28
 
 ### Fixed
