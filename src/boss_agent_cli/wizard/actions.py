@@ -24,7 +24,7 @@ from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
-from boss_agent_cli.ai.config import AIConfigStore, ai_float_setting, ai_int_setting
+from boss_agent_cli.ai.config import AIConfigStore, AIConfigValueError, ai_float_setting, ai_int_setting
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import (
 	CacheRecordInvalid,
@@ -1879,7 +1879,20 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 	config_store = AIConfigStore(context.data_dir)
 	config = config_store.load_config()
 	api_key = config_store.get_api_key()
-	base_url = config_store.get_base_url()
+	try:
+		base_url = config_store.get_base_url()
+	except AIConfigValueError as exc:
+		# 与下面的数值项、CLI ai 命令族同口径：坏配置是确定性本地错误，
+		# 不能从 action 逃逸后被 runner 兜成可重试的 NETWORK_ERROR
+		# （Issue #3126）。
+		fix = exc.recovery_hint or "ai config --base-url <值>"
+		raise WorkflowActionError(
+			"CONFIG_INVALID",
+			f"本地 AI 配置损坏：{exc}",
+			recoverable=True,
+			recovery_action=f"{_hint_command(context, fix)} 修正后重试",
+			auto_retry=False,
+		) from exc
 	model = config.get("ai_model")
 	if not api_key or not base_url or not model:
 		raise WorkflowActionError(
