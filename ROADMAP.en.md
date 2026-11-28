@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.24 (2026-11-28): `search` and wizard `candidate_search` now trust the platform / last-scanned page so the envelope, next-page command, index snapshot and step data share one source, including cache hits; wizard `candidate_export` reports `count_reached` when the requested count is filled, matching the CLI (Issue #3118 #3119).
+
 v3.9.23 (2026-11-28): `chat` pagination now trusts the platform's valid page number, so the envelope page and next-page hint no longer fall back to the requested page; `hasMore` stays boolean-only and `total` still matches the rendered row count (Issue #3115).
 
 v3.9.22 (2026-11-28): recruiter greeting and work-location local-state boundaries now report the actual outcome; claim release / recording failures no longer masquerade as outcome-unknown or silently leave TTL-free pending rows, with targeted cleanup entries for the affected candidate or conversation (Issue #3110 #3111).
