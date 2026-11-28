@@ -84,9 +84,10 @@ def _lstat_mode(path: Path) -> int | None:
 		# 报 PARENT_NOT_DIR，而不是把预检变成泛化 IO 错误。
 		return None
 	except ValueError as exc:
-		error = OSError(f"无法读取路径状态：{exc}")
-		error.filename = str(path)
-		raise error from exc
+		# 带 errno / strerror / filename 三元组，不能只塞 message：
+		# 单参数 OSError 会让 str(exc) 变成「[Errno None] None: <path>」，
+		# 丢掉 NUL 路径的真实原因（Issue #3149）。
+		raise OSError(errno.EINVAL, f"无法读取路径状态：{exc}", str(path)) from exc
 	except OSError as exc:
 		if exc.filename is None:
 			exc.filename = str(path)
@@ -100,9 +101,10 @@ def _stat_mode(path: Path) -> int | None:
 	except (FileNotFoundError, NotADirectoryError):
 		return None
 	except ValueError as exc:
-		error = OSError(f"无法读取路径状态：{exc}")
-		error.filename = str(path)
-		raise error from exc
+		# 带 errno / strerror / filename 三元组，不能只塞 message：
+		# 单参数 OSError 会让 str(exc) 变成「[Errno None] None: <path>」，
+		# 丢掉 NUL 路径的真实原因（Issue #3149）。
+		raise OSError(errno.EINVAL, f"无法读取路径状态：{exc}", str(path)) from exc
 	except OSError as exc:
 		if exc.filename is None:
 			exc.filename = str(path)
