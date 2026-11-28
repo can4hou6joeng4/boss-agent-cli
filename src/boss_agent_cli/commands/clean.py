@@ -61,6 +61,14 @@ from boss_agent_cli.display import (
 	metavar="GEEK_ID JOB_ID",
 	help="按招聘者招呼信封中的 geek_id/job_id 清除该次 pending 预约；不清除已发送记录",
 )
+@click.option(
+	"--pending-recruiter-location",
+	"pending_recruiter_location",
+	type=click.IntRange(min=1),
+	default=None,
+	metavar="friend_id",
+	help="按招聘者工作地点信封中的 friend_id 清除该会话的 pending 预约；不清除已发送记录",
+)
 @click.pass_context
 def clean_cmd(
 	ctx: click.Context,
@@ -71,6 +79,7 @@ def clean_cmd(
 	risk_lock: bool,
 	pending_claims: str | None,
 	pending_recruiter_greet: tuple[str, str] | None,
+	pending_recruiter_location: int | None,
 ) -> None:
 	"""清理过期缓存和临时文件。"""
 	if pending_claims is not None and (
@@ -95,6 +104,14 @@ def clean_cmd(
 			handle_error_output(
 				ctx, "clean", code="INVALID_PARAM",
 				message="一次只清理一种预约：--pending-claims 与 --pending-recruiter-greet 不能同时使用",
+				recovery_action="按信封选择对应的清理选项后重试",
+			)
+			return
+	if pending_recruiter_location is not None:
+		if pending_claims is not None or pending_recruiter_greet is not None:
+			handle_error_output(
+				ctx, "clean", code="INVALID_PARAM",
+				message="一次只清理一种预约：--pending-recruiter-location 不能与其他定向清理同时使用",
 				recovery_action="按信封选择对应的清理选项后重试",
 			)
 			return
@@ -292,7 +309,16 @@ def clean_cmd(
 			results.append(_clean_result("招聘者招呼预约", freed, count))
 			total_freed += freed
 
-		# 8) 仅清除释放失败信封指定的预约。每次预约的随机标识独立，旧指引
+		# 8) 招聘者工作地点的定向预约清理：按会话 ID 删除，只碰 pending。
+		if pending_recruiter_location is not None:
+			current_target = "招聘者工作地点预约"
+			freed, count = _clean_pending_recruiter_location(
+				data_dir, pending_recruiter_location, dry_run=dry_run
+			)
+			results.append(_clean_result(current_target, freed, count))
+			total_freed += freed
+
+		# 9) 仅清除释放失败信封指定的预约。每次预约的随机标识独立，旧指引
 		# 不能删除新建预约；其他在途 / 结果未知预约与 sent 行始终保留。
 		if pending_claims is not None:
 			current_target = "未完成的动作预约"
@@ -374,7 +400,13 @@ def clean_cmd(
 		if pending_claims is not None:
 			clean_args.extend(("--pending-claims", pending_claims))
 		if pending_recruiter_greet is not None:
-			clean_args.extend(("--pending-recruiter-greet", *pending_recruiter_greet))
+			clean_args.extend((
+				"--pending-recruiter-greet",
+				shell_argument(pending_recruiter_greet[0]),
+				shell_argument(pending_recruiter_greet[1]),
+			))
+		if pending_recruiter_location is not None:
+			clean_args.extend(("--pending-recruiter-location", str(pending_recruiter_location)))
 		clean_args.extend(("--days", str(days)))
 		if risk_lock:
 			clean_args.append("--risk-lock")
@@ -1023,6 +1055,34 @@ def _clean_pending_recruiter_greet(
 			count = int(row[0])
 		else:
 			cursor = conn.execute(f"DELETE FROM recruiter_greet_records WHERE {where}", params)
+			count = cursor.rowcount
+			conn.commit()
+		return count * 100, count
+	finally:
+		conn.close()
+
+
+def _clean_pending_recruiter_location(
+	data_dir: Path, friend_id: int, *, dry_run: bool
+) -> tuple[int, int]:
+	"""只清除指定会话的 pending 工作地点预约（Issue #3111）。
+
+	该表以 friend_id 为键；已发送的卡片记录仍保留，防止重复发送。
+	"""
+	db_path = data_dir / "cache" / "boss_agent.db"
+	if not _cache_db_present(db_path):
+		return 0, 0
+	conn = _open_cache_db(db_path, root=data_dir)
+	try:
+		if not _table_exists(conn, "recruiter_location_records"):
+			return 0, 0
+		where = "friend_id = ? AND status = 'pending'"
+		params = (str(friend_id),)
+		if dry_run:
+			row = conn.execute(f"SELECT COUNT(*) FROM recruiter_location_records WHERE {where}", params).fetchone()
+			count = int(row[0])
+		else:
+			cursor = conn.execute(f"DELETE FROM recruiter_location_records WHERE {where}", params)
 			count = cursor.rowcount
 			conn.commit()
 		return count * 100, count

@@ -24,6 +24,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	handle_platform_error_output,
 	render_action_result,
+	risk_error_contract,
 )
 
 
@@ -59,11 +60,55 @@ def _location_status(data_dir: Path, friend_id: int) -> str | None:
 		return cache.location_send_status(friend_id)
 
 
-def _release(cache: CacheStore, friend_id: int) -> None:
+def _release(ctx: click.Context, cache: CacheStore, friend_id: int, *, cause_code: str) -> bool:
+	"""撤销确定未发出请求的预约；释放失败不再静默保留 pending（Issue #3111）。"""
 	try:
 		cache.release_location_send(friend_id)
-	except Exception:
-		pass
+		return True
+	except Exception as exc:
+		preview = hint_command(ctx, f"clean --pending-recruiter-location {friend_id} --dry-run")
+		clean = hint_command(ctx, f"clean --pending-recruiter-location {friend_id}")
+		is_risk = cause_code in RISK_ERROR_BY_CODE
+		message = (
+			"本次停止由平台风险触发；本地预约未释放，不要重试"
+			if is_risk else "本次工作地点未发出，但本地预约未释放；不要直接重试"
+		)
+		local_action = f"先备份数据目录，用 {preview} 预览，再用 {clean} 只清理该会话的 pending 预约"
+		details = {
+			"friend_id": friend_id,
+			"sent": False,
+			"request_sent": False,
+			"recorded": False,
+			"outcome_unknown": False,
+			"cause_code": cause_code,
+			"release_error": type(exc).__name__,
+			"local_claim_release_failed": True,
+		}
+		if is_risk:
+			# 风控是硬边界：即使预约释放失败，信封也必须保留风控码与停止契约，
+			# 本地清理只能作为补充指引（Issue #3111）。
+			recovery, risk_hints = risk_error_contract(cause_code, ctx=ctx)
+			_fail(
+				ctx, code=cause_code, message=message, details=details,
+				recovery_action=f"{recovery}；{local_action}",
+				hints={
+					**(risk_hints or {}),
+					"operator_actions": [message, "不要刷新 Token、重新登录或换通道重试", local_action],
+				},
+			)
+			return False
+		_fail(
+			ctx,
+			code="LOCAL_STATE_WRITE_FAILED",
+			message=message,
+			details=details,
+			recovery_action=local_action,
+			hints={
+				"operator_actions": [message, "清理后确认该会话尚未收到工作地点卡片，再重新执行"],
+				"next_actions": [preview],
+			},
+		)
+		return False
 
 
 def _fail(
@@ -249,18 +294,22 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			return
 		try:
 			detail = platform.friend_detail([friend_id], retry=False)
-		except (RequestBudgetExceeded, PlatformRiskError, AuthRequired, RecruiterAuthError, TokenRefreshFailed):
-			_release(cache, friend_id)
+		except (RequestBudgetExceeded, PlatformRiskError, AuthRequired, RecruiterAuthError, TokenRefreshFailed) as exc:
+			if not _release(ctx, cache, friend_id, cause_code=getattr(exc, "code", type(exc).__name__)):
+				return
 			raise
 		except NotImplementedError:
-			_release(cache, friend_id)
+			if not _release(ctx, cache, friend_id, cause_code="NOT_SUPPORTED"):
+				return
 			_fail(ctx, code="NOT_SUPPORTED", message="当前平台不支持发送工作地点", details=base)
 			return
-		except Exception:
-			_release(cache, friend_id)
+		except Exception as exc:
+			if not _release(ctx, cache, friend_id, cause_code=type(exc).__name__):
+				return
 			raise
 		if not platform.is_success(detail):
-			_release(cache, friend_id)
+			if not _release(ctx, cache, friend_id, cause_code=platform.parse_error(detail)[0]):
+				return
 			handle_platform_error_output(
 				ctx,
 				"recruiter-location",
@@ -272,23 +321,27 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 		try:
 			job_id, security_id, friend = _target_from_detail(detail, friend_id)
 		except _TargetError as exc:
-			_release(cache, friend_id)
+			if not _release(ctx, cache, friend_id, cause_code="INVALID_PARAM"):
+				return
 			_reject_target(ctx, friend_id, exc.reason)
 			return
 		try:
 			result = platform.send_job_location(job_id=job_id, to_user_id=friend_id, security_id=security_id)
-		except (AuthRequired, RecruiterAuthError, TokenRefreshFailed):
-			_release(cache, friend_id)
+		except (AuthRequired, RecruiterAuthError, TokenRefreshFailed) as exc:
+			if not _release(ctx, cache, friend_id, cause_code=getattr(exc, "code", type(exc).__name__)):
+				return
 			raise
 		except PlatformRiskError:
 			# 风控可能在请求已经发出后命中；保留 pending，后续调用必须按结果未知拦住（Issue #1644）。
 			raise
 		except RequestBudgetExceeded as exc:
 			if was_provably_unsent(exc):
-				_release(cache, friend_id)
+				if not _release(ctx, cache, friend_id, cause_code=exc.code):
+					return
 			raise
 		except NotImplementedError:
-			_release(cache, friend_id)
+			if not _release(ctx, cache, friend_id, cause_code="NOT_SUPPORTED"):
+				return
 			_fail(
 				ctx,
 				code="NOT_SUPPORTED",
@@ -301,7 +354,11 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			# 预约并交给装饰器按可重试错误处理，避免一次断网永久锁死该会话
 			# （Issue #2596）。可能已发出的传输错误仍保持结果未知。
 			if candidate_action_provably_unsent(exc):
-				_release(cache, friend_id)
+				if not _release(
+					ctx, cache, friend_id,
+					cause_code=getattr(exc, "code", type(exc).__name__),
+				):
+					return
 				raise
 			_fail(
 				ctx,
@@ -315,7 +372,8 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			code, _message = platform.parse_error(result)
 			# 风控响应同样不能证明请求未发出；只有明确失败才释放预约（Issue #1644）。
 			if code != "ACTION_UNCONFIRMED" and code not in RISK_ERROR_BY_CODE:
-				_release(cache, friend_id)
+				if not _release(ctx, cache, friend_id, cause_code=code):
+					return
 			handle_platform_error_output(
 				ctx,
 				"recruiter-location",
@@ -331,12 +389,26 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 		sent = {**base, "sent": True, "job_id": job_id, "job_name": job_name, "name": name}
 		try:
 			cache.record_location_send(friend_id, job_id=str(job_id))
-		except Exception:
+		except Exception as exc:
+			# 平台已确认发出，只是本地记账失败：不是结果未知；登记表的通用
+			# 「核对是否生效」文案会误导 Agent 重发，这里改成跟进已发送卡片。
+			chatmsg = hint_command(ctx, f"hr chatmsg {friend_id}")
+			action = f"备份数据目录并检查本地状态；用 {chatmsg} 跟进这次已发出的工作地点，不要重复发送"
 			_fail(
 				ctx,
 				code="LOCAL_STATE_WRITE_FAILED",
-				message="工作地点已发送，但本地记录保存失败，禁止自动重发",
-				details=sent,
+				message="工作地点已发出，但本地记录保存失败，禁止自动重发",
+				details={
+					**sent,
+					"recorded": False,
+					"outcome_unknown": False,
+					"record_error": type(exc).__name__,
+				},
+				recovery_action=action,
+				hints={
+					"operator_actions": ["工作地点已发出，本地记录保存失败；不要重复发送", action],
+					"next_actions": [chatmsg],
+				},
 			)
 			return
 		next_actions = [hint_command(ctx, f"hr chatmsg {friend_id}")]

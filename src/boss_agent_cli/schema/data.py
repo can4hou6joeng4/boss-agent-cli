@@ -1056,6 +1056,12 @@ SCHEMA_DATA = {
 					"default": None,
 					"description": "招聘者招呼释放失败信封中的 geek_id 与 job_id；仅清除该候选人的本次 pending 预约，已发送记录不变",
 				},
+				"--pending-recruiter-location": {
+					"type": "integer",
+					"minimum": 1,
+					"default": None,
+					"description": "招聘者工作地点释放失败信封中的 friend_id；仅清除该会话的 pending 预约，已发送记录不变",
+				},
 			},
 		},
 		"stats": {
