@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.25 (2026-11-28): a non-string `ai_base_url` is no longer treated as unset and silently replaced by the provider default endpoint; reading it now raises a local configuration error with a recovery hint (Issue #3123).
+
 v3.9.24 (2026-11-28): `search` and wizard `candidate_search` now trust the platform / last-scanned page so the envelope, next-page command, index snapshot and step data share one source, including cache hits; wizard `candidate_export` reports `count_reached` when the requested count is filled, matching the CLI (Issue #3118 #3119).
 
 v3.9.23 (2026-11-28): `chat` pagination now trusts the platform's valid page number, so the envelope page and next-page hint no longer fall back to the requested page; `hasMore` stays boolean-only and `total` still matches the rendered row count (Issue #3115).
