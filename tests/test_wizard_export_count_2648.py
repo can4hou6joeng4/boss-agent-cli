@@ -139,7 +139,7 @@ def test_export_active_early_stop_marks_truncated(tmp_path, monkeypatch):
 
 
 def test_export_active_stop_with_full_count_is_not_truncated(tmp_path, monkeypatch):
-	"""恰好取满 count 时即使终止原因是 active_target_reached 也是完整结果。"""
+	"""恰好取满 count 时与 CLI 同口径报 count_reached，且不算截断（Issue #3119）。"""
 	items = [{"job_id": f"job-{index}"} for index in range(10)]
 	data, _, _ = _export(
 		_context(tmp_path),
@@ -150,7 +150,7 @@ def test_export_active_stop_with_full_count_is_not_truncated(tmp_path, monkeypat
 
 	assert data["count"] == 10
 	assert data["requested"] == 10
-	assert data["stop_reason"] == "active_target_reached"
+	assert data["stop_reason"] == "count_reached"
 	assert data["truncated"] is False
 
 

@@ -2088,6 +2088,11 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		# 耗尽 / 活跃度提前停止」：只有后两者才是截断，调用方不能把前缀当
 		# 完整结果（Issue #2657 / #2710）。判定与顶层 `boss export` 共用。
 		stop_reason = _export_stop_reason(result)
+		# 与顶层 `boss export` 同口径：取满请求条数时无论管线因何停止，都按
+		# count_reached 报告；用管线 items 而不是导出文件行数，避免
+		# include_private 过滤让口径再次漂移（Issue #3119）。
+		if len(getattr(result, "items", ())) >= count:
+			stop_reason = "count_reached"
 		data["requested"] = count
 		data["stop_reason"] = stop_reason
 		data["truncated"] = export_is_truncated(stop_reason, item_count=len(items), requested=count)
