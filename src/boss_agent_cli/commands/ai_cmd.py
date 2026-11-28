@@ -135,21 +135,22 @@ def _create_ai_service(ctx: click.Context) -> AIService | None:
 	``INVALID_PARAM`` 与修复命令，不能兜成可重试的网络错误。
 	"""
 	store = _get_ai_config_store(ctx)
+	config = store.load_config()
+	# 字符串项的类型校验必须在 is_configured() 之前（Issue #3103）：空容器 /
+	# 0 / False 会被 all([provider, model]) 吞成「未配置」，把坏类型误报成
+	# AI_NOT_CONFIGURED，还引导用户白填一遍 API key；现在所有非字符串类型
+	# 都先由 ai_text_setting 报出具体的 CONFIG_INVALID。
+	model = ai_text_setting(config, "ai_model") or ""
+	provider = ai_text_setting(config, "ai_provider")
+	raw_base_url = ai_text_setting(config, "ai_base_url")
 	if not store.is_configured():
 		return None
-	config = store.load_config()
 	api_key = store.get_api_key()
-	# 字符串项同样要在构造前校验（Issue #1428、#1431）：``ai_model`` 漂移成数组 /
-	# 数字会让服务层 ``rsplit`` 崩溃，``ai_base_url`` 写成空白串或非 URL 会让
-	# httpx 抛 UnsupportedProtocol，两者都被兜成与真实原因无关的错误。
-	model = ai_text_setting(config, "ai_model") or ""
 	if not model.strip():
 		raise AIConfigValueError(
 			"AI 配置项 ai_model 未设置或为空",
 			recovery_hint="ai config --model <model>",
 		)
-	provider = ai_text_setting(config, "ai_provider")
-	raw_base_url = ai_text_setting(config, "ai_base_url")
 	# 空串与 None / 缺键同口径视为未设置，与 ``AIConfigStore.get_base_url`` 一致：
 	# 旧版本的 ``--clear-base-url`` 写入的是空串，按 ``is not None`` 判断会把它送进
 	# 校验并让每条 AI 命令报 CONFIG_INVALID（Issue #2253）。纯空白串仍按损坏拒绝。

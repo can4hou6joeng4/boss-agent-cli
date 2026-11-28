@@ -194,6 +194,11 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 			return
 	store = AIConfigStore(ctx.obj["data_dir"])
 	try:
+		# 先确认旧配置可读、再写密钥、最后写配置（Issue #3103）：密钥路径不可写
+		# 时不能先把 provider / base_url 切到 localhost，否则「不要自动重试」的
+		# 错误信封与磁盘上的半截更新自相矛盾；与 ai config --api-key 同顺序。
+		store.load_config()
+		store.save_api_key("local")
 		store.save_config(
 			ai_provider=runtime,
 			ai_model=model,
@@ -213,7 +218,6 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 		)
 		ctx.exit(1)
 		return
-	store.save_api_key("local")
 	handle_output(
 		ctx,
 		"ai.local.configure",

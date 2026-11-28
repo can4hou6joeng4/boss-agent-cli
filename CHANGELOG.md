@@ -10,6 +10,7 @@
 - 向导 `candidate_export` 的显式空 `output`（空串或纯空白）改为在平台请求与写文件之前返回 `INVALID_PARAM`，与命令层 `-o ""` 同口径；只有缺键或显式 `null` 才落默认路径（Issue #3098）。
 - `batch-greet` 的候选预筛改用与 `search` / 向导共用的 `prefilter_job`：平台返回不满足 `--city` / `--salary` / `--experience` / `--education` 的条目不再进入候选，避免非 dry-run 时向错误职位真实发出招呼（Issue #3099）。
 - `recommend` 的分页证据改用与向导共用的 `list_pagination`：平台纠正页码时索引快照、翻页提示与表格页码都采用有效页码，不再把 Agent 导回已取过的页；列表容器按同一口径识别 `recommendList` / `jobList` / `list` / `items` / `result`，不再返回空页并覆盖编号索引（Issue #3101）。
+- AI 配置的字符串项在 `is_configured()` 真值判断前统一校验类型：空 list / dict / 0 / False 不再被吞成「未配置」并误导用户重填密钥，改为精确 `CONFIG_INVALID`；`ai local configure` 改为先确认旧配置可读、再写密钥、最后写配置，密钥不可写时不再留下半截的本地端点更新（Issue #3103）。
 
 ## [3.9.20] - 2026-11-28
 
