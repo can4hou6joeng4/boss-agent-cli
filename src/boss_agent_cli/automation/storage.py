@@ -340,7 +340,11 @@ class AutomationStore:
 	def read_state(self) -> dict[str, Any]:
 		state = AutomationStore.read_state_snapshot(self.root.parent)
 		stop = self.read_stop()
-		if "open" in stop:
+		# stop.json 的关闭标记只代表显式 resume，不能反过来解除 state.json 里
+		# 仍打开的闩锁：SafetyGuard 与 stop_reason_for() 必须对同一份状态得出
+		# 同一个停止结论（Issue #3140）。只有明确打开 / 损坏 fail-closed 的
+		# stop 才覆盖快照。
+		if stop.get("open") is True:
 			state.setdefault("autonomy", {})["circuit_breaker"] = stop
 		return state
 
