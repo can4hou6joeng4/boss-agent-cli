@@ -269,7 +269,8 @@ def test_force_refresh_prefers_cdp_and_persists_new_stoken(
 	manager.force_refresh(cdp_url="http://127.0.0.1:9222")
 
 	mock_refresh_stoken.assert_not_called()
-	mock_refresh_cdp.assert_called_once_with("http://127.0.0.1:9222")
+	assert mock_refresh_cdp.call_args.args == ("http://127.0.0.1:9222",)
+	assert mock_refresh_cdp.call_args.kwargs["policy"].name == "auto"
 	store.save.assert_called_once()
 	saved_token = store.save.call_args.args[0]
 	assert saved_token["stoken"] == "new-token"

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from patchright.sync_api import sync_playwright
 
+from boss_agent_cli.api.browser_source import CHANNEL_CDP, BrowserSourcePolicy, BrowserSourceUnavailable
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
 from boss_agent_cli.auth.identity import account_fingerprint
@@ -778,8 +779,14 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 	}
 
 
-def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
-	"""通过既有 CDP Chrome 刷新 stoken；安全页停止，不以 cookie 存在当作验证解除。"""
+def refresh_stoken_via_cdp(
+	cdp_url: str | None = None, *, policy: BrowserSourcePolicy | None = None
+) -> str:
+	"""通过既有 CDP Chrome 刷新 stoken；安全页停止，不以 cookie 存在当作验证解除。
+
+	``policy`` 来自 force_refresh 的来源意图：禁止新建 context 的来源在 CDP 里
+	没有可复用 context 时必须 fail-closed，不能建匿名会话再写回 stoken（Issue #3145）。
+	"""
 	ws_url = probe_cdp(cdp_url)
 	if not ws_url:
 		raise ConnectionError("CDP 不可用")
@@ -788,10 +795,17 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 	page = None
 	try:
 		browser = pw.chromium.connect_over_cdp(ws_url)
-		for existing_context in browser.contexts:
+		contexts = browser.contexts
+		for existing_context in contexts:
 			for existing_page in existing_context.pages:
 				_raise_if_security_page(existing_page, is_cdp=True)
-		ctx = browser.contexts[0] if browser.contexts else browser.new_context()
+		if policy is not None and not contexts and not policy.may_create_context:
+			raise BrowserSourceUnavailable(
+				policy,
+				attempted=(CHANNEL_CDP,),
+				detail="CDP 无可复用 context，该来源不会新建匿名会话刷新 stoken",
+			)
+		ctx = contexts[0] if contexts else browser.new_context()
 		page = ctx.new_page()
 		home_loaded = _warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken", is_cdp=True)
 		time.sleep(_STOKEN_GENERATION_WAIT)
