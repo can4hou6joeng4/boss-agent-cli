@@ -9,7 +9,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.ai.config import AIConfigStore, AIConfigValueError, ai_int_setting
+from boss_agent_cli.ai.config import AIConfigStore, AIConfigValueError, ai_int_setting, ai_text_setting
 from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy
@@ -61,21 +61,32 @@ def _draft_with_local_ai(
 ) -> Decision:
 	store = AIConfigStore(data_dir)
 	ai_config = store.load_config()
-	provider = str(ai_config.get("ai_provider", ""))
+	# 字符串项与 ai 命令族共用读取函数：数组 / 数字不能靠 str() 变成看似合法的
+	# provider / 模型名发给本地服务（Issue #3134）。非本地 provider 仍直接走模板，
+	# 不因为没启用的本地通道而报配置错误。
+	try:
+		provider = ai_text_setting(ai_config, "ai_provider") or ""
+	except AIConfigValueError as exc:
+		return replace(
+			decision,
+			reason=f"{decision.reason}; local ai config invalid ({exc}), template fallback",
+		)
 	if provider not in _LOCAL_AI_PROVIDERS:
 		return decision
 	api_key = store.get_api_key()
 	# 存量配置里的非法端点（手工编辑 / 旧版本写入）同样走模板降级：与下面的
 	# ai_max_tokens 漂移同口径，一处本地配置写坏不能中止整轮自动化（Issue #2254）。
 	try:
+		model = ai_text_setting(ai_config, "ai_model") or ""
 		base_url = store.get_base_url()
 	except AIConfigValueError as exc:
 		return replace(
 			decision,
 			reason=f"{decision.reason}; local ai config invalid ({exc}), template fallback",
 		)
-	model = ai_config.get("ai_model")
-	if not api_key or not base_url or not model:
+	# 纯空白 key 与空白模型名是真值，但与 CLI 的 api_key_is_set() / 命令层同口径
+	# 按未配置处理，不带着必然失败的凭据请求服务商（Issue #3130 #3134）。
+	if not api_key or not api_key.strip() or not base_url or not model or not model.strip():
 		return decision
 	# 上限类型漂移同样走模板降级：一处本地配置写坏不能中止整轮自动化（Issue #1196）。
 	try:
@@ -88,7 +99,7 @@ def _draft_with_local_ai(
 	service = AIService(
 		base_url=base_url,
 		api_key=api_key,
-		model=str(model),
+		model=model,
 		temperature=0.3,
 		# 上限跟随配置（ai local configure 写入 512）：思考模型写不完时可用 boss ai config --max-tokens 调大
 		max_tokens=max_tokens,
