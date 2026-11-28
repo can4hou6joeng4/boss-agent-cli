@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.28（2026-11-28）：MCP `boss_config` 的 `set` / `reset` 写中断改为指引先用 `boss_config list` 核对本地配置，不再让 Agent 核对不存在的 checkpoint 与平台写入（Issue #3137）。
+
 v3.9.27（2026-11-28）：自动回复的本地 AI 通道对 provider / model 类型漂移与纯空白 API key 改为模板降级，不再把 `str()` 后的坏值或非凭据发给服务商（Issue #3134）。
 
 v3.9.26（2026-11-28）：向导 `ai_assist` 读取 `ai_base_url` 的本地配置错误不再逃逸成可重试的网络错误；`ai_model` / `ai_provider` 类型漂移不再被 `str()` 变成看似合法的值发给服务商；向导与 `ai local smoke` 都把纯空白 API key 按未配置处理，统一报带修复命令的不可重试错误（Issue #3126 #3128 #3130 #3132）。
