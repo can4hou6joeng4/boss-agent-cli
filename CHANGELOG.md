@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 向导恢复指引统一走命令提示同源：损坏简历名带前导 `-` 时 `resume delete` 经 `--` 保护，缺失 crawl run 时补回本次 `--data-dir` 并保护 run_id（Issue #3155）。
+- 简历导出遇到本地写入失败时，`LOCAL_IO_ERROR` 的 `details` 保留 errno、`strerror` 与首行原因，不再只剩写死的“目录或权限”猜测（Issue #3156）。
+
 ## [3.9.33] - 2026-11-28
 
 ### Fixed
