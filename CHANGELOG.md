@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.33] - 2026-11-28
+
 ### Fixed
 
 - `chatmsg` 非直读路径的下一页提示改为选项在前、uid 位置参数经 `positional_hint` 放末尾；带前导 `-` 的 uid 也能原样重放，`--raw` 仍保留（Issue #3151）。

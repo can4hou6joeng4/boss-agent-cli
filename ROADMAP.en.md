@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.33 (2026-11-28): `chatmsg` next-page hints for the lookup path place the uid after the options and protect leading dashes with `--`, so agents can replay them verbatim while keeping `--raw` (Issue #3151).
+
 v3.9.32 (2026-11-28): output-path preflight errors for NUL-containing paths retain `EINVAL`, the underlying cause, and the filename instead of `[Errno None] None` (Issue #3149).
 
 v3.9.31 (2026-11-28): stoken refresh with an explicit `--cdp-url` now honors the `browser-source` policy; sources that forbid new contexts fail closed instead of persisting a stoken from an anonymous session (Issue #3145).
