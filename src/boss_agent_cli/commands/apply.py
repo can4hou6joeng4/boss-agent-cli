@@ -18,6 +18,7 @@ from boss_agent_cli.services.candidate_actions import (
 	cli_error_details,
 	outcome_unknown_cause,
 	run_candidate_action,
+	response_provably_unsent,
 )
 
 
@@ -186,6 +187,14 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 				raise
 
 			if not platform.is_success(resp):
+				if response_provably_unsent(resp):
+					# 浏览器在写出前中断：预约已由 run_candidate_action 释放，按平台
+					# 的可重试错误返回，不能报 outcome_unknown 把同一职位锁死（#3105）。
+					# 没有证据的 NETWORK_ERROR 仍走下面的未知分支。
+					handle_platform_error_output(
+						ctx, "apply", platform, resp, fallback_message="投递/立即沟通提交失败"
+					)
+					return
 				error_code, _ = platform.parse_error(resp)
 				if error_code in ("ACTION_UNCONFIRMED", "NETWORK_ERROR"):
 					# 求职者侧结果未知：核对投递记录与本机会话，而不是招聘者的
