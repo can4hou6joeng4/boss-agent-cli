@@ -179,9 +179,12 @@ def chatmsg_cmd(
 					next_page += " --raw"
 				next_page += f" {positional_hint(fresh_security_id)}"
 			else:
-				next_page = f"chatmsg {gid} --page {pagination['page'] + 1} --count {count}"
+				# 非直读路径的 uid 来自沟通列表，仍是可执行提示的位置参数：
+				# 选项在前、uid 经 positional_hint 放末尾，前导 '-' 才能被 '--' 保护。
+				next_page = f"chatmsg --page {pagination['page'] + 1} --count {count}"
 				if show_raw:
 					next_page += " --raw"
+				next_page += f" {positional_hint(gid)}"
 			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page, include_data_dir=True))
 		elif pagination["has_more"] is None:
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
