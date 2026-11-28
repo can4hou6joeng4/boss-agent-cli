@@ -6,7 +6,7 @@ from boss_agent_cli.api.models import dict_items, JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, list_pagination, page_can_advance
 
 
 _HISTORY_ID_KEYS = ("encryptJobId", "securityId", "lid")
@@ -89,15 +89,11 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 
 	# 平台缺失 hasMore 时不能当成 false：那会让 Agent 把「平台没说」读成
 	# 「确实没有下一页」并停止翻页。与 recommend / chat 同一套保守语义。
-	raw_has_more = platform_data.get("hasMore")
-	has_more = raw_has_more if isinstance(raw_has_more, bool) else None
-	pagination = {
-		"page": page,
-		"has_more": has_more,
-		"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
-		"total": len(items),
-		"total_kind": "returned_page_count",
-	}
+	# 页码证据与 search / recommend / 向导共用实现（Issue #3107）：平台
+	# 纠正页码时下一页提示、信封证据和 TTY 表格都必须采用有效页码。
+	pagination = list_pagination(platform_data, page=page, rows=items)
+	current_page = pagination["page"]
+	has_more = pagination["has_more"]
 	next_actions = [
 		_hint_command(ctx, "detail <security_id>"),
 		_hint_command(ctx, "apply <security_id> <job_id>"),
@@ -105,9 +101,9 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 	]
 	# 没有下一页时不能建议 --page N+1：Agent 照着执行只会拿到空页，
 	# 与 TTY 的 hint_next 守卫（hasMore 为假时不显示 more）保持一致。
-	at_page_limit = page >= MAX_TRUSTED_PAGE
+	at_page_limit = not page_can_advance(pagination)
 	if pagination["has_more"] is True and not at_page_limit:
-		next_actions.append(_hint_command(ctx, f"history --page {page + 1}"))
+		next_actions.append(_hint_command(ctx, f"history --page {current_page + 1}"))
 	hints = {"next_actions": next_actions}
 	if has_more is None:
 		hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"]
@@ -123,9 +119,9 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 		ctx, "history", items,
 		render=lambda data: render_job_table(
 			data, "history",
-			page=page,
+			page=current_page,
 			hint_next=(
-				f"more: {_hint_command(ctx, f'history --page {page + 1}')}"
+				f"more: {_hint_command(ctx, f'history --page {current_page + 1}')}"
 				if pagination["has_more"] and not at_page_limit else ""
 			),
 		),
