@@ -357,9 +357,11 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 			)
 			return
 		if error_response is not None:
+			# sync 的远端调用全是 GET，本地 upsert 只在取数成功后发生；取数阶段的
+			# 失败仍是可重试的只读错误，不能报「核对本次写操作是否生效」（#3107）。
 			handle_platform_error_output(
 				ctx, "favorites-sync", platform, error_response,
-				fallback_message="职位收藏同步失败",
+				fallback_message="职位收藏同步失败", read_only_operation=True,
 			)
 			return
 

@@ -12,6 +12,7 @@
 - `recommend` 的分页证据改用与向导共用的 `list_pagination`：平台纠正页码时索引快照、翻页提示与表格页码都采用有效页码，不再把 Agent 导回已取过的页；列表容器按同一口径识别 `recommendList` / `jobList` / `list` / `items` / `result`，不再返回空页并覆盖编号索引（Issue #3101）。
 - AI 配置的字符串项在 `is_configured()` 真值判断前统一校验类型：空 list / dict / 0 / False 不再被吞成「未配置」并误导用户重填密钥，改为精确 `CONFIG_INVALID`；`ai local configure` 改为先确认旧配置可读、再写密钥、最后写配置，密钥不可写时不再留下半截的本地端点更新（Issue #3103）。
 - `apply` / `batch-greet` 采信浏览器响应上的严格 `request_sent=false` 证据：写出前中断的写请求按可重试失败处理并释放预约，不再报自相矛盾的 `ACTION_UNCONFIRMED` 让同一职位被无 TTL 的 pending 永久挡住（Issue #3105）。
+- `history` 的分页证据改用共享 `list_pagination`：平台纠正页码时信封、下一页提示与 TTY 表格统一采用有效页码，可信上限仍停止翻页；`favorites sync` 的远端只读取数失败归一为可重试 `NETWORK_ERROR`，不再提示核对不存在的写操作（Issue #3107）。
 
 ## [3.9.20] - 2026-11-28
 
