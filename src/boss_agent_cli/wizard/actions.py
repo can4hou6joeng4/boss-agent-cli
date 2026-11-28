@@ -24,7 +24,7 @@ from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
-from boss_agent_cli.ai.config import AIConfigStore, AIConfigValueError, ai_float_setting, ai_int_setting
+from boss_agent_cli.ai.config import AIConfigStore, ai_float_setting, ai_int_setting, ai_text_setting
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import (
 	CacheRecordInvalid,
@@ -1879,45 +1879,40 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 	config_store = AIConfigStore(context.data_dir)
 	config = config_store.load_config()
 	api_key = config_store.get_api_key()
+	# 字符串配置项与 ai 命令族共用读取函数：数组 / 数字不能靠 str() 变成
+	# 看起来合法的模型名发给服务商（Issue #3128）；base_url 的本地配置错误
+	# 也必须收口，不能逃逸后被 runner 兜成可重试的 NETWORK_ERROR（Issue #3126）。
+	# provider 虽由 get_base_url() 解析端点，类型仍要先校验，避免漂移被笼统
+	# 报成 AI_NOT_CONFIGURED。
 	try:
+		model = ai_text_setting(config, "ai_model") or ""
+		ai_text_setting(config, "ai_provider")
 		base_url = config_store.get_base_url()
-	except AIConfigValueError as exc:
-		# 与下面的数值项、CLI ai 命令族同口径：坏配置是确定性本地错误，
-		# 不能从 action 逃逸后被 runner 兜成可重试的 NETWORK_ERROR
-		# （Issue #3126）。
-		fix = exc.recovery_hint or "ai config --base-url <值>"
+		# 数值项与 ai 命令同口径校验：坏值不能原样发给服务商、只换回泛化的
+		# 平台错误；本地配置问题给 CONFIG_INVALID 与修复命令（Issue #1209、#1525）。
+		temperature = ai_float_setting(config, "ai_temperature", 0.7)
+		max_tokens = ai_int_setting(config, "ai_max_tokens", 4096)
+	except ValueError as exc:
+		fix = getattr(exc, "recovery_hint", None)
 		raise WorkflowActionError(
 			"CONFIG_INVALID",
 			f"本地 AI 配置损坏：{exc}",
 			recoverable=True,
-			recovery_action=f"{_hint_command(context, fix)} 修正后重试",
+			# 字符串项异常自带精确修复命令；数值项沿用既有提示。
+			recovery_action=_hint_command(context, fix or "ai config --max-tokens 4096 --temperature 0.7"),
 			auto_retry=False,
 		) from exc
-	model = config.get("ai_model")
-	if not api_key or not base_url or not model:
+	if not api_key or not base_url or not model or not model.strip():
 		raise WorkflowActionError(
 			"AI_NOT_CONFIGURED",
 			"AI 服务未配置",
 			recoverable=True,
 			recovery_action=_hint_command(context, "ai config --provider <provider> --model <model> --api-key <key>"),
 		)
-	# 数值项与 ai 命令同口径校验：坏值不能原样发给服务商、只换回泛化的
-	# 平台错误；本地配置问题给 CONFIG_INVALID 与修复命令（Issue #1209、#1525）。
-	try:
-		temperature = ai_float_setting(config, "ai_temperature", 0.7)
-		max_tokens = ai_int_setting(config, "ai_max_tokens", 4096)
-	except ValueError as exc:
-		raise WorkflowActionError(
-			"CONFIG_INVALID",
-			f"本地 AI 配置损坏：{exc}",
-			recoverable=True,
-			recovery_action=_hint_command(context, "ai config --max-tokens 4096 --temperature 0.7"),
-			auto_retry=False,
-		) from exc
 	service = AIService(
 		str(base_url),
 		api_key,
-		str(model),
+		model,
 		temperature=temperature,
 		max_tokens=max_tokens,
 	)

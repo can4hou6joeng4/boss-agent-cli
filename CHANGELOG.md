@@ -7,6 +7,7 @@
 ### Fixed
 
 - 向导 `ai_assist` 读取 `ai_base_url` 时的本地配置错误改为收口为不可自动重试的 `CONFIG_INVALID`，并给出 `ai config --base-url` 修复命令；不再让异常逃逸后被 runner 兜成可重试的 `NETWORK_ERROR`（Issue #3126）。
+- 向导 `ai_assist` 的 `ai_model` / `ai_provider` 类型漂移不再经 `str()` 变成看似合法的模型名发给服务商，改为与 `ai` 命令族同口径报不可重试 `CONFIG_INVALID`，并保留具体修复命令（Issue #3128）。
 
 ## [3.9.25] - 2026-11-28
 
