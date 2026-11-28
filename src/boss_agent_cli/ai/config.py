@@ -380,16 +380,19 @@ class AIConfigStore:
 		"""Get the API base URL: user config takes priority, then provider lookup."""
 		config = self.load_config()
 		provider = config.get("ai_provider")
-		base_url = config.get("ai_base_url")
+		# 缺键 / None / 显式空串才是「未设置」；0 / False / 空容器等伪值必须走
+		# 同一份类型校验，否则真值判断会把它们当成未设置并静默改用 provider
+		# 默认端点（Issue #3123）。
+		base_url = ai_text_setting(config, "ai_base_url")
 		if base_url:
 			# 手工编辑 / 旧版本写入的配置也走写入侧同一套校验：缺 scheme 的地址
 			# 若原样透传，httpx 会抛 UnsupportedProtocol 并被兜成可重试的
 			# AI_API_ERROR（Issue #2205）。损坏配置按带 recovery_hint 的本地
 			# 配置错误报出。
-			base_url = normalize_base_url(str(base_url))
+			base_url = normalize_base_url(base_url)
 		return provider_endpoint(
 			str(provider) if provider else None,
-			str(base_url) if base_url else None,
+			base_url if base_url else None,
 		)
 
 	def unresolved_provider(self) -> str | None:
