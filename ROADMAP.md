@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.30（2026-11-28）：显式 `browser-source=httpx-only` 的空通道白名单不再被同时传入的 `--cdp-url` 改写，只读请求保持走 httpx，需要页面的能力继续按策略拒绝（Issue #3143）。
+
 v3.9.29（2026-11-28）：关闭的 `stop.json` 不再覆盖 `state.json` 里仍打开的熔断，`SafetyGuard` 与统一停止判定结论一致，避免熔断状态下放行招聘写操作（Issue #3140）。
 
 v3.9.28（2026-11-28）：MCP `boss_config` 的 `set` / `reset` 写中断改为指引先用 `boss_config list` 核对本地配置，不再让 Agent 核对不存在的 checkpoint 与平台写入（Issue #3137）。
