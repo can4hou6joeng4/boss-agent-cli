@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.29 (2026-11-28): a closed `stop.json` no longer overrides an open circuit breaker in `state.json`; `SafetyGuard` and the unified stop check now agree, preventing recruiting writes while tripped (Issue #3140).
+
 v3.9.28 (2026-11-28): MCP `boss_config` `set` / `reset` write interruptions now point to `boss_config list` for local verification instead of asking the agent to inspect nonexistent checkpoints or platform writes (Issue #3137).
 
 v3.9.27 (2026-11-28): the local AI reply channel now falls back to templates for provider / model type drift and whitespace-only API keys, instead of sending stringified bad values or non-credentials to the provider (Issue #3134).

@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.29（2026-11-28）：关闭的 `stop.json` 不再覆盖 `state.json` 里仍打开的熔断，`SafetyGuard` 与统一停止判定结论一致，避免熔断状态下放行招聘写操作（Issue #3140）。
+
 v3.9.28（2026-11-28）：MCP `boss_config` 的 `set` / `reset` 写中断改为指引先用 `boss_config list` 核对本地配置，不再让 Agent 核对不存在的 checkpoint 与平台写入（Issue #3137）。
 
 v3.9.27（2026-11-28）：自动回复的本地 AI 通道对 provider / model 类型漂移与纯空白 API key 改为模板降级，不再把 `str()` 后的坏值或非凭据发给服务商（Issue #3134）。
