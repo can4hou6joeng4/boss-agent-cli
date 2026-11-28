@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.31 (2026-11-28): stoken refresh with an explicit `--cdp-url` now honors the `browser-source` policy; sources that forbid new contexts fail closed instead of persisting a stoken from an anonymous session (Issue #3145).
+
 v3.9.30 (2026-11-28): an explicit `browser-source=httpx-only` no longer gets its empty channel allowlist overridden by a simultaneous `--cdp-url`; read-only requests stay on httpx while page-only capabilities remain refused by policy (Issue #3143).
 
 v3.9.29 (2026-11-28): a closed `stop.json` no longer overrides an open circuit breaker in `state.json`; `SafetyGuard` and the unified stop check now agree, preventing recruiting writes while tripped (Issue #3140).
