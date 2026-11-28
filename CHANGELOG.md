@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.27] - 2026-11-28
+
 ### Fixed
 
 - 自动回复的本地 AI 通道对 `ai_provider` / `ai_model` 类型漂移与纯空白 API key 改为模板降级，不再把 `str()` 后的坏值或非凭据发给本地服务（Issue #3134）。

@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.27 (2026-11-28): the local AI reply channel now falls back to templates for provider / model type drift and whitespace-only API keys, instead of sending stringified bad values or non-credentials to the provider (Issue #3134).
+
 v3.9.26 (2026-11-28): local configuration errors while reading `ai_base_url` in wizard `ai_assist` no longer escape as retryable network errors; type drift in `ai_model` / `ai_provider` is no longer stringified into plausible values sent to the provider; both the wizard and `ai local smoke` treat a whitespace-only API key as not configured. All now report non-retryable errors with recovery commands (Issue #3126 #3128 #3130 #3132).
 
 v3.9.25 (2026-11-28): a non-string `ai_base_url` is no longer treated as unset and silently replaced by the provider default endpoint; reading it now raises a local configuration error with a recovery hint (Issue #3123).
