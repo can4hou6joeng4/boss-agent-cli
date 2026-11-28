@@ -181,12 +181,23 @@ def _emit_export_failure(ctx: click.Context, fmt: str, exc: Exception, *, target
 		return
 	if is_local_io_error(exc):
 		# 目标路径不可写与「导出器坏了」是两回事：前者换路径就能解决，
-		# 给个安装浏览器的指引只会让用户白折腾一圈。
+		# 给个安装浏览器的指引只会让用户白折腾一圈。errno 与底层原因只进
+		# details，不进 message：文案继续稳定，诊断信息不再被写死的说法吞掉
+		# （Issue #3156，与 #3149 / handle_browser_kernel_missing 同口径）。
+		cause = (str(exc) or type(exc).__name__).splitlines()[0][:300]
+		details: dict[str, Any] = {"cause": cause}
+		error_number = getattr(exc, "errno", None)
+		if isinstance(error_number, int):
+			details["errno"] = error_number
+		strerror = getattr(exc, "strerror", None)
+		if isinstance(strerror, str) and strerror:
+			details["strerror"] = strerror
 		handle_error_output(
 			ctx,
 			"resume",
 			code="LOCAL_IO_ERROR",
 			message=f"{fmt.upper()} 导出失败：无法写入 {target}（目标可能是已存在的目录或没有写权限）",
+			details=details,
 			hints={"operator_actions": ["换一个 --output 路径，或确认目标目录存在且可写后重试"]},
 		)
 		return

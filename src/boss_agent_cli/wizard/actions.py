@@ -1864,7 +1864,7 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 			recoverable=True,
 			recovery_action=(
 				f"修正 resumes/{resume_name}.json 的 JSON 内容后重试，"
-				f"或执行 {_hint_command(context, f'resume delete {shell_argument(resume_name)}')} 后重新创建；"
+				f"或执行 {_hint_command(context, f'resume delete {positional_hint(resume_name)}')} 后重新创建；"
 				"该文件只存在本机"
 			),
 		)
@@ -2953,8 +2953,8 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 				"CRAWL_RUN_NOT_FOUND",
 				f"未找到 crawl run: {run_id}",
 				recovery_action=(
-					f"用 boss crawl status {shell_argument(run_id)} 核对 run_id，"
-					"或用 boss crawl start <query> 新建任务"
+					f"用 {_hint_command(context, f'crawl status {positional_hint(run_id)}')} 核对 run_id，"
+					f"或用 {_hint_command(context, 'crawl start <query>')} 新建任务"
 				),
 			) from exc
 	# 风控暂停时 CLI `boss crawl status` 只给人工解锁步骤，不放 resume 到
