@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.9.26 (2026-11-28): local configuration errors while reading `ai_base_url` in wizard `ai_assist` no longer escape as retryable network errors; type drift in `ai_model` / `ai_provider` is no longer stringified into plausible values sent to the provider; both the wizard and `ai local smoke` treat a whitespace-only API key as not configured. All now report non-retryable errors with recovery commands (Issue #3126 #3128 #3130 #3132).
+
 v3.9.25 (2026-11-28): a non-string `ai_base_url` is no longer treated as unset and silently replaced by the provider default endpoint; reading it now raises a local configuration error with a recovery hint (Issue #3123).
 
 v3.9.24 (2026-11-28): `search` and wizard `candidate_search` now trust the platform / last-scanned page so the envelope, next-page command, index snapshot and step data share one source, including cache hits; wizard `candidate_export` reports `count_reached` when the requested count is filled, matching the CLI (Issue #3118 #3119).
