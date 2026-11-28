@@ -867,7 +867,7 @@ def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_a
 
 	assert result.exit_code == 0
 	cache_params = mock_cache.get_search.call_args.args[0]
-	assert cache_params["cache_schema"] == 6
+	assert cache_params["cache_schema"] == 7
 	assert "account" in cache_params
 	mock_pipeline.assert_not_called()
 
@@ -895,8 +895,8 @@ def test_search_cache_schema_bump_invalidates_pre_887_entries(
 		result = CliRunner().invoke(cli, ["--json", "search", "产品"])
 
 	assert result.exit_code == 0, result.output
-	# 缓存键必须带新版本：旧条目（schema 5）不会再被 get_search 命中。
-	assert _SEARCH_CACHE_SCHEMA >= 6
+	# 缓存键必须带新版本：旧条目（schema < 7）不会再被 get_search 命中。
+	assert _SEARCH_CACHE_SCHEMA >= 7
 	assert mock_cache.get_search.call_args.args[0]["cache_schema"] == _SEARCH_CACHE_SCHEMA
 	assert json.loads(result.stdout)["pagination"]["has_more"] is None
 
