@@ -352,7 +352,9 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 	api_key = store.get_api_key()
 	base_url = store.get_base_url()
 	model = config.get("ai_model")
-	if not api_key or not base_url or model is None:
+	# 与 ai chat 的 is_configured() / api_key_is_set() 同口径：纯空白 key 不是
+	# 可用凭据，不能带着它调用服务商（Issue #3132）。
+	if not api_key or not api_key.strip() or not base_url or model is None:
 		provider = store.unresolved_provider()
 		message = (
 			"本地 AI 服务未配置"

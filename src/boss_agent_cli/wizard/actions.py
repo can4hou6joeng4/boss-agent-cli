@@ -1902,7 +1902,9 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 			recovery_action=_hint_command(context, fix or "ai config --max-tokens 4096 --temperature 0.7"),
 			auto_retry=False,
 		) from exc
-	if not api_key or not base_url or not model or not model.strip():
+	# 纯空白 key 是真值，但 CLI 的 api_key_is_set() 按未设置处理；向导同口径，
+	# 不把必然失败的凭据发给服务商（Issue #3130）。
+	if not api_key or not api_key.strip() or not base_url or not model or not model.strip():
 		raise WorkflowActionError(
 			"AI_NOT_CONFIGURED",
 			"AI 服务未配置",
