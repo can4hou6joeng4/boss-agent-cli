@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.23] - 2026-11-28
+
 ### Fixed
 
 - `chat` 的分页证据改用与 `recommend` / `history` / `chatmsg` 共用的 `list_pagination`：平台纠正页码时信封页码与下一页命令采用有效页码，不再按请求页提示翻到已看过的页；`hasMore` 仍只认布尔，`total` 仍等于本次渲染行数（Issue #3115）。
