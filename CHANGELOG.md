@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.32] - 2026-11-28
+
 ### Fixed
 
 - 含 NUL 的输出路径在 lstat / stat 预检失败时保留 `EINVAL`、具体原因与 filename，不再把错误信封 message 变成 `[Errno None] None`（Issue #3149）。
