@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.9.31] - 2026-11-28
+
 ### Fixed
 
 - `force_refresh()` 在显式 `--cdp-url` 下也遵守 `browser-source` 策略：`stored-cookie` / `existing-browser` 遇到无可复用 CDP context 时不再新建匿名会话刷新并写回 stoken，而是按来源 fail-closed（Issue #3145）。

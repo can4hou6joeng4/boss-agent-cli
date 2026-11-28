@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.9.31（2026-11-28）：显式 `--cdp-url` 下的 stoken 刷新也遵守 `browser-source` 策略，禁止新建 context 的来源在无可复用会话时按来源 fail-closed，不再写回匿名会话生成的 stoken（Issue #3145）。
+
 v3.9.30（2026-11-28）：显式 `browser-source=httpx-only` 的空通道白名单不再被同时传入的 `--cdp-url` 改写，只读请求保持走 httpx，需要页面的能力继续按策略拒绝（Issue #3143）。
 
 v3.9.29（2026-11-28）：关闭的 `stop.json` 不再覆盖 `state.json` 里仍打开的熔断，`SafetyGuard` 与统一停止判定结论一致，避免熔断状态下放行招聘写操作（Issue #3140）。
